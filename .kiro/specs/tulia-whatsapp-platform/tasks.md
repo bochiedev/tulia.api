@@ -248,21 +248,21 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Document default roles and their permission mappings
     - _Requirements: 76.1, 76.2, 76.3, 76.4, 76.5_
 
-- [ ] 7. Implement catalog models and services for bookable services
-  - [ ] 7.1 Create Service, ServiceVariant, and AvailabilityWindow models
+- [-] 7. Implement catalog models and services for bookable services
+  - [x] 7.1 Create Service, ServiceVariant, and AvailabilityWindow models
     - Implement Service model with title, description, pricing
     - Implement ServiceVariant model with duration_minutes and pricing
     - Implement AvailabilityWindow model with weekday/date, time range, capacity
     - Add validation for weekday (0-6) and end_time > start_time
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 11.1, 11.2, 11.3, 11.4_
   
-  - [ ] 7.2 Create Appointment model with status tracking
+  - [x] 7.2 Create Appointment model with status tracking
     - Implement Appointment model with start_dt, end_dt, status
     - Add indexes for capacity calculation queries
     - Add tenant and customer scoping
     - _Requirements: 13.4, 14.3_
   
-  - [ ] 7.3 Implement BookingService for availability and appointments
+  - [x] 7.3 Implement BookingService for availability and appointments
     - Create find_availability() to return available slots with capacity
     - Create check_capacity() to validate slot availability
     - Create create_appointment() with capacity validation
@@ -270,7 +270,7 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Implement propose_alternatives() for unavailable slots
     - _Requirements: 11.5, 12.1, 12.2, 12.3, 12.4, 12.5, 13.1, 13.2, 13.3, 13.5, 13.6, 14.1, 14.2_
   
-  - [ ] 7.4 Create service and booking REST API endpoints
+  - [x] 7.4 Create service and booking REST API endpoints
     - Implement POST /v1/services and GET /v1/services
     - Implement GET /v1/services/{id} and GET /v1/services/{id}/availability
     - Implement POST /v1/appointments with capacity validation
@@ -279,21 +279,21 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - _Requirements: 10.5, 13.5, 14.4, 14.5, 38.2_
 
 
-- [ ] 8. Implement Twilio integration service
-  - [ ] 8.1 Create TwilioService for sending and receiving messages
+- [x] 8. Implement Twilio integration service
+  - [x] 8.1 Create TwilioService for sending and receiving messages
     - Implement send_whatsapp() method using Twilio API
     - Implement send_template() for Twilio message templates
     - Implement verify_signature() for webhook validation
     - Add error handling and retry logic for API failures
     - _Requirements: 2.4, 2.5, 19.1, 19.2, 19.3, 19.4, 24.2, 24.5_
   
-  - [ ] 8.2 Create WebhookLog model and logging functionality
+  - [x] 8.2 Create WebhookLog model and logging functionality
     - Implement WebhookLog model with provider, event, payload, status
     - Create logging before and after webhook processing
     - Store error messages for failed webhooks
     - _Requirements: 18.1, 18.2, 18.3, 18.4, 18.5, 19.5_
   
-  - [ ] 8.3 Implement webhook handler with tenant resolution
+  - [x] 8.3 Implement webhook handler with tenant resolution
     - Create POST /v1/webhooks/twilio endpoint
     - Implement tenant resolution by "To" number or URL path
     - Verify Twilio signature using tenant's webhook_secret
@@ -301,13 +301,13 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Store inbound Message record
     - _Requirements: 2.1, 2.2, 2.3, 3.1, 3.2_
 
-- [ ] 9. Implement intent classification service
-  - [ ] 9.1 Create IntentEvent model for tracking classifications
+- [x] 9. Implement intent classification service
+  - [x] 9.1 Create IntentEvent model for tracking classifications
     - Implement IntentEvent model with intent_name, confidence_score, slots
     - Add indexes for intent analytics queries
     - _Requirements: 4.5, 15.4_
   
-  - [ ] 9.2 Implement IntentService with LLM integration
+  - [x] 9.2 Implement IntentService with LLM integration
     - Create classify_intent() method using OpenAI/Claude API
     - Define system prompt with all supported intents
     - Implement extract_slots() for entity extraction
@@ -315,7 +315,7 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Implement handle_low_confidence() with automatic handoff after 2 attempts
     - _Requirements: 4.1, 5.1, 6.1, 12.1, 13.1, 14.1, 15.1, 15.4_
   
-  - [ ] 9.3 Implement intent handlers for products
+  - [x] 9.3 Implement intent handlers for products
     - Create handler for BROWSE_PRODUCTS intent
     - Create handler for PRODUCT_DETAILS intent
     - Create handler for PRICE_CHECK intent
@@ -324,7 +324,7 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Each handler queries catalog, generates response, sends via Twilio
     - _Requirements: 4.2, 4.3, 5.2, 5.3, 6.2, 6.3, 6.4, 7.1, 7.2, 7.3, 7.4_
   
-  - [ ] 9.4 Implement intent handlers for services
+  - [x] 9.4 Implement intent handlers for services
     - Create handler for BROWSE_SERVICES intent
     - Create handler for SERVICE_DETAILS intent
     - Create handler for CHECK_AVAILABILITY intent
@@ -333,7 +333,7 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Each handler queries services/bookings, generates response, sends via Twilio
     - _Requirements: 12.2, 12.3, 12.4, 12.5, 13.2, 13.3, 13.4, 13.5, 14.2, 14.3, 14.4_
   
-  - [ ] 9.5 Implement HUMAN_HANDOFF intent handler
+  - [x] 9.5 Implement HUMAN_HANDOFF intent handler
     - Create handler to update Conversation status to "handoff"
     - Send confirmation message to customer
     - Prevent further bot processing for handoff conversations
