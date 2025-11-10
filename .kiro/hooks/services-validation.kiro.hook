@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "Services Validation Hook",
+  "description": "Validates service booking logic when services app files are modified. Ensures double-booking prevention, capacity enforcement, and availability window validation.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "services/**/*.py",
+      "services/models.py",
+      "services/views.py",
+      "services/serializers.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Review the changed services files and verify:\n\n1. **Double-booking prevention**: Appointment.create must check for overlapping appointments with same service/variant/time.\n2. **Capacity enforcement**: Validate that capacity_left > 0 before allowing bookings.\n3. **Availability window validation**: Ensure requested slots fall within published AvailabilityWindow records.\n4. **Timezone handling**: All availability stored in tenant timezone; booking endpoints must validate in correct timezone.\n5. **Tenant scoping**: All queries must filter by tenant_id; Customer uniqueness by (tenant_id, phone_e164).\n6. **Analytics updates**: Appointment creation/cancellation must update AnalyticsDaily.bookings and derived rates.\n7. **Tests**: Verify tests exist for booking overlaps, capacity limits, and tenant isolation.\n\nIf any issues found, suggest fixes. If all checks pass, confirm the implementation is production-ready."
+  }
+}

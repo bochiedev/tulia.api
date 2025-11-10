@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "Tenant Scoping Validator",
+  "description": "Validates that all queries and endpoints properly enforce tenant isolation. Prevents cross-tenant data leaks.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/views.py",
+      "**/serializers.py",
+      "**/models.py",
+      "**/services/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Review the changed files for tenant scoping compliance:\n\n1. **Query filtering**: All ORM queries must filter by tenant_id or use tenant-scoped manager.\n2. **Customer identity**: Customer uniqueness by (tenant_id, phone_e164). Never share memory across tenants.\n3. **API endpoints**: Private endpoints must require X-TENANT-ID and X-TENANT-API-KEY headers.\n4. **Serializers**: Never return data from other tenants; validate tenant ownership on updates/deletes.\n5. **Foreign keys**: Related objects must belong to same tenant.\n6. **Tests**: Verify tenant isolation tests exist (Tenant A cannot see Tenant B data).\n\nIf violations found, flag them immediately. Suggest fixes that enforce strict tenant boundaries."
+  }
+}

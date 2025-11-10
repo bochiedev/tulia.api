@@ -1,0 +1,31 @@
+{
+  "enabled": true,
+  "name": "Tulia Agent Orchestrator",
+  "description": "Monitors project files and triggers appropriate agents (RepoAgent, IntegrationAgent, BotAgent, AnalyticsAgent, DocsAgent) based on file changes. Handles Django scaffolding, integration syncs, bot logic, analytics rollups, and documentation updates.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.py",
+      "**/settings.py",
+      "**/urls.py",
+      "**/models.py",
+      "**/views.py",
+      "**/serializers.py",
+      "**/tasks.py",
+      "integrations/**/*",
+      "bot/**/*",
+      "analytics/**/*",
+      "docs/**/*",
+      ".env.example",
+      "docker-compose.yml",
+      "scripts/**/*",
+      "requirements.txt",
+      "pyproject.toml"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Analyze the changed files and determine which WaBotiQ agent(s) should act:\n\n**RepoAgent**: If Django app files, settings, models, views, serializers, URLs, or infrastructure files (docker-compose.yml, .env.example) changed - scaffold/modify code, ensure tenant security, run formatters.\n\n**IntegrationAgent**: If files in integrations/twilio, integrations/woo, or integrations/shopify changed - implement webhook handlers with signature verification, product sync tasks, rate limiting, and normalization logic. Tenant resolution: prefer Twilio 'To' number mapping → tenant; fallback to webhook path mapping.\n\n**BotAgent**: If bot/**/* files changed - implement conversation handlers with expanded MCP tools:\n  - catalog.search_products/get_product\n  - catalog.search_services/get_service\n  - availability.find (service_id, from_dt, to_dt, top_k=5)\n  - appointment.create/cancel\n  - cart.add, order.create\n  - messaging.reply\n  System prompt: 'You are a concise commerce & booking assistant. Confirm availability before booking. If slot unavailable, propose up to 3 alternatives. For repeated failures or explicit request, hand off to a human.'\n\n**AnalyticsAgent**: If analytics/**/* files changed - implement nightly rollup including: msgs_in, msgs_out, conversations, orders, bookings, booking_conversion_rate, no_show_rate. Expose analytics across both products and services.\n\n**DocsAgent**: If docs/**/* files changed - update API documentation, curl examples, onboarding steps, and integration guides.\n\nFor each relevant agent, provide specific implementation guidance following the agent's rules and guardrails. Always enforce tenant headers and API keys on private endpoints, never expose secrets, and maintain atomic commits per feature."
+  }
+}

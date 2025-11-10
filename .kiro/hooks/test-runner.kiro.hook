@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "name": "Auto Test Runner",
+  "description": "Automatically runs relevant tests when code files are saved. Provides immediate feedback on breaking changes.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/models.py",
+      "**/views.py",
+      "**/serializers.py",
+      "**/services/**/*.py",
+      "bot/**/*.py",
+      "integrations/**/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A code file was modified. Identify the relevant test file(s) and run them:\n\n1. Determine which app/module was changed (e.g., services, catalog, orders, bot).\n2. Look for corresponding test files in tests/ directory.\n3. Run the specific test module using pytest (e.g., `pytest tests/test_services.py -v`).\n4. If tests fail, report the failures clearly and suggest fixes.\n5. If no tests exist for the changed code, recommend creating minimal tests for core functionality.\n\nFocus on fast feedback - run only relevant tests, not the entire suite."
+  }
+}

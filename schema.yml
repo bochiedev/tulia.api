@@ -1,0 +1,2747 @@
+openapi: 3.0.3
+info:
+  title: Tulia AI WhatsApp Commerce API
+  version: 1.0.0
+  description: "\nMulti-tenant WhatsApp commerce and services platform with comprehensive\
+    \ RBAC.\n\n## Authentication\n\nAll API requests require authentication via headers:\n\
+    - `X-TENANT-ID`: UUID of the tenant context\n- `X-TENANT-API-KEY`: API key for\
+    \ the tenant\n\n## Authorization (RBAC)\n\nThe platform implements Role-Based\
+    \ Access Control (RBAC) with the following components:\n\n### Permissions\nGranular\
+    \ capabilities identified by codes (e.g., `catalog:view`, `finance:withdraw:approve`).\n\
+    See the `/v1/permissions` endpoint for the complete list.\n\n### Roles\nCollections\
+    \ of permissions that can be assigned to users. Each tenant has default roles:\n\
+    - **Owner**: All permissions\n- **Admin**: All permissions except `finance:withdraw:approve`\n\
+    - **Finance Admin**: `analytics:view`, `finance:*`, `orders:view`\n- **Catalog\
+    \ Manager**: `analytics:view`, `catalog:*`, `services:*`, `availability:edit`\n\
+    - **Support Lead**: `conversations:view`, `handoff:perform`, `orders:view`, `appointments:view`\n\
+    - **Analyst**: `analytics:view`, `catalog:view`, `services:view`, `orders:view`,\
+    \ `appointments:view`\n\n### Scopes\nThe effective set of permission codes a user\
+    \ has for a specific tenant, resolved from:\n1. Roles assigned to the user\n2.\
+    \ User-specific permission overrides (grants or denies)\n\nDeny overrides always\
+    \ take precedence over role grants.\n\n### Four-Eyes Approval\nSensitive operations\
+    \ like financial withdrawals require two different users:\n- One user initiates\
+    \ the action (`finance:withdraw:initiate`)\n- A different user approves it (`finance:withdraw:approve`)\n\
+    \n## Multi-Tenant Isolation\n\nAll data is strictly isolated by tenant. Users\
+    \ can be members of multiple tenants with different roles in each.\nThe `X-TENANT-ID`\
+    \ header determines which tenant context is active for the request.\n\n## Canonical\
+    \ Permissions\n\n| Code | Description | Category |\n|------|-------------|----------|\n\
+    | `catalog:view` | View products and catalog | Catalog |\n| `catalog:edit` | Create,\
+    \ update, delete products | Catalog |\n| `services:view` | View services | Services\
+    \ |\n| `services:edit` | Create, update, delete services | Services |\n| `availability:edit`\
+    \ | Manage service availability windows | Services |\n| `conversations:view` |\
+    \ View customer conversations | Messaging |\n| `handoff:perform` | Perform human\
+    \ handoff | Messaging |\n| `orders:view` | View orders | Orders |\n| `orders:edit`\
+    \ | Create, update orders | Orders |\n| `appointments:view` | View appointments\
+    \ | Appointments |\n| `appointments:edit` | Create, update, cancel appointments\
+    \ | Appointments |\n| `analytics:view` | View analytics and reports | Analytics\
+    \ |\n| `finance:view` | View wallet and transactions | Finance |\n| `finance:withdraw:initiate`\
+    \ | Initiate withdrawal requests | Finance |\n| `finance:withdraw:approve` | Approve\
+    \ withdrawal requests | Finance |\n| `finance:reconcile` | Perform financial reconciliation\
+    \ | Finance |\n| `integrations:manage` | Manage external integrations | Integrations\
+    \ |\n| `users:manage` | Invite users, assign roles, manage permissions | Users\
+    \ |\n\n## Example Workflows\n\n### Invite a User and Assign Roles\n```bash\n#\
+    \ 1. Invite user (requires users:manage scope)\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite\
+    \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+    \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"email\": \"newuser@example.com\"\
+    ,\n    \"role_ids\": [\"role-uuid-1\", \"role-uuid-2\"]\n  }'\n\n# 2. User accepts\
+    \ invitation and logs in\n\n# 3. Assign additional roles\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/{user_id}/roles\
+    \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+    \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"role_ids\": [\"\
+    role-uuid-3\"]\n  }'\n```\n\n### Grant User-Specific Permission Override\n```bash\n\
+    # Grant a specific permission to a user (overrides role permissions)\ncurl -X\
+    \ POST https://api.tulia.ai/v1/users/{user_id}/permissions \\\n  -H \"X-TENANT-ID:\
+    \ {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\n  -H \"Content-Type:\
+    \ application/json\" \\\n  -d '{\n    \"permission_code\": \"finance:reconcile\"\
+    ,\n    \"granted\": true,\n    \"reason\": \"Temporary access for Q4 audit\"\n\
+    \  }'\n\n# Deny a permission (even if granted by role)\ncurl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions\
+    \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+    \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"permission_code\"\
+    : \"catalog:edit\",\n    \"granted\": false,\n    \"reason\": \"Suspended pending\
+    \ investigation\"\n  }'\n```\n\n### Four-Eyes Withdrawal Approval\n```bash\n#\
+    \ 1. User A initiates withdrawal (requires finance:withdraw:initiate)\ncurl -X\
+    \ POST https://api.tulia.ai/v1/wallet/withdraw \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
+    \ \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\n  -H \"Content-Type: application/json\"\
+    \ \\\n  -d '{\n    \"amount\": 1000.00,\n    \"currency\": \"USD\",\n    \"destination\"\
+    : \"bank_account_123\"\n  }'\n# Returns: {\"transaction_id\": \"txn-uuid\", \"\
+    status\": \"pending_approval\"}\n\n# 2. User B approves withdrawal (requires finance:withdraw:approve,\
+    \ must be different user)\ncurl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve\
+    \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+    \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"notes\": \"Approved\
+    \ for monthly payout\"\n  }'\n# Returns: {\"transaction_id\": \"txn-uuid\", \"\
+    status\": \"approved\"}\n\n# If User A tries to approve their own withdrawal:\n\
+    # Returns: 409 Conflict - \"Four-eyes validation failed: initiator and approver\
+    \ must be different users\"\n```\n    "
+paths:
+  /v1/admin/wallet/withdrawals/{transaction_id}/process:
+    post:
+      operationId: admin_wallet_withdrawals_process_create
+      description: 'Complete or fail a pending withdrawal. If failed, the amount is
+        credited back to the wallet. DEPRECATED: Use /v1/wallet/withdrawals/{id}/approve
+        for four-eyes approval.'
+      summary: Process withdrawal (admin) - DEPRECATED
+      parameters:
+      - in: path
+        name: transaction_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawalProcessRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      deprecated: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+          description: ''
+  /v1/audit-logs:
+    get:
+      operationId: audit_logs_list
+      description: "\nList audit logs for the tenant. Supports filtering by action,\
+        \ target_type, user, and date range.\n\n**Required scope:** `analytics:view`\n\
+        \nAudit logs track all RBAC changes and sensitive operations including:\n\
+        - User invitations and role assignments\n- Permission grants and denials\n\
+        - Role modifications\n- Financial operations (withdrawals, approvals)\n- Catalog\
+        \ changes\n\nQuery parameters:\n- `action`: Filter by action type (e.g., 'user_invited',\
+        \ 'role_assigned')\n- `target_type`: Filter by target type (e.g., 'TenantUser',\
+        \ 'Role')\n- `user_id`: Filter by user who performed the action\n- `from_date`:\
+        \ Filter by date range start (ISO 8601)\n- `to_date`: Filter by date range\
+        \ end (ISO 8601)\n        "
+      summary: List audit logs
+      parameters:
+      - in: query
+        name: action
+        schema:
+          type: string
+        description: Filter by action type
+      - in: query
+        name: from_date
+        schema:
+          type: string
+          format: date-time
+        description: Filter from date
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: target_type
+        schema:
+          type: string
+        description: Filter by target type
+      - in: query
+        name: to_date
+        schema:
+          type: string
+          format: date-time
+        description: Filter to date
+      - in: query
+        name: user_id
+        schema:
+          type: string
+          format: uuid
+        description: Filter by user ID
+      tags:
+      - RBAC - Audit
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditLogList'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/health/:
+    get:
+      operationId: health_retrieve
+      description: Check the health of the system and its dependencies
+      summary: Health check
+      tags:
+      - health
+      security:
+      - TenantAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  database:
+                    type: string
+                  cache:
+                    type: string
+                  celery:
+                    type: string
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  database:
+                    type: string
+                  cache:
+                    type: string
+                  celery:
+                    type: string
+                  errors:
+                    type: array
+                    items:
+                      type: string
+          description: ''
+  /v1/memberships/{tenant_id}/{user_id}/roles:
+    post:
+      operationId: memberships_roles_create
+      description: "\nAssign roles to a tenant user. Adds the specified roles to the\
+        \ user's existing roles.\n\n**Required scope:** `users:manage`\n\n**Example\
+        \ curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/{user_id}/roles\
+        \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+        \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"role_ids\": [\"\
+        role-uuid-1\", \"role-uuid-2\"]}'\n```\n        "
+      summary: Assign roles to user
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - RBAC - Memberships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRolesRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipDetail'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/memberships/{tenant_id}/{user_id}/roles/{role_id}:
+    delete:
+      operationId: memberships_roles_destroy
+      description: "\nRemove a role from a tenant user.\n\n**Required scope:** `users:manage`\n\
+        \        "
+      summary: Remove role from user
+      parameters:
+      - in: path
+        name: role_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - RBAC - Memberships
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '204':
+          description: No response body
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/memberships/{tenant_id}/invite:
+    post:
+      operationId: memberships_invite_create
+      description: "\nInvite a user to join a tenant.\nCreates a TenantUser record\
+        \ with invite_status='pending' and optionally assigns roles.\n\n**Required\
+        \ scope:** `users:manage`\n\nThe invited user will receive an email with an\
+        \ acceptance link.\nIf the user doesn't exist, a new User account is created.\n\
+        \n**Example curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite\
+        \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+        \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"email\":\
+        \ \"newuser@example.com\",\n    \"role_ids\": [\"role-uuid-1\", \"role-uuid-2\"\
+        ]\n  }'\n```\n        "
+      summary: Invite user to tenant
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - RBAC - Memberships
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteMemberRequest'
+            examples:
+              InviteRequest:
+                value:
+                  email: newuser@example.com
+                  role_ids:
+                  - 123e4567-e89b-12d3-a456-426614174000
+                summary: Invite Request
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipDetail'
+              examples:
+                SuccessResponse:
+                  value:
+                    id: 123e4567-e89b-12d3-a456-426614174000
+                    tenant:
+                      id: 123e4567-e89b-12d3-a456-426614174001
+                      name: Acme Corp
+                    user:
+                      id: 123e4567-e89b-12d3-a456-426614174002
+                      email: newuser@example.com
+                    roles:
+                    - id: role-1
+                      name: Catalog Manager
+                    invite_status: pending
+                  summary: Success Response
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/memberships/me:
+    get:
+      operationId: memberships_me_list
+      description: "\nList all tenant memberships for the authenticated user.\nReturns\
+        \ tenants where the user has an active TenantUser record with roles.\n\n**No\
+        \ scope required** - users can always see their own memberships.\n\nThis endpoint\
+        \ is typically used for:\n- Workspace switcher in the UI\n- Determining which\
+        \ tenants a user can access\n- Displaying user's roles per tenant\n      \
+        \  "
+      summary: List user memberships
+      tags:
+      - RBAC - Memberships
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MembershipDetail'
+              examples:
+                SuccessResponse:
+                  value:
+                  - count: 2
+                    memberships:
+                    - id: 123e4567-e89b-12d3-a456-426614174000
+                      tenant:
+                        id: 123e4567-e89b-12d3-a456-426614174001
+                        name: Acme Corp
+                        slug: acme-corp
+                      user:
+                        id: 123e4567-e89b-12d3-a456-426614174002
+                        email: user@example.com
+                      roles:
+                      - id: role-1
+                        name: Owner
+                      - id: role-2
+                        name: Admin
+                      invite_status: accepted
+                      joined_at: '2025-01-01T00:00:00Z'
+                  summary: Success Response
+          description: ''
+  /v1/permissions:
+    get:
+      operationId: permissions_list
+      description: "\nList all available permissions in the system. Returns the canonical\
+        \ permission set.\n\n**No specific scope required** - all authenticated users\
+        \ can view available permissions.\n\nQuery parameters:\n- `category`: Filter\
+        \ by permission category (e.g., 'Catalog', 'Finance')\n- `group_by_category`:\
+        \ Set to 'true' to group permissions by category\n\nThis endpoint is useful\
+        \ for:\n- Building role permission assignment UIs\n- Displaying available\
+        \ permissions to administrators\n- Understanding the permission model\n  \
+        \      "
+      summary: List all permissions
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: Filter by permission category
+      - in: query
+        name: group_by_category
+        schema:
+          type: boolean
+        description: Group results by category
+      tags:
+      - RBAC - Permissions
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+              examples:
+                PermissionsList:
+                  value:
+                  - count: 17
+                    permissions:
+                    - id: 123e4567-e89b-12d3-a456-426614174000
+                      code: catalog:view
+                      label: View Catalog
+                      description: View products and catalog
+                      category: Catalog
+                    - id: 123e4567-e89b-12d3-a456-426614174001
+                      code: finance:withdraw:approve
+                      label: Approve Withdrawals
+                      description: Approve withdrawal requests (four-eyes)
+                      category: Finance
+                  summary: Permissions List
+          description: ''
+  /v1/products/products:
+    get:
+      operationId: products_products_list
+      description: Retrieve paginated list of products with optional search and filtering
+      summary: List products
+      parameters:
+      - in: query
+        name: external_source
+        schema:
+          type: string
+          enum:
+          - manual
+          - shopify
+          - woocommerce
+        description: Filter by external source
+      - in: query
+        name: in_stock
+        schema:
+          type: boolean
+        description: Filter by stock availability
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+        description: 'Filter by active status (default: true)'
+      - in: query
+        name: max_price
+        schema:
+          type: number
+          format: double
+        description: Maximum price filter
+      - in: query
+        name: min_price
+        schema:
+          type: number
+          format: double
+        description: Minimum price filter
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Number of items per page (max 100)
+      - in: query
+        name: query
+        schema:
+          type: string
+        description: Search query for title and description
+      tags:
+      - Products
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductList'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
+          description: ''
+    post:
+      operationId: products_products_create
+      description: Create a new product. Feature limit enforcement applies based on
+        subscription tier.
+      summary: Create product
+      tags:
+      - Products
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
+          description: ''
+  /v1/products/products/{product_id}:
+    get:
+      operationId: products_products_retrieve
+      description: Retrieve detailed product information including all variants
+      summary: Get product details
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Products
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+          description: ''
+    put:
+      operationId: products_products_update
+      description: Update product information. Cannot update tenant or external source
+        fields.
+      summary: Update product
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Products
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateRequest'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+          description: ''
+    delete:
+      operationId: products_products_destroy
+      description: Soft delete a product. The product will be marked as deleted but
+        not removed from database.
+      summary: Delete product
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Products
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '204':
+          description: No response body
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+          description: ''
+  /v1/products/products/{product_id}/variants:
+    get:
+      operationId: products_products_variants_list
+      description: Retrieve all variants for a specific product
+      summary: List product variants
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Products
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductVariant'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+          description: ''
+    post:
+      operationId: products_products_variants_create
+      description: Create a new variant for a product
+      summary: Create product variant
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Products
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductVariantCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductVariant'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+          description: ''
+  /v1/products/products/{product_id}/variants/{variant_id}:
+    get:
+      operationId: products_products_variants_retrieve
+      description: Retrieve detailed variant information
+      summary: Get variant details
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: variant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Products
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductVariant'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+          description: ''
+    put:
+      operationId: products_products_variants_update
+      description: Update variant information
+      summary: Update variant
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: variant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Products
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductVariantCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductVariant'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+          description: ''
+    delete:
+      operationId: products_products_variants_destroy
+      description: Soft delete a variant
+      summary: Delete variant
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: variant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Products
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+          description: ''
+  /v1/roles:
+    get:
+      operationId: roles_list
+      description: "\nList all roles for the authenticated tenant. Returns both system\
+        \ and custom roles.\n\n**No specific scope required** - all authenticated\
+        \ users can view roles.\n\nQuery parameters:\n- `type`: Filter by 'system'\
+        \ or 'custom'\n- `include_permissions`: Set to 'true' to include permission\
+        \ details\n        "
+      summary: List tenant roles
+      parameters:
+      - in: query
+        name: include_permissions
+        schema:
+          type: boolean
+        description: Include permission details
+      - in: query
+        name: type
+        schema:
+          type: string
+        description: 'Filter by role type: system or custom'
+      tags:
+      - RBAC - Roles
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+          description: ''
+  /v1/roles/{role_id}:
+    get:
+      operationId: roles_retrieve
+      description: "\nGet detailed information about a role including all permissions.\n\
+        \n**No specific scope required** - all authenticated users can view roles.\n\
+        \        "
+      summary: Get role details
+      parameters:
+      - in: path
+        name: role_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - RBAC - Roles
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleDetail'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/roles/{role_id}/permissions:
+    get:
+      operationId: roles_permissions_list
+      description: "\nList all permissions for a role.\n\n**No specific scope required**\
+        \ - all authenticated users can view role permissions.\n        "
+      summary: List role permissions
+      parameters:
+      - in: path
+        name: role_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - RBAC - Roles
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/roles/{role_id}/permissions/add:
+    post:
+      operationId: roles_permissions_add_create
+      description: "\nAdd permissions to a role. Creates RolePermission records for\
+        \ the specified permission codes.\n\n**Required scope:** `users:manage`\n\n\
+        This immediately affects all users assigned to this role. Their scope cache\
+        \ is invalidated.\n\n**Example curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/roles/{role_id}/permissions\
+        \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+        \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"permission_codes\"\
+        : [\"catalog:view\", \"catalog:edit\", \"orders:view\"]\n  }'\n```\n     \
+        \   "
+      summary: Add permissions to role
+      parameters:
+      - in: path
+        name: role_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - RBAC - Roles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RolePermissionRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/roles/create:
+    post:
+      operationId: roles_create_create
+      description: "\nCreate a new custom role for the tenant. System roles cannot\
+        \ be created via API.\n\n**Required scope:** `users:manage`\n\nAfter creating\
+        \ a role, use the `/v1/roles/{id}/permissions` endpoint to add permissions.\n\
+        \        "
+      summary: Create custom role
+      tags:
+      - RBAC - Roles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/users/{user_id}/permissions:
+    get:
+      operationId: users_permissions_list
+      description: "\nList all permission overrides for a user. Shows both grants\
+        \ and denies.\n\n**No specific scope required** - users can view their own\
+        \ overrides.\nUsers with `users:manage` scope can view others' overrides.\n\
+        \        "
+      summary: List user permission overrides
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - RBAC - Permissions
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserPermission'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/users/{user_id}/permissions/manage:
+    post:
+      operationId: users_permissions_manage_create
+      description: "\nGrant or deny a permission to a specific user.\nCreates a UserPermission\
+        \ override that takes precedence over role permissions.\n\n**Required scope:**\
+        \ `users:manage`\n\n**Deny overrides always win:** If a user has a permission\
+        \ from a role but a UserPermission\ndenies it, the user will NOT have that\
+        \ permission.\n\n**Example curl (grant):**\n```bash\ncurl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions\
+        \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+        \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"permission_code\"\
+        : \"finance:reconcile\",\n    \"granted\": true,\n    \"reason\": \"Temporary\
+        \ access for Q4 audit\"\n  }'\n```\n\n**Example curl (deny):**\n```bash\n\
+        curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \\\n  -H\
+        \ \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\
+        \n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"permission_code\"\
+        : \"catalog:edit\",\n    \"granted\": false,\n    \"reason\": \"Suspended\
+        \ pending investigation\"\n  }'\n```\n        "
+      summary: Grant or deny user permission
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - RBAC - Permissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPermissionCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPermission'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/wallet/balance:
+    get:
+      operationId: wallet_balance_retrieve
+      description: Retrieve current wallet balance for the authenticated tenant
+      summary: Get wallet balance
+      tags:
+      - Wallet
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletBalance'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
+          description: ''
+  /v1/wallet/transactions:
+    get:
+      operationId: wallet_transactions_list
+      description: Retrieve paginated list of wallet transactions with optional filtering
+      summary: List wallet transactions
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+          format: date
+        description: Filter by end date (YYYY-MM-DD)
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Number of items per page (max 100)
+      - in: query
+        name: start_date
+        schema:
+          type: string
+          format: date
+        description: Filter by start date (YYYY-MM-DD)
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - canceled
+          - completed
+          - failed
+          - pending
+        description: Filter by status
+      - in: query
+        name: transaction_type
+        schema:
+          type: string
+          enum:
+          - adjustment
+          - customer_payment
+          - platform_fee
+          - refund
+          - withdrawal
+        description: Filter by transaction type
+      tags:
+      - Wallet
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
+          description: ''
+  /v1/wallet/withdraw:
+    post:
+      operationId: wallet_withdraw_create
+      description: "\nRequest a withdrawal from the tenant wallet. This is the first\
+        \ step of the four-eyes approval process.\n\n**Required scope:** `finance:withdraw:initiate`\n\
+        \nThe amount is immediately debited from the wallet and a transaction is created\
+        \ with `pending_approval` status.\nA different user with `finance:withdraw:approve`\
+        \ scope must approve the withdrawal.\n\n**Four-eyes validation:** The initiating\
+        \ user CANNOT approve their own withdrawal.\n\n**Example curl:**\n```bash\n\
+        curl -X POST https://api.tulia.ai/v1/wallet/withdraw \\\n  -H \"X-TENANT-ID:\
+        \ {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\n  -H \"Content-Type:\
+        \ application/json\" \\\n  -d '{\n    \"amount\": 1000.00,\n    \"currency\"\
+        : \"USD\",\n    \"bank_account\": \"****1234\",\n    \"notes\": \"Monthly\
+        \ payout\"\n  }'\n```\n\n**Response:** Transaction with `status: \"pending_approval\"\
+        ` and `transaction_id` for approval.\n        "
+      summary: Initiate withdrawal (four-eyes step 1)
+      tags:
+      - Finance - Withdrawals
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawalRequestRequest'
+            examples:
+              WithdrawalRequest:
+                value:
+                  amount: 1000.0
+                  currency: USD
+                  bank_account: '****1234'
+                  notes: Monthly payout
+                summary: Withdrawal Request
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              examples:
+                SuccessResponse:
+                  value:
+                    id: 123e4567-e89b-12d3-a456-426614174000
+                    transaction_type: withdrawal
+                    amount: 1000.0
+                    currency: USD
+                    status: pending_approval
+                    initiated_by:
+                      id: user-uuid-1
+                      email: finance@example.com
+                    created_at: '2025-11-10T12:00:00Z'
+                  summary: Success Response
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/wallet/withdrawals/{transaction_id}/approve:
+    post:
+      operationId: wallet_withdrawals_approve_create
+      description: "\nApprove a pending withdrawal with four-eyes validation. This\
+        \ is the second step of the four-eyes approval process.\n\n**Required scope:**\
+        \ `finance:withdraw:approve`\n\n**Four-eyes validation:** The approver MUST\
+        \ be a different user than the initiator.\nIf the same user attempts approval,\
+        \ returns 409 Conflict.\n\nOnce approved, the withdrawal is processed and\
+        \ funds are transferred to the specified destination.\n\n**Example curl:**\n\
+        ```bash\ncurl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve\
+        \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+        \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"notes\":\
+        \ \"Approved for monthly payout\"\n  }'\n```\n\n**Success:** Transaction status\
+        \ changes to `approved` and withdrawal is processed.\n\n**Failure (same user):**\n\
+        ```json\n{\n  \"error\": \"Four-eyes validation failed\",\n  \"details\":\
+        \ {\n    \"message\": \"Initiator and approver must be different users\",\n\
+        \    \"initiator_id\": \"user-uuid-1\",\n    \"approver_id\": \"user-uuid-1\"\
+        \n  }\n}\n```\n        "
+      summary: Approve withdrawal (four-eyes step 2)
+      parameters:
+      - in: path
+        name: transaction_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Finance - Withdrawals
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawalApprovalRequest'
+            examples:
+              ApprovalRequest:
+                value:
+                  notes: Approved for monthly payout
+                summary: Approval Request
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - TenantAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              examples:
+                SuccessResponse:
+                  value:
+                    id: 123e4567-e89b-12d3-a456-426614174000
+                    transaction_type: withdrawal
+                    amount: 1000.0
+                    currency: USD
+                    status: approved
+                    initiated_by:
+                      id: user-uuid-1
+                      email: finance@example.com
+                    approved_by:
+                      id: user-uuid-2
+                      email: manager@example.com
+                    approved_at: '2025-11-10T12:30:00Z'
+                    created_at: '2025-11-10T12:00:00Z'
+                  summary: Success Response
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                Four-EyesViolation:
+                  value:
+                    error: Four-eyes validation failed
+                    details:
+                      message: Initiator and approver must be different users
+                      initiator_id: user-uuid-1
+                      approver_id: user-uuid-1
+                  summary: Four-Eyes Violation
+          description: ''
+components:
+  schemas:
+    ActionEnum:
+      enum:
+      - complete
+      - fail
+      type: string
+      description: |-
+        * `complete` - complete
+        * `fail` - fail
+    AssignRolesRequest:
+      type: object
+      description: Serializer for assigning roles to a user.
+      properties:
+        role_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: List of role IDs to assign
+      required:
+      - role_ids
+    AuditLog:
+      type: object
+      description: Serializer for AuditLog model.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        tenant_name:
+          type: string
+          readOnly: true
+        user_email:
+          type: string
+          format: email
+          readOnly: true
+        action:
+          type: string
+          readOnly: true
+          description: Action performed (e.g., 'role_assigned', 'permission_denied',
+            'product_created')
+        target_type:
+          type: string
+          readOnly: true
+          description: Type of target entity (e.g., 'Role', 'Product', 'Withdrawal')
+        target_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+          description: ID of target entity
+        diff:
+          readOnly: true
+          description: Before/after changes in JSON format
+        metadata:
+          readOnly: true
+          description: Additional context metadata
+        ip_address:
+          type: string
+          readOnly: true
+          nullable: true
+          description: IP address of the request
+        user_agent:
+          type: string
+          readOnly: true
+          description: User agent string
+        request_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+          description: Request ID for tracing
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+      required:
+      - action
+      - created_at
+      - diff
+      - id
+      - ip_address
+      - metadata
+      - request_id
+      - target_id
+      - target_type
+      - tenant_name
+      - user_agent
+      - user_email
+    BlankEnum:
+      enum:
+      - ''
+    ExternalSourceEnum:
+      enum:
+      - woocommerce
+      - shopify
+      - manual
+      type: string
+      description: |-
+        * `woocommerce` - WooCommerce
+        * `shopify` - Shopify
+        * `manual` - Manual
+    InviteMemberRequest:
+      type: object
+      description: Serializer for inviting a new member to a tenant.
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        role_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: List of role IDs to assign to the invited user
+      required:
+      - email
+    InviteStatusEnum:
+      enum:
+      - pending
+      - accepted
+      - revoked
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `revoked` - Revoked
+    MembershipDetail:
+      type: object
+      description: Detailed serializer for membership with full role details.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        user:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        tenant_id:
+          type: string
+          format: uuid
+          readOnly: true
+        tenant_name:
+          type: string
+          readOnly: true
+        is_active:
+          type: boolean
+          description: Whether membership is active
+        invite_status:
+          allOf:
+          - $ref: '#/components/schemas/InviteStatusEnum'
+          description: |-
+            Invitation status
+
+            * `pending` - Pending
+            * `accepted` - Accepted
+            * `revoked` - Revoked
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantUserRole'
+          readOnly: true
+        invited_by_email:
+          type: string
+          format: email
+          readOnly: true
+        invited_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When invitation was sent
+        joined_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When user accepted invitation
+        last_seen_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Last activity timestamp in this tenant
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - created_at
+      - id
+      - invited_at
+      - invited_by_email
+      - joined_at
+      - last_seen_at
+      - roles
+      - tenant_id
+      - tenant_name
+      - updated_at
+      - user
+    NullEnum:
+      enum:
+      - null
+    PaginatedAuditLogList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+    Permission:
+      type: object
+      description: Serializer for Permission model.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        code:
+          type: string
+          description: Unique permission code (e.g., 'catalog:view')
+          maxLength: 100
+        label:
+          type: string
+          description: Human-readable label (e.g., 'View Catalog')
+          maxLength: 255
+        description:
+          type: string
+          description: Detailed description of what this permission grants
+        category:
+          type: string
+          description: Permission category (e.g., 'catalog', 'finance', 'users')
+          maxLength: 50
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - category
+      - code
+      - created_at
+      - id
+      - label
+      - updated_at
+    ProductCreateRequest:
+      type: object
+      description: Serializer for creating Product.
+      properties:
+        external_source:
+          nullable: true
+          description: |-
+            Source system for synchronized products
+
+            * `woocommerce` - WooCommerce
+            * `shopify` - Shopify
+            * `manual` - Manual
+          oneOf:
+          - $ref: '#/components/schemas/ExternalSourceEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        external_id:
+          type: string
+          nullable: true
+          description: Product ID in external system
+          maxLength: 255
+        title:
+          type: string
+          minLength: 1
+          description: Product title
+          maxLength: 500
+        description:
+          type: string
+          nullable: true
+          description: Product description
+        images:
+          description: List of image URLs
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Base price
+        currency:
+          type: string
+          minLength: 1
+          description: Currency code (ISO 4217)
+          maxLength: 3
+        sku:
+          type: string
+          nullable: true
+          description: Stock Keeping Unit
+          maxLength: 255
+        stock:
+          type: integer
+          nullable: true
+          description: Available stock quantity (null = unlimited)
+        is_active:
+          type: boolean
+          description: Whether product is active and visible
+        metadata:
+          description: Additional product metadata
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductVariantCreateRequest'
+      required:
+      - price
+      - title
+    ProductDetail:
+      type: object
+      description: Serializer for Product detail view (with variants).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        tenant:
+          type: string
+          format: uuid
+          description: Tenant this product belongs to
+          readOnly: true
+        tenant_name:
+          type: string
+          readOnly: true
+        external_source:
+          nullable: true
+          description: |-
+            Source system for synchronized products
+
+            * `woocommerce` - WooCommerce
+            * `shopify` - Shopify
+            * `manual` - Manual
+          oneOf:
+          - $ref: '#/components/schemas/ExternalSourceEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        external_id:
+          type: string
+          nullable: true
+          description: Product ID in external system
+          maxLength: 255
+        title:
+          type: string
+          description: Product title
+          maxLength: 500
+        description:
+          type: string
+          nullable: true
+          description: Product description
+        images:
+          description: List of image URLs
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Base price
+        currency:
+          type: string
+          description: Currency code (ISO 4217)
+          maxLength: 3
+        sku:
+          type: string
+          nullable: true
+          description: Stock Keeping Unit
+          maxLength: 255
+        stock:
+          type: integer
+          nullable: true
+          description: Available stock quantity (null = unlimited)
+        is_active:
+          type: boolean
+          description: Whether product is active and visible
+        is_in_stock:
+          type: boolean
+          readOnly: true
+        variant_count:
+          type: integer
+          readOnly: true
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductVariant'
+          readOnly: true
+        metadata:
+          description: Additional product metadata
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - created_at
+      - external_id
+      - external_source
+      - id
+      - is_in_stock
+      - price
+      - tenant
+      - tenant_name
+      - title
+      - updated_at
+      - variant_count
+      - variants
+    ProductList:
+      type: object
+      description: Serializer for Product list view (without variants).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        tenant:
+          type: string
+          format: uuid
+          description: Tenant this product belongs to
+          readOnly: true
+        tenant_name:
+          type: string
+          readOnly: true
+        external_source:
+          nullable: true
+          description: |-
+            Source system for synchronized products
+
+            * `woocommerce` - WooCommerce
+            * `shopify` - Shopify
+            * `manual` - Manual
+          oneOf:
+          - $ref: '#/components/schemas/ExternalSourceEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        external_id:
+          type: string
+          nullable: true
+          description: Product ID in external system
+          maxLength: 255
+        title:
+          type: string
+          description: Product title
+          maxLength: 500
+        description:
+          type: string
+          nullable: true
+          description: Product description
+        images:
+          description: List of image URLs
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Base price
+        currency:
+          type: string
+          description: Currency code (ISO 4217)
+          maxLength: 3
+        sku:
+          type: string
+          nullable: true
+          description: Stock Keeping Unit
+          maxLength: 255
+        stock:
+          type: integer
+          nullable: true
+          description: Available stock quantity (null = unlimited)
+        is_active:
+          type: boolean
+          description: Whether product is active and visible
+        is_in_stock:
+          type: boolean
+          readOnly: true
+        variant_count:
+          type: integer
+          readOnly: true
+        metadata:
+          description: Additional product metadata
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - created_at
+      - external_id
+      - external_source
+      - id
+      - is_in_stock
+      - price
+      - tenant
+      - tenant_name
+      - title
+      - updated_at
+      - variant_count
+    ProductUpdateRequest:
+      type: object
+      description: Serializer for updating Product.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Product title
+          maxLength: 500
+        description:
+          type: string
+          nullable: true
+          description: Product description
+        images:
+          description: List of image URLs
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Base price
+        currency:
+          type: string
+          minLength: 1
+          description: Currency code (ISO 4217)
+          maxLength: 3
+        sku:
+          type: string
+          nullable: true
+          description: Stock Keeping Unit
+          maxLength: 255
+        stock:
+          type: integer
+          nullable: true
+          description: Available stock quantity (null = unlimited)
+        is_active:
+          type: boolean
+          description: Whether product is active and visible
+        metadata:
+          description: Additional product metadata
+    ProductVariant:
+      type: object
+      description: Serializer for ProductVariant.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        product:
+          type: string
+          format: uuid
+          description: Product this variant belongs to
+          readOnly: true
+        title:
+          type: string
+          description: Variant title (e.g., 'Large / Red')
+          maxLength: 255
+        sku:
+          type: string
+          nullable: true
+          description: Stock Keeping Unit for this variant
+          maxLength: 255
+        stock:
+          type: integer
+          nullable: true
+          description: Available stock quantity (null = unlimited)
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+          description: Variant-specific price (null = use product price)
+        effective_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+          description: Effective price (variant price or product price)
+        currency:
+          type: string
+          readOnly: true
+        attrs:
+          description: 'Variant attributes (e.g., {''size'': ''L'', ''color'': ''red''})'
+        metadata:
+          description: Additional variant metadata
+        is_in_stock:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - created_at
+      - currency
+      - effective_price
+      - id
+      - is_in_stock
+      - product
+      - title
+      - updated_at
+    ProductVariantCreateRequest:
+      type: object
+      description: Serializer for creating ProductVariant.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Variant title (e.g., 'Large / Red')
+          maxLength: 255
+        sku:
+          type: string
+          nullable: true
+          description: Stock Keeping Unit for this variant
+          maxLength: 255
+        stock:
+          type: integer
+          nullable: true
+          description: Available stock quantity (null = unlimited)
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+          description: Variant-specific price (null = use product price)
+        attrs:
+          description: 'Variant attributes (e.g., {''size'': ''L'', ''color'': ''red''})'
+        metadata:
+          description: Additional variant metadata
+      required:
+      - title
+    Role:
+      type: object
+      description: Serializer for Role model.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        name:
+          type: string
+          description: Role name (e.g., 'Owner', 'Catalog Manager')
+          maxLength: 100
+        description:
+          type: string
+          description: Role description
+        is_system:
+          type: boolean
+          readOnly: true
+          description: Whether this is a system-seeded role
+        permission_count:
+          type: string
+          readOnly: true
+        permissions:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - created_at
+      - id
+      - is_system
+      - name
+      - permission_count
+      - permissions
+      - updated_at
+    RoleCreateRequest:
+      type: object
+      description: Serializer for creating roles.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Role name (e.g., 'Owner', 'Catalog Manager')
+          maxLength: 100
+        description:
+          type: string
+          description: Role description
+      required:
+      - name
+    RoleDetail:
+      type: object
+      description: Detailed serializer for Role with full permission list.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        name:
+          type: string
+          description: Role name (e.g., 'Owner', 'Catalog Manager')
+          maxLength: 100
+        description:
+          type: string
+          description: Role description
+        is_system:
+          type: boolean
+          readOnly: true
+          description: Whether this is a system-seeded role
+        permission_count:
+          type: string
+          readOnly: true
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - created_at
+      - id
+      - is_system
+      - name
+      - permission_count
+      - permissions
+      - updated_at
+    RolePermissionRequest:
+      type: object
+      description: Serializer for adding permissions to a role.
+      properties:
+        permission_codes:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: List of permission codes to add to the role
+      required:
+      - permission_codes
+    StatusEnum:
+      enum:
+      - pending
+      - completed
+      - failed
+      - canceled
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `completed` - Completed
+        * `failed` - Failed
+        * `canceled` - Canceled
+    TenantUserRole:
+      type: object
+      description: Serializer for TenantUserRole (role assignments).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        role:
+          allOf:
+          - $ref: '#/components/schemas/Role'
+          readOnly: true
+        assigned_by_email:
+          type: string
+          format: email
+          readOnly: true
+        assigned_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When role was assigned
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+      required:
+      - assigned_at
+      - assigned_by_email
+      - created_at
+      - id
+      - role
+    Transaction:
+      type: object
+      description: Serializer for Transaction.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        tenant:
+          type: string
+          format: uuid
+          description: Tenant this transaction belongs to
+          readOnly: true
+        tenant_name:
+          type: string
+          readOnly: true
+        wallet:
+          type: string
+          format: uuid
+          description: Wallet this transaction affects
+          readOnly: true
+        transaction_type:
+          allOf:
+          - $ref: '#/components/schemas/TransactionTypeEnum'
+          description: |-
+            Type of transaction
+
+            * `customer_payment` - Customer Payment
+            * `platform_fee` - Platform Fee
+            * `withdrawal` - Withdrawal
+            * `refund` - Refund
+            * `adjustment` - Adjustment
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Transaction amount (gross)
+        fee:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Platform fee (for customer_payment type)
+        net_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Net amount after fees
+        currency:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          description: |-
+            Transaction status
+
+            * `pending` - Pending
+            * `completed` - Completed
+            * `failed` - Failed
+            * `canceled` - Canceled
+        reference_type:
+          type: string
+          nullable: true
+          description: Type of related entity (e.g., 'order', 'appointment')
+          maxLength: 50
+        reference_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID of related entity
+        metadata:
+          description: Additional transaction metadata
+        notes:
+          type: string
+          description: Internal notes about the transaction
+        initiated_by:
+          type: string
+          format: uuid
+          description: User who initiated the transaction (for four-eyes approval)
+          readOnly: true
+          nullable: true
+        initiated_by_email:
+          type: string
+          readOnly: true
+          nullable: true
+        approved_by:
+          type: string
+          format: uuid
+          description: User who approved the transaction (for four-eyes approval)
+          readOnly: true
+          nullable: true
+        approved_by_email:
+          type: string
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - amount
+      - approved_by
+      - approved_by_email
+      - created_at
+      - currency
+      - id
+      - initiated_by
+      - initiated_by_email
+      - net_amount
+      - tenant
+      - tenant_name
+      - transaction_type
+      - updated_at
+      - wallet
+    TransactionTypeEnum:
+      enum:
+      - customer_payment
+      - platform_fee
+      - withdrawal
+      - refund
+      - adjustment
+      type: string
+      description: |-
+        * `customer_payment` - Customer Payment
+        * `platform_fee` - Platform Fee
+        * `withdrawal` - Withdrawal
+        * `refund` - Refund
+        * `adjustment` - Adjustment
+    User:
+      type: object
+      description: Serializer for User model.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        email:
+          type: string
+          format: email
+          description: User email address (unique globally)
+          maxLength: 254
+        first_name:
+          type: string
+          description: User first name
+          maxLength: 100
+        last_name:
+          type: string
+          description: User last name
+          maxLength: 100
+        full_name:
+          type: string
+          readOnly: true
+        is_active:
+          type: boolean
+          description: Whether user account is active
+        two_factor_enabled:
+          type: boolean
+          description: Whether 2FA is enabled
+        last_login_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Last login timestamp
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - created_at
+      - email
+      - full_name
+      - id
+      - last_login_at
+      - updated_at
+    UserPermission:
+      type: object
+      description: Serializer for UserPermission (permission overrides).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        permission:
+          allOf:
+          - $ref: '#/components/schemas/Permission'
+          readOnly: true
+        granted:
+          type: boolean
+          description: True = grant, False = deny (deny wins over role grants)
+        reason:
+          type: string
+          description: Reason for this override
+        granted_by_email:
+          type: string
+          format: email
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - created_at
+      - granted
+      - granted_by_email
+      - id
+      - permission
+      - updated_at
+    UserPermissionCreateRequest:
+      type: object
+      description: Serializer for creating user permission overrides.
+      properties:
+        permission_code:
+          type: string
+          minLength: 1
+        granted:
+          type: boolean
+        reason:
+          type: string
+          description: Reason for this permission override
+      required:
+      - granted
+      - permission_code
+    WalletBalance:
+      type: object
+      description: Serializer for wallet balance response.
+      properties:
+        balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        currency:
+          type: string
+          maxLength: 3
+        minimum_withdrawal:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+      required:
+      - balance
+      - currency
+      - minimum_withdrawal
+    WithdrawalApprovalRequest:
+      type: object
+      description: Serializer for withdrawal approval with four-eyes validation.
+      properties:
+        notes:
+          type: string
+          description: Approval notes
+    WithdrawalProcessRequest:
+      type: object
+      description: Serializer for processing withdrawal (admin).
+      properties:
+        action:
+          allOf:
+          - $ref: '#/components/schemas/ActionEnum'
+          description: |-
+            Action to take: complete or fail
+
+            * `complete` - complete
+            * `fail` - fail
+        reason:
+          type: string
+          description: Reason for failure (required if action is 'fail')
+        notes:
+          type: string
+          description: Admin notes
+      required:
+      - action
+    WithdrawalRequestRequest:
+      type: object
+      description: Serializer for withdrawal request.
+      properties:
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          description: Withdrawal amount
+        bank_account:
+          type: string
+          description: Bank account information
+        notes:
+          type: string
+          description: Additional notes
+      required:
+      - amount
+  securitySchemes:
+    TenantAuth:
+      type: apiKey
+      in: header
+      name: X-TENANT-ID
+      description: Tenant UUID for multi-tenant context. Must be accompanied by X-TENANT-API-KEY
+        header.
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+tags:
+- name: RBAC - Memberships
+  description: User membership and invitation management
+- name: RBAC - Roles
+  description: Role management and permission assignments
+- name: RBAC - Permissions
+  description: Permission listing and user-specific overrides
+- name: RBAC - Audit
+  description: Audit log viewing for compliance
+- name: Finance - Wallet
+  description: Wallet balance and transaction management
+- name: Finance - Withdrawals
+  description: Withdrawal requests with four-eyes approval
+- name: Catalog
+  description: Product catalog management
+- name: Services
+  description: Bookable services and availability
+- name: Orders
+  description: Order management
+- name: Appointments
+  description: Appointment booking and management
+- name: Messaging
+  description: WhatsApp messaging and conversations
+- name: Analytics
+  description: Business analytics and reporting
+- name: Integrations
+  description: External service integrations
