@@ -431,3 +431,238 @@ class MessageTemplate(BaseModel):
         """Increment usage counter."""
         self.usage_count += 1
         self.save(update_fields=['usage_count'])
+
+
+class CustomerPreferencesManager(models.Manager):
+    """Manager for customer preferences queries."""
+    
+    def for_customer(self, tenant, customer):
+        """Get preferences for a specific customer."""
+        return self.filter(tenant=tenant, customer=customer).first()
+    
+    def get_or_create_for_customer(self, tenant, customer):
+        """Get or create preferences with default values."""
+        prefs, created = self.get_or_create(
+            tenant=tenant,
+            customer=customer,
+            defaults={
+                'transactional_messages': True,
+                'reminder_messages': True,
+                'promotional_messages': False,
+            }
+        )
+        return prefs, created
+
+
+class CustomerPreferences(BaseModel):
+    """
+    Customer communication preferences and consent settings.
+    
+    Manages three types of consent:
+    - transactional_messages: Order updates, payment confirmations (always true, cannot opt-out)
+    - reminder_messages: Appointment reminders, cart abandonment (default true, can opt-out)
+    - promotional_messages: Marketing, offers, campaigns (default false, requires opt-in)
+    
+    Each customer has one preferences record per tenant.
+    """
+    
+    tenant = models.ForeignKey(
+        'tenants.Tenant',
+        on_delete=models.CASCADE,
+        related_name='customer_preferences',
+        db_index=True,
+        help_text="Tenant this preference record belongs to"
+    )
+    customer = models.ForeignKey(
+        'tenants.Customer',
+        on_delete=models.CASCADE,
+        related_name='preferences',
+        db_index=True,
+        help_text="Customer these preferences belong to"
+    )
+    
+    # Consent Types
+    transactional_messages = models.BooleanField(
+        default=True,
+        help_text="Consent for transactional messages (order updates, payment confirmations)"
+    )
+    reminder_messages = models.BooleanField(
+        default=True,
+        help_text="Consent for reminder messages (appointment reminders, cart abandonment)"
+    )
+    promotional_messages = models.BooleanField(
+        default=False,
+        help_text="Consent for promotional messages (marketing, offers, campaigns)"
+    )
+    
+    # Metadata
+    last_updated_by = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="Source of last update (customer, tenant, system)"
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Additional notes about preference changes"
+    )
+    
+    # Custom manager
+    objects = CustomerPreferencesManager()
+    
+    class Meta:
+        db_table = 'customer_preferences'
+        unique_together = [('tenant', 'customer')]
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['tenant', 'customer']),
+            models.Index(fields=['tenant', 'promotional_messages']),
+            models.Index(fields=['tenant', 'reminder_messages']),
+        ]
+        verbose_name_plural = 'Customer preferences'
+    
+    def __str__(self):
+        return f"Preferences for {self.customer} ({self.tenant.slug})"
+    
+    def has_consent_for(self, message_type):
+        """
+        Check if customer has consented to a specific message type.
+        
+        Args:
+            message_type: One of 'transactional', 'reminder', 'promotional'
+            
+        Returns:
+            bool: True if customer has consented
+        """
+        consent_map = {
+            'transactional': self.transactional_messages,
+            'reminder': self.reminder_messages,
+            'promotional': self.promotional_messages,
+            'automated_transactional': self.transactional_messages,
+            'automated_reminder': self.reminder_messages,
+            'automated_reengagement': self.promotional_messages,
+            'scheduled_promotional': self.promotional_messages,
+        }
+        return consent_map.get(message_type, False)
+    
+    def opt_out_all(self):
+        """Opt out of all optional message types (keeps transactional)."""
+        self.reminder_messages = False
+        self.promotional_messages = False
+        self.save(update_fields=['reminder_messages', 'promotional_messages'])
+    
+    def opt_in_all(self):
+        """Opt in to all message types."""
+        self.reminder_messages = True
+        self.promotional_messages = True
+        self.save(update_fields=['reminder_messages', 'promotional_messages'])
+
+
+class ConsentEventManager(models.Manager):
+    """Manager for consent event queries."""
+    
+    def for_customer(self, tenant, customer):
+        """Get consent events for a specific customer."""
+        return self.filter(tenant=tenant, customer=customer).order_by('-created_at')
+    
+    def by_consent_type(self, tenant, customer, consent_type):
+        """Get consent events for a specific consent type."""
+        return self.filter(
+            tenant=tenant,
+            customer=customer,
+            consent_type=consent_type
+        ).order_by('-created_at')
+
+
+class ConsentEvent(BaseModel):
+    """
+    Audit trail for customer consent preference changes.
+    
+    Records all changes to consent preferences for compliance and regulatory purposes.
+    Each event captures:
+    - What changed (consent_type)
+    - Previous and new values
+    - Who/what triggered the change (source)
+    - When it happened (created_at from BaseModel)
+    """
+    
+    CONSENT_TYPE_CHOICES = [
+        ('transactional_messages', 'Transactional Messages'),
+        ('reminder_messages', 'Reminder Messages'),
+        ('promotional_messages', 'Promotional Messages'),
+    ]
+    
+    SOURCE_CHOICES = [
+        ('customer_initiated', 'Customer Initiated'),
+        ('tenant_updated', 'Tenant Updated'),
+        ('system_default', 'System Default'),
+    ]
+    
+    tenant = models.ForeignKey(
+        'tenants.Tenant',
+        on_delete=models.CASCADE,
+        related_name='consent_events',
+        db_index=True,
+        help_text="Tenant this event belongs to"
+    )
+    customer = models.ForeignKey(
+        'tenants.Customer',
+        on_delete=models.CASCADE,
+        related_name='consent_events',
+        db_index=True,
+        help_text="Customer this event is for"
+    )
+    preferences = models.ForeignKey(
+        CustomerPreferences,
+        on_delete=models.CASCADE,
+        related_name='events',
+        help_text="Preferences record this event relates to"
+    )
+    
+    # Event Details
+    consent_type = models.CharField(
+        max_length=30,
+        choices=CONSENT_TYPE_CHOICES,
+        db_index=True,
+        help_text="Type of consent that changed"
+    )
+    previous_value = models.BooleanField(
+        help_text="Previous consent value"
+    )
+    new_value = models.BooleanField(
+        help_text="New consent value"
+    )
+    source = models.CharField(
+        max_length=20,
+        choices=SOURCE_CHOICES,
+        help_text="Source of the change"
+    )
+    
+    # Additional Context
+    reason = models.TextField(
+        blank=True,
+        help_text="Reason for the change (if provided)"
+    )
+    changed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='consent_changes',
+        help_text="User who made the change (if tenant_updated)"
+    )
+    
+    # Custom manager
+    objects = ConsentEventManager()
+    
+    class Meta:
+        db_table = 'consent_events'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant', 'customer', 'created_at']),
+            models.Index(fields=['tenant', 'consent_type', 'created_at']),
+            models.Index(fields=['customer', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"ConsentEvent: {self.customer} - {self.consent_type} ({self.previous_value} → {self.new_value})"

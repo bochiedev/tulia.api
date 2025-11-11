@@ -340,22 +340,22 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - _Requirements: 15.2, 15.3, 15.5_
 
 
-- [ ] 10. Implement consent management system
-  - [ ] 10.1 Create CustomerPreferences and ConsentEvent models
+- [x] 10. Implement consent management system
+  - [x] 10.1 Create CustomerPreferences and ConsentEvent models
     - Implement CustomerPreferences model with three consent types
     - Set default values: transactional=true, reminder=true, promotional=false
     - Implement ConsentEvent model for audit trail
     - Add unique constraint on (tenant, customer)
     - _Requirements: 46.1, 46.2, 46.3, 46.4, 52.1, 52.2_
   
-  - [ ] 10.2 Implement ConsentService for preference management
+  - [x] 10.2 Implement ConsentService for preference management
     - Create get_preferences() method
     - Create update_consent() method with audit logging
     - Create check_consent() method for message validation
     - Implement automatic preference creation on first customer interaction
     - _Requirements: 46.1, 48.1, 52.1_
   
-  - [ ] 10.3 Add consent intent handlers to IntentService
+  - [x] 10.3 Add consent intent handlers to IntentService
     - Create handler for OPT_OUT_PROMOTIONS intent (keywords: "stop promotions")
     - Create handler for OPT_IN_PROMOTIONS intent (keywords: "start promotions")
     - Create handler for STOP_ALL intent (keywords: "STOP", "UNSUBSCRIBE")
@@ -363,7 +363,7 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Each handler updates preferences and sends confirmation
     - _Requirements: 46.5, 46.6, 47.1, 47.2, 47.3, 47.4, 47.5_
   
-  - [ ] 10.4 Create customer preferences REST API endpoints
+  - [x] 10.4 Create customer preferences REST API endpoints
     - Implement GET /v1/customers/{id}/preferences
     - Implement PUT /v1/customers/{id}/preferences with reason logging
     - Add consent indicators to customer list views
