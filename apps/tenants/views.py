@@ -17,7 +17,7 @@ from apps.tenants.serializers import (
     WithdrawalApprovalSerializer, TransactionFilterSerializer
 )
 from apps.core.exceptions import TuliaException
-from apps.core.permissions import requires_scopes
+from apps.core.permissions import requires_scopes, HasTenantScopes, HasTenantScopes
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,11 @@ class WalletBalanceView(APIView):
     Get wallet balance for authenticated tenant.
     
     GET /v1/wallet/balance
+    
+    Required scope: finance:view
     """
+    permission_classes = [HasTenantScopes]
+    required_scopes = {'finance:view'}
     
     @extend_schema(
         summary="Get wallet balance",
@@ -46,7 +50,8 @@ class WalletBalanceView(APIView):
                 'properties': {
                     'error': {'type': 'string'},
                     'details': {'type': 'object'}
-                }
+                },
+                'description': 'Forbidden - Missing required scope: finance:view'
             }
         },
         tags=['Wallet']
@@ -80,7 +85,11 @@ class WalletTransactionsView(APIView):
     List wallet transactions for authenticated tenant.
     
     GET /v1/wallet/transactions
+    
+    Required scope: finance:view
     """
+    permission_classes = [HasTenantScopes]
+    required_scopes = {'finance:view'}
     
     @extend_schema(
         summary="List wallet transactions",

@@ -14,6 +14,19 @@ from apps.rbac.services import RBACService
 from apps.tenants.models import Tenant, SubscriptionTier
 
 
+def get_or_create_permission(code, label='', category=''):
+    """Helper to get or create permission (idempotent)."""
+    return Permission.objects.get_or_create(
+        code=code,
+        defaults={'label': label or code, 'category': category}
+    )[0]
+
+
+def create_test_role(tenant, name):
+    """Helper to create a test role with a unique name."""
+    return Role.objects.create(tenant=tenant, name=f'Test_{name}')
+
+
 @pytest.mark.django_db
 class TestScopeResolution:
     """Test scope resolution with roles and user permission overrides."""
@@ -24,9 +37,9 @@ class TestScopeResolution:
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         
         # Create role with permissions
-        role = Role.objects.create(tenant=tenant, name='Catalog Manager')
-        perm1 = Permission.objects.create(code='catalog:view', label='View', category='catalog')
-        perm2 = Permission.objects.create(code='catalog:edit', label='Edit', category='catalog')
+        role = create_test_role(tenant, 'CatalogManager')
+        perm1 = get_or_create_permission('catalog:view', 'View', 'catalog')
+        perm2 = get_or_create_permission('catalog:edit', 'Edit', 'catalog')
         RolePermission.objects.grant_permission(role, perm1)
         RolePermission.objects.grant_permission(role, perm2)
         
@@ -45,15 +58,15 @@ class TestScopeResolution:
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         
         # Create first role
-        role1 = Role.objects.create(tenant=tenant, name='Catalog Manager')
-        perm1 = Permission.objects.create(code='catalog:view', label='View', category='catalog')
-        perm2 = Permission.objects.create(code='catalog:edit', label='Edit', category='catalog')
+        role1 = create_test_role(tenant, 'CatalogManager')
+        perm1 = get_or_create_permission('catalog:view', 'View', 'catalog')
+        perm2 = get_or_create_permission('catalog:edit', 'Edit', 'catalog')
         RolePermission.objects.grant_permission(role1, perm1)
         RolePermission.objects.grant_permission(role1, perm2)
         
         # Create second role
-        role2 = Role.objects.create(tenant=tenant, name='Analyst')
-        perm3 = Permission.objects.create(code='analytics:view', label='View Analytics', category='analytics')
+        role2 = create_test_role(tenant, 'Analyst')
+        perm3 = get_or_create_permission('analytics:view', 'View Analytics', 'analytics')
         RolePermission.objects.grant_permission(role2, perm3)
         
         # Assign both roles
@@ -73,9 +86,9 @@ class TestScopeResolution:
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         
         # Create role with catalog:edit permission
-        role = Role.objects.create(tenant=tenant, name='Catalog Manager')
-        perm_view = Permission.objects.create(code='catalog:view', label='View', category='catalog')
-        perm_edit = Permission.objects.create(code='catalog:edit', label='Edit', category='catalog')
+        role = create_test_role(tenant, 'CatalogManager')
+        perm_view = get_or_create_permission('catalog:view', 'View', 'catalog')
+        perm_edit = get_or_create_permission('catalog:edit', 'Edit', 'catalog')
         RolePermission.objects.grant_permission(role, perm_view)
         RolePermission.objects.grant_permission(role, perm_edit)
         
@@ -99,7 +112,7 @@ class TestScopeResolution:
         # No roles assigned
         
         # Grant permission directly
-        perm = Permission.objects.create(code='finance:view', label='View Finance', category='finance')
+        perm = get_or_create_permission(code='finance:view', label='View Finance', category='finance')
         UserPermission.objects.grant_permission(tenant_user, perm)
         
         # Resolve scopes
@@ -113,8 +126,8 @@ class TestScopeResolution:
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         
         # Create role with permission
-        role = Role.objects.create(tenant=tenant, name='Viewer')
-        perm = Permission.objects.create(code='catalog:view', label='View', category='catalog')
+        role = create_test_role(tenant, 'Viewer')
+        perm = get_or_create_permission(code='catalog:view', label='View', category='catalog')
         RolePermission.objects.grant_permission(role, perm)
         TenantUserRole.objects.create(tenant_user=tenant_user, role=role)
         
@@ -145,8 +158,8 @@ class TestScopeResolution:
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         
         # Create role with permission
-        role = Role.objects.create(tenant=tenant, name='Viewer')
-        perm = Permission.objects.create(code='catalog:view', label='View', category='catalog')
+        role = create_test_role(tenant, 'Viewer')
+        perm = get_or_create_permission(code='catalog:view', label='View', category='catalog')
         RolePermission.objects.grant_permission(role, perm)
         TenantUserRole.objects.create(tenant_user=tenant_user, role=role)
         
@@ -175,7 +188,7 @@ class TestPermissionManagement:
         admin = User.objects.create_user(email='admin@example.com', password='pass')
         
         # Create permission
-        Permission.objects.create(code='catalog:view', label='View', category='catalog')
+        get_or_create_permission(code='catalog:view', label='View', category='catalog')
         
         # Grant permission
         user_perm = RBACService.grant_permission(
@@ -199,8 +212,8 @@ class TestPermissionManagement:
         admin = User.objects.create_user(email='admin@example.com', password='pass')
         
         # Create role with permission
-        role = Role.objects.create(tenant=tenant, name='Manager')
-        perm = Permission.objects.create(code='catalog:edit', label='Edit', category='catalog')
+        role = create_test_role(tenant, 'Manager')
+        perm = get_or_create_permission(code='catalog:edit', label='Edit', category='catalog')
         RolePermission.objects.grant_permission(role, perm)
         TenantUserRole.objects.create(tenant_user=tenant_user, role=role)
         
@@ -228,7 +241,7 @@ class TestPermissionManagement:
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         admin = User.objects.create_user(email='admin@example.com', password='pass')
         
-        Permission.objects.create(code='catalog:view', label='View', category='catalog')
+        get_or_create_permission(code='catalog:view', label='View', category='catalog')
         
         # Grant permission
         RBACService.grant_permission(
@@ -270,7 +283,7 @@ class TestRoleManagement:
         admin = User.objects.create_user(email='admin@example.com', password='pass')
         
         # Create role
-        role = Role.objects.create(tenant=tenant, name='Catalog Manager')
+        role = create_test_role(tenant, 'Catalog Manager')
         
         # Assign role
         user_role = RBACService.assign_role(
@@ -288,7 +301,7 @@ class TestRoleManagement:
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         admin = User.objects.create_user(email='admin@example.com', password='pass')
         
-        role = Role.objects.create(tenant=tenant, name='Catalog Manager')
+        role = create_test_role(tenant, 'Catalog Manager')
         
         # Assign role
         RBACService.assign_role(
@@ -305,7 +318,7 @@ class TestRoleManagement:
         ).first()
         
         assert log is not None
-        assert log.diff['role'] == 'Catalog Manager'
+        assert log.diff['role'] == 'Test_Catalog Manager'
     
     def test_assign_role_invalidates_cache(self, tenant, user):
         """Test that assigning role invalidates scope cache."""
@@ -316,8 +329,8 @@ class TestRoleManagement:
         assert len(scopes1) == 0
         
         # Assign role with permission
-        role = Role.objects.create(tenant=tenant, name='Viewer')
-        perm = Permission.objects.create(code='catalog:view', label='View', category='catalog')
+        role = create_test_role(tenant, 'Viewer')
+        perm = get_or_create_permission(code='catalog:view', label='View', category='catalog')
         RolePermission.objects.grant_permission(role, perm)
         
         RBACService.assign_role(tenant_user=tenant_user, role=role)
@@ -332,7 +345,7 @@ class TestRoleManagement:
         admin = User.objects.create_user(email='admin@example.com', password='pass')
         
         # Create and assign role
-        role = Role.objects.create(tenant=tenant, name='Catalog Manager')
+        role = create_test_role(tenant, 'Catalog Manager')
         TenantUserRole.objects.create(tenant_user=tenant_user, role=role)
         
         # Remove role
@@ -355,7 +368,7 @@ class TestRoleManagement:
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         admin = User.objects.create_user(email='admin@example.com', password='pass')
         
-        role = Role.objects.create(tenant=tenant, name='Catalog Manager')
+        role = create_test_role(tenant, 'Catalog Manager')
         TenantUserRole.objects.create(tenant_user=tenant_user, role=role)
         
         # Remove role
@@ -373,12 +386,12 @@ class TestRoleManagement:
         ).first()
         
         assert log is not None
-        assert log.diff['role'] == 'Catalog Manager'
+        assert log.diff['role'] == 'Test_Catalog Manager'
     
     def test_remove_nonexistent_role_returns_false(self, tenant, user):
         """Test that removing nonexistent role returns False."""
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
-        role = Role.objects.create(tenant=tenant, name='Catalog Manager')
+        role = create_test_role(tenant, 'Catalog Manager')
         
         # Role not assigned, try to remove
         removed = RBACService.remove_role(
@@ -445,8 +458,8 @@ class TestHelperMethods:
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         
         # Create role with permission
-        role = Role.objects.create(tenant=tenant, name='Viewer')
-        perm = Permission.objects.create(code='catalog:view', label='View', category='catalog')
+        role = create_test_role(tenant, 'Viewer')
+        perm = get_or_create_permission(code='catalog:view', label='View', category='catalog')
         RolePermission.objects.grant_permission(role, perm)
         TenantUserRole.objects.create(tenant_user=tenant_user, role=role)
         
@@ -457,9 +470,9 @@ class TestHelperMethods:
         """Test checking if user has all specified scopes."""
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         
-        role = Role.objects.create(tenant=tenant, name='Manager')
-        perm1 = Permission.objects.create(code='catalog:view', label='View', category='catalog')
-        perm2 = Permission.objects.create(code='catalog:edit', label='Edit', category='catalog')
+        role = create_test_role(tenant, 'Manager')
+        perm1 = get_or_create_permission(code='catalog:view', label='View', category='catalog')
+        perm2 = get_or_create_permission(code='catalog:edit', label='Edit', category='catalog')
         RolePermission.objects.grant_permission(role, perm1)
         RolePermission.objects.grant_permission(role, perm2)
         TenantUserRole.objects.create(tenant_user=tenant_user, role=role)
@@ -471,8 +484,8 @@ class TestHelperMethods:
         """Test checking if user has any of specified scopes."""
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         
-        role = Role.objects.create(tenant=tenant, name='Viewer')
-        perm = Permission.objects.create(code='catalog:view', label='View', category='catalog')
+        role = create_test_role(tenant, 'Viewer')
+        perm = get_or_create_permission(code='catalog:view', label='View', category='catalog')
         RolePermission.objects.grant_permission(role, perm)
         TenantUserRole.objects.create(tenant_user=tenant_user, role=role)
         
@@ -481,9 +494,9 @@ class TestHelperMethods:
     
     def test_get_role_permissions(self, tenant):
         """Test getting all permissions for a role."""
-        role = Role.objects.create(tenant=tenant, name='Manager')
-        perm1 = Permission.objects.create(code='catalog:view', label='View', category='catalog')
-        perm2 = Permission.objects.create(code='catalog:edit', label='Edit', category='catalog')
+        role = create_test_role(tenant, 'Manager')
+        perm1 = get_or_create_permission(code='catalog:view', label='View', category='catalog')
+        perm2 = get_or_create_permission(code='catalog:edit', label='Edit', category='catalog')
         RolePermission.objects.grant_permission(role, perm1)
         RolePermission.objects.grant_permission(role, perm2)
         
@@ -497,8 +510,8 @@ class TestHelperMethods:
         """Test getting all roles for a tenant user."""
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         
-        role1 = Role.objects.create(tenant=tenant, name='Manager')
-        role2 = Role.objects.create(tenant=tenant, name='Analyst')
+        role1 = create_test_role(tenant, 'Manager')
+        role2 = create_test_role(tenant, 'Analyst')
         TenantUserRole.objects.create(tenant_user=tenant_user, role=role1)
         TenantUserRole.objects.create(tenant_user=tenant_user, role=role2)
         
@@ -513,8 +526,8 @@ class TestHelperMethods:
         tenant_user = TenantUser.objects.create(tenant=tenant, user=user)
         admin = User.objects.create_user(email='admin@example.com', password='pass')
         
-        role1 = Role.objects.create(tenant=tenant, name='Manager')
-        role2 = Role.objects.create(tenant=tenant, name='Analyst')
+        role1 = create_test_role(tenant, 'Manager')
+        role2 = create_test_role(tenant, 'Analyst')
         
         user_roles = RBACService.bulk_assign_roles(
             tenant_user=tenant_user,

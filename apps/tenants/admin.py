@@ -2,7 +2,7 @@
 Django admin configuration for tenants app.
 """
 from django.contrib import admin
-from .models import Tenant, SubscriptionTier, GlobalParty, Customer
+from .models import Tenant, SubscriptionTier, GlobalParty, Customer, TenantSettings
 
 
 @admin.register(SubscriptionTier)
@@ -144,3 +144,102 @@ class CustomerAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+
+@admin.register(TenantSettings)
+class TenantSettingsAdmin(admin.ModelAdmin):
+    """Admin interface for TenantSettings."""
+    
+    list_display = [
+        'tenant', 'has_woocommerce', 'has_shopify', 
+        'has_twilio', 'created_at'
+    ]
+    search_fields = ['tenant__name', 'tenant__slug']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Tenant', {
+            'fields': ('tenant',)
+        }),
+        ('Twilio Integration', {
+            'fields': ('twilio_sid', 'twilio_token', 'twilio_webhook_secret'),
+            'description': 'Encrypted fields - values are masked in admin'
+        }),
+        ('WooCommerce Integration', {
+            'fields': (
+                'woo_store_url', 'woo_consumer_key',
+                'woo_consumer_secret', 'woo_webhook_secret'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Shopify Integration', {
+            'fields': (
+                'shopify_shop_domain', 'shopify_access_token',
+                'shopify_webhook_secret'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('WhatsApp Business', {
+            'fields': ('whatsapp_business_id', 'whatsapp_access_token'),
+            'classes': ('collapse',)
+        }),
+        ('OpenAI / LLM', {
+            'fields': ('openai_api_key', 'openai_org_id'),
+            'classes': ('collapse',)
+        }),
+        ('Payment Methods', {
+            'fields': (
+                'stripe_customer_id', 'stripe_payment_methods',
+                'payout_method', 'payout_details'
+            ),
+            'classes': ('collapse',),
+            'description': 'PCI-DSS compliant - only tokenized references stored'
+        }),
+        ('Notification Settings', {
+            'fields': ('notification_settings',),
+            'classes': ('collapse',)
+        }),
+        ('Feature Flags', {
+            'fields': ('feature_flags',),
+            'classes': ('collapse',)
+        }),
+        ('Business Hours', {
+            'fields': ('business_hours',),
+            'classes': ('collapse',)
+        }),
+        ('Integration Status', {
+            'fields': ('integrations_status',),
+            'classes': ('collapse',)
+        }),
+        ('Branding', {
+            'fields': ('branding',),
+            'classes': ('collapse',)
+        }),
+        ('Compliance', {
+            'fields': ('compliance_settings',),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('id', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_woocommerce(self, obj):
+        """Display if WooCommerce is configured."""
+        return obj.has_woocommerce_configured()
+    has_woocommerce.boolean = True
+    has_woocommerce.short_description = 'WooCommerce'
+    
+    def has_shopify(self, obj):
+        """Display if Shopify is configured."""
+        return obj.has_shopify_configured()
+    has_shopify.boolean = True
+    has_shopify.short_description = 'Shopify'
+    
+    def has_twilio(self, obj):
+        """Display if Twilio is configured."""
+        return obj.has_twilio_configured()
+    has_twilio.boolean = True
+    has_twilio.short_description = 'Twilio'

@@ -666,3 +666,465 @@ class ConsentEvent(BaseModel):
     
     def __str__(self):
         return f"ConsentEvent: {self.customer} - {self.consent_type} ({self.previous_value} → {self.new_value})"
+
+
+class ScheduledMessageManager(models.Manager):
+    """Manager for scheduled message queries."""
+    
+    def for_tenant(self, tenant):
+        """Get scheduled messages for a specific tenant."""
+        return self.filter(tenant=tenant)
+    
+    def pending(self, tenant=None):
+        """Get pending scheduled messages."""
+        qs = self.filter(status='pending')
+        if tenant:
+            qs = qs.filter(tenant=tenant)
+        return qs
+    
+    def due_for_sending(self):
+        """Get messages that are due to be sent."""
+        from django.utils import timezone
+        return self.filter(
+            status='pending',
+            scheduled_at__lte=timezone.now()
+        )
+    
+    def for_customer(self, tenant, customer):
+        """Get scheduled messages for a specific customer."""
+        return self.filter(tenant=tenant, customer=customer)
+
+
+class ScheduledMessage(BaseModel):
+    """
+    Scheduled message for future delivery.
+    
+    Used for:
+    - Promotional campaigns scheduled in advance
+    - Appointment reminders (24h, 2h before)
+    - Re-engagement messages for inactive conversations
+    - Any message that should be sent at a specific future time
+    
+    Messages can be:
+    - Individual (customer specified)
+    - Broadcast (customer=null, uses recipient_criteria)
+    """
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+        ('canceled', 'Canceled'),
+    ]
+    
+    tenant = models.ForeignKey(
+        'tenants.Tenant',
+        on_delete=models.CASCADE,
+        related_name='scheduled_messages',
+        db_index=True,
+        help_text="Tenant this scheduled message belongs to"
+    )
+    customer = models.ForeignKey(
+        'tenants.Customer',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='scheduled_messages',
+        db_index=True,
+        help_text="Target customer (null for broadcast campaigns)"
+    )
+    
+    # Content
+    content = models.TextField(
+        help_text="Message content to send"
+    )
+    template = models.ForeignKey(
+        MessageTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='scheduled_messages',
+        help_text="Template used for this message"
+    )
+    template_context = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Context data for template rendering"
+    )
+    
+    # Scheduling
+    scheduled_at = models.DateTimeField(
+        db_index=True,
+        help_text="When to send this message"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+        help_text="Current status of scheduled message"
+    )
+    
+    # Broadcast Configuration (for campaigns)
+    recipient_criteria = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Criteria for selecting recipients (for broadcast messages)"
+    )
+    message_type = models.CharField(
+        max_length=30,
+        default='scheduled_promotional',
+        help_text="Type of message for consent checking"
+    )
+    
+    # Delivery Tracking
+    sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when message was actually sent"
+    )
+    failed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when sending failed"
+    )
+    error_message = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Error message if sending failed"
+    )
+    
+    # Reference to created message(s)
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='scheduled_from',
+        help_text="Message record created when sent"
+    )
+    
+    # Metadata
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional metadata (campaign_id, appointment_id, etc.)"
+    )
+    
+    # Custom manager
+    objects = ScheduledMessageManager()
+    
+    class Meta:
+        db_table = 'scheduled_messages'
+        ordering = ['scheduled_at']
+        indexes = [
+            models.Index(fields=['tenant', 'status', 'scheduled_at']),
+            models.Index(fields=['tenant', 'customer', 'status']),
+            models.Index(fields=['status', 'scheduled_at']),
+        ]
+    
+    def __str__(self):
+        customer_str = f"to {self.customer}" if self.customer else "broadcast"
+        return f"ScheduledMessage {self.id} - {customer_str} at {self.scheduled_at}"
+    
+    def mark_sent(self, message=None):
+        """Mark scheduled message as sent."""
+        from django.utils import timezone
+        
+        # Validate message belongs to same tenant if provided
+        if message and message.conversation.tenant_id != self.tenant_id:
+            raise ValueError("Message must belong to same tenant as scheduled message")
+        
+        self.status = 'sent'
+        self.sent_at = timezone.now()
+        if message:
+            self.message = message
+        self.save(update_fields=['status', 'sent_at', 'message'])
+    
+    def mark_failed(self, error_message=None):
+        """Mark scheduled message as failed."""
+        from django.utils import timezone
+        self.status = 'failed'
+        self.failed_at = timezone.now()
+        if error_message:
+            self.error_message = error_message
+        self.save(update_fields=['status', 'failed_at', 'error_message'])
+    
+    def cancel(self):
+        """Cancel a pending scheduled message."""
+        if self.status == 'pending':
+            self.status = 'canceled'
+            self.save(update_fields=['status'])
+            return True
+        return False
+    
+    def is_due(self):
+        """Check if message is due to be sent."""
+        from django.utils import timezone
+        return self.status == 'pending' and self.scheduled_at <= timezone.now()
+
+
+class MessageCampaignManager(models.Manager):
+    """Manager for message campaign queries."""
+    
+    def for_tenant(self, tenant):
+        """Get campaigns for a specific tenant."""
+        return self.filter(tenant=tenant)
+    
+    def active(self, tenant=None):
+        """Get active campaigns (not canceled)."""
+        qs = self.exclude(status='canceled')
+        if tenant:
+            qs = qs.filter(tenant=tenant)
+        return qs
+    
+    def completed(self, tenant=None):
+        """Get completed campaigns."""
+        qs = self.filter(status='completed')
+        if tenant:
+            qs = qs.filter(tenant=tenant)
+        return qs
+    
+    def by_status(self, tenant, status):
+        """Get campaigns by status."""
+        return self.filter(tenant=tenant, status=status)
+
+
+class MessageCampaign(BaseModel):
+    """
+    Message campaign for broadcasting messages to multiple customers.
+    
+    Campaigns support:
+    - Targeted messaging based on customer criteria (tags, purchase history, activity)
+    - A/B testing with multiple message variants
+    - Comprehensive metrics tracking (delivery, engagement, conversion)
+    - Consent-based filtering (only sends to customers who opted in)
+    - Tier-based limits on campaign sends per month
+    
+    Campaign workflow:
+    1. Create campaign with target criteria and message content
+    2. Calculate reach (count eligible customers)
+    3. Execute campaign (send to all matching customers with consent)
+    4. Track metrics (delivery, reads, responses, conversions)
+    5. Generate report with engagement analytics
+    """
+    
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('scheduled', 'Scheduled'),
+        ('sending', 'Sending'),
+        ('completed', 'Completed'),
+        ('canceled', 'Canceled'),
+    ]
+    
+    tenant = models.ForeignKey(
+        'tenants.Tenant',
+        on_delete=models.CASCADE,
+        related_name='campaigns',
+        db_index=True,
+        help_text="Tenant this campaign belongs to"
+    )
+    
+    # Campaign Details
+    name = models.CharField(
+        max_length=255,
+        help_text="Campaign name for identification"
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Campaign description and notes"
+    )
+    
+    # Message Content
+    message_content = models.TextField(
+        help_text="Default message content to send"
+    )
+    template = models.ForeignKey(
+        MessageTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='campaigns',
+        help_text="Template used for this campaign"
+    )
+    
+    # Targeting
+    target_criteria = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Criteria for selecting recipients (tags, purchase_history, activity)"
+    )
+    
+    # A/B Testing
+    is_ab_test = models.BooleanField(
+        default=False,
+        help_text="Whether this campaign is an A/B test"
+    )
+    variants = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="A/B test variants: [{name, content, customer_ids, metrics}]"
+    )
+    
+    # Metrics - Delivery
+    delivery_count = models.IntegerField(
+        default=0,
+        help_text="Total customers targeted"
+    )
+    delivered_count = models.IntegerField(
+        default=0,
+        help_text="Successfully delivered messages"
+    )
+    failed_count = models.IntegerField(
+        default=0,
+        help_text="Failed delivery attempts"
+    )
+    
+    # Metrics - Engagement
+    read_count = models.IntegerField(
+        default=0,
+        help_text="Messages read by customers"
+    )
+    response_count = models.IntegerField(
+        default=0,
+        help_text="Customer responses received"
+    )
+    conversion_count = models.IntegerField(
+        default=0,
+        help_text="Conversions (orders/bookings) from campaign"
+    )
+    
+    # Status and Scheduling
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='draft',
+        db_index=True,
+        help_text="Current campaign status"
+    )
+    scheduled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="When to execute this campaign"
+    )
+    
+    # Execution Tracking
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When campaign execution started"
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When campaign execution completed"
+    )
+    
+    # Creator
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='campaigns_created',
+        help_text="User who created this campaign"
+    )
+    
+    # Metadata
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional campaign metadata"
+    )
+    
+    # Custom manager
+    objects = MessageCampaignManager()
+    
+    class Meta:
+        db_table = 'message_campaigns'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant', 'status']),
+            models.Index(fields=['tenant', 'created_at']),
+            models.Index(fields=['status', 'scheduled_at']),
+        ]
+    
+    def __str__(self):
+        return f"Campaign: {self.name} ({self.tenant.slug}) - {self.status}"
+    
+    def calculate_delivery_rate(self):
+        """Calculate delivery success rate."""
+        if self.delivery_count == 0:
+            return 0.0
+        return (self.delivered_count / self.delivery_count) * 100
+    
+    def calculate_engagement_rate(self):
+        """Calculate engagement rate (responses / delivered)."""
+        if self.delivered_count == 0:
+            return 0.0
+        return (self.response_count / self.delivered_count) * 100
+    
+    def calculate_conversion_rate(self):
+        """Calculate conversion rate (conversions / delivered)."""
+        if self.delivered_count == 0:
+            return 0.0
+        return (self.conversion_count / self.delivered_count) * 100
+    
+    def calculate_read_rate(self):
+        """Calculate read rate (reads / delivered)."""
+        if self.delivered_count == 0:
+            return 0.0
+        return (self.read_count / self.delivered_count) * 100
+    
+    def mark_sending(self):
+        """Mark campaign as currently sending."""
+        from django.utils import timezone
+        self.status = 'sending'
+        self.started_at = timezone.now()
+        self.save(update_fields=['status', 'started_at'])
+    
+    def mark_completed(self):
+        """Mark campaign as completed."""
+        from django.utils import timezone
+        self.status = 'completed'
+        self.completed_at = timezone.now()
+        self.save(update_fields=['status', 'completed_at'])
+    
+    def cancel(self):
+        """Cancel a draft or scheduled campaign."""
+        if self.status in ['draft', 'scheduled']:
+            self.status = 'canceled'
+            self.save(update_fields=['status'])
+            return True
+        return False
+    
+    def increment_delivery(self):
+        """Increment delivery count."""
+        self.delivery_count += 1
+        self.save(update_fields=['delivery_count'])
+    
+    def increment_delivered(self):
+        """Increment delivered count."""
+        self.delivered_count += 1
+        self.save(update_fields=['delivered_count'])
+    
+    def increment_failed(self):
+        """Increment failed count."""
+        self.failed_count += 1
+        self.save(update_fields=['failed_count'])
+    
+    def increment_read(self):
+        """Increment read count."""
+        self.read_count += 1
+        self.save(update_fields=['read_count'])
+    
+    def increment_response(self):
+        """Increment response count."""
+        self.response_count += 1
+        self.save(update_fields=['response_count'])
+    
+    def increment_conversion(self):
+        """Increment conversion count."""
+        self.conversion_count += 1
+        self.save(update_fields=['conversion_count'])

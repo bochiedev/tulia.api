@@ -220,31 +220,37 @@ class TestTenantContextMiddlewareRBAC(TestCase):
             password='testpass123'
         )
         
-        # Create permissions
-        self.catalog_view = Permission.objects.create(
+        # Get or create permissions (they may already exist from seed_permissions)
+        self.catalog_view, _ = Permission.objects.get_or_create(
             code='catalog:view',
-            label='View Catalog',
-            category='catalog'
+            defaults={
+                'label': 'View Catalog',
+                'category': 'catalog'
+            }
         )
-        self.catalog_edit = Permission.objects.create(
+        self.catalog_edit, _ = Permission.objects.get_or_create(
             code='catalog:edit',
-            label='Edit Catalog',
-            category='catalog'
+            defaults={
+                'label': 'Edit Catalog',
+                'category': 'catalog'
+            }
         )
         
-        # Create role
-        self.catalog_manager_role = Role.objects.create(
+        # Get or create role (it may already exist from tenant creation signal)
+        self.catalog_manager_role, role_created = Role.objects.get_or_create(
             tenant=self.tenant,
             name='Catalog Manager',
-            description='Can view and edit catalog'
+            defaults={
+                'description': 'Can view and edit catalog'
+            }
         )
         
-        # Assign permissions to role
-        RolePermission.objects.create(
+        # Assign permissions to role (only if not already assigned)
+        RolePermission.objects.get_or_create(
             role=self.catalog_manager_role,
             permission=self.catalog_view
         )
-        RolePermission.objects.create(
+        RolePermission.objects.get_or_create(
             role=self.catalog_manager_role,
             permission=self.catalog_edit
         )

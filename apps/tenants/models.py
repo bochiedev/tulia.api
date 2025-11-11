@@ -7,7 +7,7 @@ Twilio configuration, and API key authentication.
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from apps.core.models import BaseModel
-from apps.core.fields import EncryptedCharField
+from apps.core.fields import EncryptedCharField, EncryptedTextField
 
 
 class TenantManager(models.Manager):
@@ -1126,3 +1126,294 @@ class WalletAudit(BaseModel):
     def is_debit(self):
         """Check if this is a debit (negative) transaction."""
         return self.amount < 0
+
+
+
+class TenantSettings(BaseModel):
+    """
+    Secure storage for tenant configuration and credentials.
+    
+    Centralizes all tenant-specific settings including:
+    - Integration credentials (encrypted)
+    - Payment methods (tokenized references)
+    - Notification preferences
+    - Feature flags
+    - Business settings
+    
+    Security:
+    - Sensitive fields use EncryptedCharField/EncryptedTextField
+    - Payment cards stored as Stripe tokens only (PCI-DSS compliant)
+    - Access controlled via RBAC (integrations:manage, finance:manage)
+    - All credential access is audit logged
+    """
+    
+    tenant = models.OneToOneField(
+        Tenant,
+        on_delete=models.CASCADE,
+        unique=True,
+        related_name='settings',
+        help_text="Associated tenant"
+    )
+    
+    # === INTEGRATION CREDENTIALS (Encrypted) ===
+    
+    # Twilio
+    twilio_sid = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted Twilio Account SID"
+    )
+    twilio_token = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted Twilio Auth Token"
+    )
+    twilio_webhook_secret = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted Twilio webhook signature secret"
+    )
+    
+    # WooCommerce
+    woo_store_url = models.URLField(
+        null=True,
+        blank=True,
+        help_text="WooCommerce store URL"
+    )
+    woo_consumer_key = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted WooCommerce consumer key"
+    )
+    woo_consumer_secret = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted WooCommerce consumer secret"
+    )
+    woo_webhook_secret = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted WooCommerce webhook secret"
+    )
+    
+    # Shopify
+    shopify_shop_domain = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Shopify shop domain (e.g., mystore.myshopify.com)"
+    )
+    shopify_access_token = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted Shopify Admin API access token"
+    )
+    shopify_webhook_secret = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted Shopify webhook secret"
+    )
+    
+    # WhatsApp Business API (if different from Twilio)
+    whatsapp_business_id = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted WhatsApp Business Account ID"
+    )
+    whatsapp_access_token = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted WhatsApp Business API access token"
+    )
+    
+    # OpenAI / LLM
+    openai_api_key = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted OpenAI API key"
+    )
+    openai_org_id = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted OpenAI organization ID"
+    )
+    
+    # === PAYMENT METHODS (Tokenized - PCI-DSS Compliant) ===
+    
+    stripe_customer_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Stripe customer ID for this tenant"
+    )
+    stripe_payment_methods = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of Stripe PaymentMethod IDs: [{id, last4, brand, exp_month, exp_year, is_default}]"
+    )
+    
+    # Payout account (for tenant earnings)
+    payout_method = models.CharField(
+        max_length=50,
+        choices=[
+            ('bank_transfer', 'Bank Transfer'),
+            ('mobile_money', 'Mobile Money'),
+            ('paypal', 'PayPal'),
+        ],
+        null=True,
+        blank=True,
+        help_text="Payout method for tenant earnings"
+    )
+    payout_details = EncryptedTextField(
+        null=True,
+        blank=True,
+        help_text="Encrypted JSON with payout account details"
+    )
+    
+    # === NOTIFICATION PREFERENCES ===
+    
+    notification_settings = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Notification preferences by channel and event type"
+    )
+    
+    # === FEATURE FLAGS & PREFERENCES ===
+    
+    feature_flags = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Feature flags for gradual rollout and A/B testing"
+    )
+    
+    business_hours = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Business hours by day of week"
+    )
+    
+    # === INTEGRATION STATUS ===
+    
+    integrations_status = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Status and metadata for each integration"
+    )
+    
+    # === BRANDING & CUSTOMIZATION ===
+    
+    branding = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Branding and customization settings"
+    )
+    
+    # === COMPLIANCE & LEGAL ===
+    
+    compliance_settings = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="GDPR, data retention, and legal compliance settings"
+    )
+    
+    class Meta:
+        db_table = 'tenant_settings'
+        verbose_name = 'Tenant Settings'
+        verbose_name_plural = 'Tenant Settings'
+    
+    def __str__(self):
+        return f"Settings for {self.tenant.name}"
+    
+    # === HELPER METHODS ===
+    
+    def has_woocommerce_configured(self) -> bool:
+        """Check if WooCommerce credentials are set."""
+        return bool(
+            self.woo_store_url and 
+            self.woo_consumer_key and 
+            self.woo_consumer_secret
+        )
+    
+    def has_shopify_configured(self) -> bool:
+        """Check if Shopify credentials are set."""
+        return bool(
+            self.shopify_shop_domain and 
+            self.shopify_access_token
+        )
+    
+    def has_twilio_configured(self) -> bool:
+        """Check if Twilio credentials are set."""
+        return bool(
+            self.twilio_sid and 
+            self.twilio_token
+        )
+    
+    def get_default_payment_method(self):
+        """Get default Stripe payment method."""
+        for pm in self.stripe_payment_methods:
+            if pm.get('is_default'):
+                return pm
+        return self.stripe_payment_methods[0] if self.stripe_payment_methods else None
+    
+    def is_notification_enabled(self, channel: str, event: str) -> bool:
+        """
+        Check if notification is enabled for channel and event.
+        
+        Args:
+            channel: Notification channel (email, sms, in_app)
+            event: Event type (order_received, low_stock, etc.)
+            
+        Returns:
+            bool: True if notification is enabled
+        """
+        return self.notification_settings.get(channel, {}).get(event, False)
+    
+    def is_feature_enabled(self, feature: str) -> bool:
+        """
+        Check if feature flag is enabled.
+        
+        Args:
+            feature: Feature name
+            
+        Returns:
+            bool: True if feature is enabled
+        """
+        return self.feature_flags.get(feature, False)
+    
+    def get_integration_status(self, integration: str) -> dict:
+        """
+        Get status for a specific integration.
+        
+        Args:
+            integration: Integration name (woocommerce, shopify, etc.)
+            
+        Returns:
+            dict: Integration status and metadata
+        """
+        return self.integrations_status.get(integration, {})
+    
+    def update_integration_status(self, integration: str, status_data: dict):
+        """
+        Update status for a specific integration.
+        
+        Args:
+            integration: Integration name
+            status_data: Status data to update
+        """
+        if integration not in self.integrations_status:
+            self.integrations_status[integration] = {}
+        
+        self.integrations_status[integration].update(status_data)
+        self.save(update_fields=['integrations_status', 'updated_at'])

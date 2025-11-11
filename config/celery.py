@@ -81,3 +81,35 @@ def task_retry_handler(sender=None, task_id=None, reason=None, einfo=None, **ext
 def debug_task(self):
     """Debug task for testing Celery setup."""
     print(f'Request: {self.request!r}')
+
+
+# Celery Beat Schedule for Periodic Tasks
+app.conf.beat_schedule = {
+    # Process scheduled messages every minute
+    'process-scheduled-messages': {
+        'task': 'apps.messaging.tasks.process_scheduled_messages',
+        'schedule': 60.0,  # Every 60 seconds
+    },
+    
+    # Send 24-hour appointment reminders every hour
+    'send-24h-appointment-reminders': {
+        'task': 'apps.messaging.tasks.send_24h_appointment_reminders',
+        'schedule': 3600.0,  # Every hour
+    },
+    
+    # Send 2-hour appointment reminders every 15 minutes
+    'send-2h-appointment-reminders': {
+        'task': 'apps.messaging.tasks.send_2h_appointment_reminders',
+        'schedule': 900.0,  # Every 15 minutes
+    },
+    
+    # Send re-engagement messages daily at 10 AM UTC
+    'send-reengagement-messages': {
+        'task': 'apps.messaging.tasks.send_reengagement_messages',
+        'schedule': 86400.0,  # Every 24 hours
+        # Note: For production, use crontab schedule to run at specific time:
+        # 'schedule': crontab(hour=10, minute=0),
+    },
+}
+
+app.conf.timezone = 'UTC'

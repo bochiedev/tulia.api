@@ -40,6 +40,13 @@ Deliverables (auto-generate)
 - OpenAPI schema at /schema and /schema/swagger/
 - .env.example with all provider keys (no real secrets).
 
+TenantSettings (ALWAYS USE)
+- ALL integration credentials MUST be stored in TenantSettings, NOT Tenant model
+- Access via: tenant.settings.twilio_sid, tenant.settings.woo_consumer_key, etc.
+- NEVER use: tenant.twilio_sid (deprecated)
+- Service factories: create_twilio_service_for_tenant(tenant) uses tenant.settings
+- See: apps/tenants/MIGRATION_GUIDE.md for full details
+
 Performance & Cost
 - Cache product lookups by tenant.
 - Batch sync in pages (100 items).

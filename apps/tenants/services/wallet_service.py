@@ -508,6 +508,69 @@ class WalletService:
         return txn
     
     @staticmethod
+    @db_transaction.atomic
+    def fail_payment_transaction(transaction_id, reason='', retry_url=None, notify_customer=True):
+        """
+        Fail a payment transaction and optionally notify customer.
+        
+        This is used when a customer payment fails (e.g., card declined, 
+        payment gateway error). Optionally sends a notification to the customer
+        with instructions to retry.
+        
+        Args:
+            transaction_id: Transaction ID
+            reason: Failure reason
+            retry_url: Optional URL for customer to retry payment
+            notify_customer: Whether to send notification to customer (default: True)
+            
+        Returns:
+            dict: {
+                'transaction': Transaction,
+                'notification_sent': bool,
+                'notification_task_id': str (if sent)
+            }
+        """
+        txn = Transaction.objects.select_for_update().get(id=transaction_id)
+        
+        # Update transaction status
+        txn.status = 'failed'
+        txn.metadata['failure_reason'] = reason
+        if retry_url:
+            txn.metadata['retry_url'] = retry_url
+        txn.notes = f"{txn.notes}\nFailed: {reason}" if txn.notes else f"Failed: {reason}"
+        txn.save(update_fields=['status', 'metadata', 'notes', 'updated_at'])
+        
+        result = {
+            'transaction': txn,
+            'notification_sent': False
+        }
+        
+        # Send notification to customer if requested
+        if notify_customer:
+            try:
+                from apps.messaging.tasks import send_payment_failed_notification
+                
+                # Trigger async notification task
+                task = send_payment_failed_notification.delay(
+                    str(transaction_id),
+                    retry_url=retry_url
+                )
+                
+                result['notification_sent'] = True
+                result['notification_task_id'] = task.id
+                
+            except Exception as e:
+                # Log error but don't fail the transaction update
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(
+                    f"Failed to send payment failure notification for transaction {transaction_id}: {str(e)}",
+                    exc_info=True
+                )
+        
+        return result
+    
+    @staticmethod
     def get_wallet_balance(tenant):
         """
         Get current wallet balance for tenant.

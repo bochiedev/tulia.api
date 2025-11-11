@@ -549,13 +549,27 @@ class ProductVariantListView(APIView):
     
     GET /v1/products/{product_id}/variants - List variants
     POST /v1/products/{product_id}/variants - Create variant
+    
+    Required scopes:
+    - GET: catalog:view
+    - POST: catalog:edit
     """
+    permission_classes = [HasTenantScopes]
+    
+    def check_permissions(self, request):
+        """Set required scopes based on HTTP method before permission check."""
+        if request.method == 'GET':
+            self.required_scopes = {'catalog:view'}
+        elif request.method == 'POST':
+            self.required_scopes = {'catalog:edit'}
+        super().check_permissions(request)
     
     @extend_schema(
         summary="List product variants",
         description="Retrieve all variants for a specific product",
         responses={
             200: ProductVariantSerializer(many=True),
+            403: {'description': 'Forbidden - Missing required scope: catalog:view'},
             404: {
                 'type': 'object',
                 'properties': {
@@ -608,6 +622,7 @@ class ProductVariantListView(APIView):
                     'details': {'type': 'object'}
                 }
             },
+            403: {'description': 'Forbidden - Missing required scope: catalog:edit'},
             404: {
                 'type': 'object',
                 'properties': {
@@ -671,13 +686,27 @@ class ProductVariantDetailView(APIView):
     GET /v1/products/{product_id}/variants/{variant_id} - Get variant details
     PUT /v1/products/{product_id}/variants/{variant_id} - Update variant
     DELETE /v1/products/{product_id}/variants/{variant_id} - Delete variant
+    
+    Required scopes:
+    - GET: catalog:view
+    - PUT/DELETE: catalog:edit
     """
+    permission_classes = [HasTenantScopes]
+    
+    def check_permissions(self, request):
+        """Set required scopes based on HTTP method before permission check."""
+        if request.method == 'GET':
+            self.required_scopes = {'catalog:view'}
+        elif request.method in ['PUT', 'DELETE']:
+            self.required_scopes = {'catalog:edit'}
+        super().check_permissions(request)
     
     @extend_schema(
         summary="Get variant details",
         description="Retrieve detailed variant information",
         responses={
             200: ProductVariantSerializer,
+            403: {'description': 'Forbidden - Missing required scope: catalog:view'},
             404: {
                 'type': 'object',
                 'properties': {
@@ -726,6 +755,7 @@ class ProductVariantDetailView(APIView):
                     'details': {'type': 'object'}
                 }
             },
+            403: {'description': 'Forbidden - Missing required scope: catalog:edit'},
             404: {
                 'type': 'object',
                 'properties': {
@@ -783,6 +813,7 @@ class ProductVariantDetailView(APIView):
         description="Soft delete a variant",
         responses={
             204: None,
+            403: {'description': 'Forbidden - Missing required scope: catalog:edit'},
             404: {
                 'type': 'object',
                 'properties': {
@@ -824,6 +855,277 @@ class ProductVariantDetailView(APIView):
             return Response(
                 {
                     'error': 'Failed to delete variant',
+                    'details': {'message': str(e)}
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+
+class WooCommerceSyncView(APIView):
+    """
+    Trigger WooCommerce product synchronization.
+    
+    POST /v1/catalog/sync/woocommerce - Sync products from WooCommerce
+    """
+    permission_classes = [HasTenantScopes]
+    required_scopes = {'integrations:manage'}
+    
+    @extend_schema(
+        summary="Sync WooCommerce products",
+        description="""
+        Trigger product synchronization from WooCommerce store.
+        
+        Requires WooCommerce credentials to be configured in tenant metadata:
+        - store_url: WooCommerce store URL
+        - consumer_key: REST API consumer key
+        - consumer_secret: REST API consumer secret
+        
+        The sync runs asynchronously via Celery task. Returns task ID for tracking.
+        
+        Example curl:
+        ```bash
+        curl -X POST https://api.tulia.ai/v1/catalog/sync/woocommerce \\
+          -H "X-TENANT-ID: tenant-uuid" \\
+          -H "X-TENANT-API-KEY: your-api-key"
+        ```
+        """,
+        request=None,
+        responses={
+            202: {
+                'type': 'object',
+                'properties': {
+                    'status': {'type': 'string', 'example': 'accepted'},
+                    'message': {'type': 'string'},
+                    'task_id': {'type': 'string'},
+                    'store_url': {'type': 'string'}
+                }
+            },
+            400: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'details': {'type': 'object'}
+                }
+            },
+            403: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'}
+                }
+            }
+        },
+        tags=['Catalog Sync']
+    )
+    def post(self, request):
+        """Trigger WooCommerce product sync."""
+        tenant = request.tenant  # Injected by middleware
+        user = getattr(request, 'user', None)
+        
+        try:
+            # Check if WooCommerce credentials are configured
+            woo_config = tenant.metadata.get('woocommerce', {})
+            
+            if not all([
+                woo_config.get('store_url'),
+                woo_config.get('consumer_key'),
+                woo_config.get('consumer_secret')
+            ]):
+                return Response(
+                    {
+                        'error': 'WooCommerce credentials not configured',
+                        'details': {
+                            'message': 'Please configure WooCommerce store_url, consumer_key, and consumer_secret in tenant metadata'
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Import here to avoid circular dependency
+            from apps.integrations.tasks import sync_woocommerce_products
+            
+            # Schedule sync task
+            task = sync_woocommerce_products.delay(str(tenant.id))
+            
+            logger.info(
+                f"WooCommerce sync triggered",
+                extra={
+                    'tenant_id': str(tenant.id),
+                    'task_id': task.id,
+                    'store_url': woo_config['store_url']
+                }
+            )
+            
+            # Create audit log entry
+            AuditLog.log_action(
+                action='woocommerce_sync_triggered',
+                user=user,
+                tenant=tenant,
+                target_type='Integration',
+                target_id=None,
+                metadata={
+                    'task_id': task.id,
+                    'store_url': woo_config['store_url']
+                },
+                request=request
+            )
+            
+            return Response(
+                {
+                    'status': 'accepted',
+                    'message': 'WooCommerce product sync has been scheduled',
+                    'task_id': task.id,
+                    'store_url': woo_config['store_url']
+                },
+                status=status.HTTP_202_ACCEPTED
+            )
+        
+        except Exception as e:
+            logger.error(
+                f"Error triggering WooCommerce sync",
+                extra={
+                    'tenant_id': str(tenant.id),
+                    'error': str(e)
+                },
+                exc_info=True
+            )
+            return Response(
+                {
+                    'error': 'Failed to trigger WooCommerce sync',
+                    'details': {'message': str(e)}
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class ShopifySyncView(APIView):
+    """
+    Trigger Shopify product synchronization.
+    
+    POST /v1/catalog/sync/shopify - Sync products from Shopify
+    """
+    permission_classes = [HasTenantScopes]
+    required_scopes = {'integrations:manage'}
+    
+    @extend_schema(
+        summary="Sync Shopify products",
+        description="""
+        Trigger product synchronization from Shopify store.
+        
+        Requires Shopify credentials to be configured in tenant metadata:
+        - shop_domain: Shopify store domain (e.g., mystore.myshopify.com)
+        - access_token: Admin API access token
+        
+        The sync runs asynchronously via Celery task. Returns task ID for tracking.
+        
+        Example curl:
+        ```bash
+        curl -X POST https://api.tulia.ai/v1/catalog/sync/shopify \\
+          -H "X-TENANT-ID: tenant-uuid" \\
+          -H "X-TENANT-API-KEY: your-api-key"
+        ```
+        """,
+        request=None,
+        responses={
+            202: {
+                'type': 'object',
+                'properties': {
+                    'status': {'type': 'string', 'example': 'accepted'},
+                    'message': {'type': 'string'},
+                    'task_id': {'type': 'string'},
+                    'shop_domain': {'type': 'string'}
+                }
+            },
+            400: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'details': {'type': 'object'}
+                }
+            },
+            403: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'}
+                }
+            }
+        },
+        tags=['Catalog Sync']
+    )
+    def post(self, request):
+        """Trigger Shopify product sync."""
+        tenant = request.tenant  # Injected by middleware
+        user = getattr(request, 'user', None)
+        
+        try:
+            # Check if Shopify credentials are configured
+            shopify_config = tenant.metadata.get('shopify', {})
+            
+            if not all([
+                shopify_config.get('shop_domain'),
+                shopify_config.get('access_token')
+            ]):
+                return Response(
+                    {
+                        'error': 'Shopify credentials not configured',
+                        'details': {
+                            'message': 'Please configure Shopify shop_domain and access_token in tenant metadata'
+                        }
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Import here to avoid circular dependency
+            from apps.integrations.tasks import sync_shopify_products
+            
+            # Schedule sync task
+            task = sync_shopify_products.delay(str(tenant.id))
+            
+            logger.info(
+                f"Shopify sync triggered",
+                extra={
+                    'tenant_id': str(tenant.id),
+                    'task_id': task.id,
+                    'shop_domain': shopify_config['shop_domain']
+                }
+            )
+            
+            # Create audit log entry
+            AuditLog.log_action(
+                action='shopify_sync_triggered',
+                user=user,
+                tenant=tenant,
+                target_type='Integration',
+                target_id=None,
+                metadata={
+                    'task_id': task.id,
+                    'shop_domain': shopify_config['shop_domain']
+                },
+                request=request
+            )
+            
+            return Response(
+                {
+                    'status': 'accepted',
+                    'message': 'Shopify product sync has been scheduled',
+                    'task_id': task.id,
+                    'shop_domain': shopify_config['shop_domain']
+                },
+                status=status.HTTP_202_ACCEPTED
+            )
+        
+        except Exception as e:
+            logger.error(
+                f"Error triggering Shopify sync",
+                extra={
+                    'tenant_id': str(tenant.id),
+                    'error': str(e)
+                },
+                exc_info=True
+            )
+            return Response(
+                {
+                    'error': 'Failed to trigger Shopify sync',
                     'details': {'message': str(e)}
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

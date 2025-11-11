@@ -178,35 +178,38 @@ class TestRoleModel:
     
     def test_create_role(self, tenant):
         """Test creating a role."""
+        # Use a custom role name since Owner is auto-seeded
         role = Role.objects.create(
             tenant=tenant,
-            name='Owner',
+            name='Custom Role',
             description='Full access to all features',
-            is_system=True
+            is_system=False
         )
         
         assert role.tenant == tenant
-        assert role.name == 'Owner'
-        assert role.is_system is True
+        assert role.name == 'Custom Role'
+        assert role.is_system is False
     
     def test_role_unique_per_tenant(self, tenant):
         """Test that role names must be unique per tenant."""
+        # Use a custom role name
         Role.objects.create(
             tenant=tenant,
-            name='Owner'
+            name='Test Role'
         )
         
         with pytest.raises(Exception):  # IntegrityError
             Role.objects.create(
                 tenant=tenant,
-                name='Owner'
+                name='Test Role'
             )
     
     def test_get_or_create_role(self, tenant):
         """Test idempotent role creation."""
+        # Use a custom role name
         role1, created1 = Role.objects.get_or_create_role(
             tenant=tenant,
-            name='Owner',
+            name='Test Manager',
             description='Full access',
             is_system=True
         )
@@ -214,7 +217,7 @@ class TestRoleModel:
         
         role2, created2 = Role.objects.get_or_create_role(
             tenant=tenant,
-            name='Owner',
+            name='Test Manager',
             description='Full access',
             is_system=True
         )
@@ -228,12 +231,15 @@ class TestRolePermissionModel:
     
     def test_grant_permission_to_role(self, tenant):
         """Test granting a permission to a role."""
-        role = Role.objects.create(tenant=tenant, name='Owner')
-        permission = Permission.objects.create(
+        # Use a custom role name
+        role = Role.objects.create(tenant=tenant, name='Test Role')
+        permission = Permission.objects.get_or_create(
             code='catalog:view',
-            label='View Catalog',
-            category='catalog'
-        )
+            defaults={
+                'label': 'View Catalog',
+                'category': 'catalog'
+            }
+        )[0]
         
         role_perm, created = RolePermission.objects.grant_permission(role, permission)
         assert created is True
@@ -242,12 +248,15 @@ class TestRolePermissionModel:
     
     def test_role_has_permission(self, tenant):
         """Test checking if role has a permission."""
-        role = Role.objects.create(tenant=tenant, name='Owner')
-        permission = Permission.objects.create(
+        # Use a custom role name
+        role = Role.objects.create(tenant=tenant, name='Test Role')
+        permission = Permission.objects.get_or_create(
             code='catalog:view',
-            label='View Catalog',
-            category='catalog'
-        )
+            defaults={
+                'label': 'View Catalog',
+                'category': 'catalog'
+            }
+        )[0]
         
         assert role.has_permission('catalog:view') is False
         
@@ -256,9 +265,10 @@ class TestRolePermissionModel:
     
     def test_get_role_permissions(self, tenant):
         """Test getting all permissions for a role."""
-        role = Role.objects.create(tenant=tenant, name='Owner')
-        perm1 = Permission.objects.create(code='catalog:view', label='View', category='catalog')
-        perm2 = Permission.objects.create(code='catalog:edit', label='Edit', category='catalog')
+        # Use a custom role name
+        role = Role.objects.create(tenant=tenant, name='Test Role')
+        perm1 = Permission.objects.get_or_create(code='catalog:view', defaults={'label': 'View', 'category': 'catalog'})[0]
+        perm2 = Permission.objects.get_or_create(code='catalog:edit', defaults={'label': 'Edit', 'category': 'catalog'})[0]
         
         RolePermission.objects.grant_permission(role, perm1)
         RolePermission.objects.grant_permission(role, perm2)

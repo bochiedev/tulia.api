@@ -423,6 +423,19 @@ def create_twilio_service_for_tenant(tenant) -> TwilioService:
         >>> service = create_twilio_service_for_tenant(tenant)
         >>> service.send_whatsapp('+1234567890', 'Hello!')
     """
+    # Try to get credentials from TenantSettings first, fallback to Tenant model
+    try:
+        settings = tenant.settings
+        if settings.has_twilio_configured():
+            return TwilioService(
+                account_sid=settings.twilio_sid,
+                auth_token=settings.twilio_token,
+                from_number=tenant.whatsapp_number
+            )
+    except AttributeError:
+        pass
+    
+    # Fallback to Tenant model (for backward compatibility)
     return TwilioService(
         account_sid=tenant.twilio_sid,
         auth_token=tenant.twilio_token,

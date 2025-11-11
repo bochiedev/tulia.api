@@ -180,7 +180,7 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Implement seed_demo command to create demo tenant with users and roles
     - Ensure all commands are idempotent (safe to re-run)
     - Add --tenant and --all flags to seed_tenant_roles
-    - _Requirements: 57.1, 57.2, 58.1, 58.2, 58.5, 59.1, 59.2, 60.1, 60.2, 61.1, 61.2, 61.3, 61.4, 75.1, 75.2, 75.3, 75.4, 75.5_
+    - _Requirements: 5View7.1, 57.2, 58.1, 58.2, 58.5, 59.1, 59.2, 60.1, 60.2, 61.1, 61.2, 61.3, 61.4, 75.1, 75.2, 75.3, 75.4, 75.5_
   
   - [x] 6.6 Wire RBAC signals for automatic role seeding
     - Create post_save signal on Tenant model
@@ -369,14 +369,14 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Add consent indicators to customer list views
     - _Requirements: 48.1, 48.2, 48.5_
 
-- [ ] 11. Implement messaging service with consent and rate limiting
-  - [ ] 11.1 Create MessageTemplate and ScheduledMessage models
+- [-] 11. Implement messaging service with consent and rate limiting
+  - [x] 11.1 Create MessageTemplate and ScheduledMessage models
     - Implement MessageTemplate model with placeholder support
     - Implement ScheduledMessage model with scheduled_at and status
     - Add usage_count tracking for templates
     - _Requirements: 49.1, 49.5, 44.1, 44.2_
   
-  - [ ] 11.2 Implement MessagingService for outbound messages
+  - [x] 11.2 Implement MessagingService for outbound messages
     - Create send_message() method with consent validation
     - Create check_rate_limit() using Redis sliding window
     - Create apply_template() for placeholder replacement
@@ -384,14 +384,14 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Implement respect_quiet_hours() with timezone handling
     - _Requirements: 24.1, 44.3, 44.4, 49.2, 49.3, 49.4, 50.1, 50.2, 53.1, 53.2, 53.3, 53.4, 53.5_
   
-  - [ ] 11.3 Implement rate limiting with warnings
+  - [x] 11.3 Implement rate limiting with warnings
     - Track message count per tenant in 24-hour rolling window
     - Send warning notification at 80% of daily limit
     - Queue excess messages for next day
     - Flag accounts consistently exceeding limits
     - _Requirements: 50.3, 50.4, 50.5_
   
-  - [ ] 11.4 Create messaging REST API endpoints
+  - [x] 11.4 Create messaging REST API endpoints
     - Implement POST /v1/messages/send with consent checks
     - Implement POST /v1/messages/schedule
     - Implement POST /v1/templates and GET /v1/templates
@@ -399,8 +399,8 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - _Requirements: 24.1, 24.4, 44.6, 49.6_
 
 
-- [ ] 12. Implement automated messaging system
-  - [ ] 12.1 Create Celery tasks for transactional messages
+- [x] 12. Implement automated messaging system
+  - [x] 12.1 Create Celery tasks for transactional messages
     - Create task to send payment confirmation on Order status="paid"
     - Create task to send shipment notification on Order status="shipped"
     - Create task to send payment failed message on transaction failure
@@ -408,34 +408,34 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Add retry logic with exponential backoff (3 attempts)
     - _Requirements: 41.1, 41.2, 41.3, 41.4, 41.5, 41.6_
   
-  - [ ] 12.2 Create Celery tasks for appointment reminders
+  - [x] 12.2 Create Celery tasks for appointment reminders
     - Create scheduled task to send 24-hour appointment reminders
     - Create scheduled task to send 2-hour appointment reminders
     - Check reminder_messages consent before sending
     - Cancel reminders if appointment is canceled
     - _Requirements: 42.1, 42.2, 42.3, 42.4, 42.5_
   
-  - [ ] 12.3 Create Celery task for re-engagement messages
+  - [x] 12.3 Create Celery task for re-engagement messages
     - Create task to identify conversations inactive for 7 days
     - Send personalized re-engagement message with call-to-action
     - Check promotional_messages consent before sending
     - Update conversation status to "dormant" after 14 days no response
     - _Requirements: 43.1, 43.2, 43.3, 43.4, 43.5_
   
-  - [ ] 12.4 Integrate automated messages with order and appointment workflows
+  - [x] 12.4 Integrate automated messages with order and appointment workflows
     - Trigger transactional messages on status changes
     - Schedule appointment reminders on booking creation
     - Wire all automated messages through MessagingService for consent checks
     - _Requirements: 41.5, 42.3_
 
-- [ ] 13. Implement campaign management system
-  - [ ] 13.1 Create MessageCampaign model with targeting and metrics
+- [x] 13. Implement campaign management system
+  - [x] 13.1 Create MessageCampaign model with targeting and metrics
     - Implement MessageCampaign model with target_criteria and status
     - Add fields for A/B testing: is_ab_test, variants
     - Add metric fields: delivery_count, delivered_count, failed_count, read_count, response_count, conversion_count
     - _Requirements: 45.1, 45.4, 54.1_
   
-  - [ ] 13.2 Implement CampaignService for execution and targeting
+  - [x] 13.2 Implement CampaignService for execution and targeting
     - Create create_campaign() method with validation
     - Create calculate_reach() to count eligible customers
     - Create execute_campaign() to send to all matching customers with consent
@@ -443,13 +443,13 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Track delivery status and engagement metrics
     - _Requirements: 45.2, 45.3, 45.5, 48.4, 54.2_
   
-  - [ ] 13.3 Implement campaign analytics and reporting
+  - [x] 13.3 Implement campaign analytics and reporting
     - Create generate_report() method with engagement metrics
     - Calculate delivery_rate, engagement_rate, conversion tracking
     - Implement A/B test comparison with statistical metrics
     - _Requirements: 45.5, 51.5, 54.3, 54.4_
   
-  - [ ] 13.4 Create campaign REST API endpoints
+  - [x] 13.4 Create campaign REST API endpoints
     - Implement POST /v1/campaigns with tier limit enforcement
     - Implement GET /v1/campaigns and GET /v1/campaigns/{id}
     - Implement POST /v1/campaigns/{id}/execute
@@ -457,8 +457,8 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - _Requirements: 45.6, 54.5_
 
 
-- [ ] 14. Implement WooCommerce and Shopify integration services
-  - [ ] 14.1 Implement WooService for product synchronization
+- [x] 14. Implement WooCommerce and Shopify integration services
+  - [x] 14.1 Implement WooService for product synchronization
     - Create sync_products() method with WooCommerce REST API authentication
     - Implement fetch_products_batch() with pagination (100 items per page)
     - Create transform_product() to convert WooCommerce format to Tulia Product
@@ -467,7 +467,7 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Log sync status and item count
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
   
-  - [ ] 14.2 Implement ShopifyService for product synchronization
+  - [x] 14.2 Implement ShopifyService for product synchronization
     - Create sync_products() method with Shopify Admin API authentication
     - Implement fetch_products_batch() with pagination (100 items per page)
     - Create transform_product() to convert Shopify format to Tulia Product
@@ -476,28 +476,29 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Log sync status and item count
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
   
-  - [ ] 14.3 Create Celery tasks for scheduled syncs
+  - [x] 14.3 Create Celery tasks for scheduled syncs
     - Create task for WooCommerce sync with error handling
     - Create task for Shopify sync with error handling
     - Add retry logic for transient API failures
     - Log all sync operations to WebhookLog or IntegrationLog
     - _Requirements: 8.5, 9.5_
   
-  - [ ] 14.4 Create catalog sync REST API endpoints
+  - [x] 14.4 Create catalog sync REST API endpoints
     - Implement POST /v1/catalog/sync/woocommerce
     - Implement POST /v1/catalog/sync/shopify
     - Return sync status and item counts
     - Add authentication error handling
     - _Requirements: 8.1, 9.1_
 
-- [ ] 15. Implement analytics service and reporting
-  - [ ] 15.1 Create AnalyticsDaily model for aggregated metrics
+- [x] 15. Implement analytics service and reporting
+  - [x] 15.1 Create AnalyticsDaily model for aggregated metrics ✓
     - Implement AnalyticsDaily model with all metric fields
     - Add unique constraint on (tenant, date)
     - Create indexes for date range queries
+    - Migration applied: 0001_initial
     - _Requirements: 17.2_
   
-  - [ ] 15.2 Implement AnalyticsService for metric calculation
+  - [x] 15.2 Implement AnalyticsService for metric calculation
     - Create get_overview() method with date range aggregation
     - Create get_daily_metrics() method
     - Create calculate_booking_conversion_rate() method
@@ -505,7 +506,7 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Create get_messaging_analytics() grouped by message_type
     - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5, 16.6, 17.5, 17.6, 51.1, 51.2, 51.3, 51.4_
   
-  - [ ] 15.3 Create nightly analytics rollup Celery task
+  - [x] 15.3 Create nightly analytics rollup Celery task
     - Implement task to aggregate metrics for each tenant
     - Count messages, conversations, orders, bookings
     - Calculate revenue from paid/fulfilled orders
@@ -514,7 +515,7 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Log completion status
     - _Requirements: 17.1, 17.3, 17.4, 36.1, 36.2_
   
-  - [ ] 15.4 Create analytics REST API endpoints
+  - [x] 15.4 Create analytics REST API endpoints
     - Implement GET /v1/analytics/overview with range parameter
     - Implement GET /v1/analytics/daily
     - Implement GET /v1/analytics/messaging
@@ -523,28 +524,28 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - _Requirements: 16.1, 36.3, 36.4, 36.5_
 
 
-- [ ] 16. Implement order and cart management
-  - [ ] 16.1 Create Cart and Order models
+- [x] 16. Implement order and cart management
+  - [x] 16.1 Create Cart and Order models
     - Implement Cart model with items JSON field and subtotal
     - Implement Order model with status, items, payment_ref
     - Add indexes for order queries by tenant and status
     - _Requirements: 7.2, 7.3_
   
-  - [ ] 16.2 Implement cart operations in intent handlers
+  - [x] 16.2 Implement cart operations in intent handlers
     - Update ADD_TO_CART handler to create/update Cart
     - Validate ProductVariant belongs to Product
     - Check stock availability before adding to cart
     - Return updated cart state with item count and subtotal
     - _Requirements: 6.2, 6.3, 6.4, 6.5_
   
-  - [ ] 16.3 Implement order creation in CHECKOUT_LINK handler
+  - [x] 16.3 Implement order creation in CHECKOUT_LINK handler
     - Create Order with status="draft" from Cart items
     - Calculate subtotal, shipping, and total
     - Generate payment checkout link (stub or integration)
     - Clear cart after order creation
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
   
-  - [ ] 16.4 Create order REST API endpoints
+  - [x] 16.4 Create order REST API endpoints
     - Implement POST /v1/orders
     - Implement GET /v1/orders with filtering by status
     - Implement GET /v1/orders/{id}
@@ -554,7 +555,7 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
 
 - [ ] 17. Implement payment facilitation integration
   - [ ] 17.1 Add payment processing to order workflow
-    - Integrate payment gateway (Stripe/PayPal) for checkout links
+    - Integrate payment gateway (Pesapal/Mpesa/Stripe) for checkout links
     - Handle payment webhooks for order status updates
     - Trigger wallet credit on successful payment
     - Calculate and apply transaction fees based on tier
