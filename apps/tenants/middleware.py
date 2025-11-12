@@ -30,10 +30,10 @@ class TenantContextMiddleware(MiddlewareMixin):
     
     # Paths that don't require tenant authentication
     PUBLIC_PATHS = [
-        '/v1/webhooks/',
-        '/v1/health',
-        '/schema',
-        '/admin/',
+        '/v1/webhooks/',  # External webhook callbacks (verified by signature)
+        '/v1/health',     # Health check endpoint for monitoring
+        '/schema',        # OpenAPI schema endpoints for documentation
+        '/admin/',        # Django admin interface (uses session authentication)
     ]
     
     def process_request(self, request):
@@ -53,6 +53,10 @@ class TenantContextMiddleware(MiddlewareMixin):
         
         # Skip authentication for public paths
         if self._is_public_path(request.path):
+            logger.debug(
+                f"Request to public path bypassing tenant authentication: {request.path}",
+                extra={'request_id': request_id}
+            )
             request.tenant = None
             request.membership = None
             request.scopes = set()
@@ -61,6 +65,12 @@ class TenantContextMiddleware(MiddlewareMixin):
         # Extract headers
         tenant_id = request.headers.get('X-TENANT-ID')
         api_key = request.headers.get('X-TENANT-API-KEY')
+        
+        # Handle duplicate headers (comma-separated values) - take first value
+        if tenant_id and ',' in tenant_id:
+            tenant_id = tenant_id.split(',')[0].strip()
+        if api_key and ',' in api_key:
+            api_key = api_key.split(',')[0].strip()
         
         # Check if headers are present
         if not tenant_id or not api_key:
