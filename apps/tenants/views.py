@@ -36,13 +36,16 @@ class WalletBalanceView(APIView):
     GET /v1/wallet/balance
     
     Required scope: finance:view
+    
+    Note: Payment facilitation must be enabled for tenant's subscription tier.
     """
     permission_classes = [HasTenantScopes]
     required_scopes = {'finance:view'}
     
     @extend_schema(
         summary="Get wallet balance",
-        description="Retrieve current wallet balance for the authenticated tenant",
+        description="Retrieve current wallet balance for the authenticated tenant. "
+                    "Requires payment facilitation to be enabled for tenant's subscription tier.",
         responses={
             200: WalletBalanceSerializer,
             403: {
@@ -51,16 +54,23 @@ class WalletBalanceView(APIView):
                     'error': {'type': 'string'},
                     'details': {'type': 'object'}
                 },
-                'description': 'Forbidden - Missing required scope: finance:view'
+                'description': 'Forbidden - Missing required scope or payment facilitation not enabled'
             }
         },
         tags=['Wallet']
     )
     def get(self, request):
         """Get wallet balance."""
+        from apps.tenants.services.payment_facilitation_service import (
+            PaymentFacilitationService, PaymentFacilitationNotEnabled
+        )
+        
         tenant = request.tenant  # Injected by middleware
         
         try:
+            # Check if payment facilitation is enabled
+            PaymentFacilitationService.require_payment_facilitation(tenant)
+            
             wallet = WalletService.get_or_create_wallet(tenant)
             serializer = WalletBalanceSerializer({
                 'balance': wallet.balance,
@@ -68,6 +78,15 @@ class WalletBalanceView(APIView):
                 'minimum_withdrawal': wallet.minimum_withdrawal
             })
             return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except PaymentFacilitationNotEnabled as e:
+            return Response(
+                {
+                    'error': str(e),
+                    'details': e.details
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         except Exception as e:
             logger.error(f"Error getting wallet balance: {str(e)}", exc_info=True)
@@ -87,6 +106,8 @@ class WalletTransactionsView(APIView):
     GET /v1/wallet/transactions
     
     Required scope: finance:view
+    
+    Note: Payment facilitation must be enabled for tenant's subscription tier.
     """
     permission_classes = [HasTenantScopes]
     required_scopes = {'finance:view'}
@@ -148,22 +169,29 @@ class WalletTransactionsView(APIView):
     )
     def get(self, request):
         """List transactions with filtering."""
+        from apps.tenants.services.payment_facilitation_service import (
+            PaymentFacilitationService, PaymentFacilitationNotEnabled
+        )
+        
         tenant = request.tenant  # Injected by middleware
         
-        # Validate query parameters
-        filter_serializer = TransactionFilterSerializer(data=request.query_params)
-        if not filter_serializer.is_valid():
-            return Response(
-                {
-                    'error': 'Invalid query parameters',
-                    'details': filter_serializer.errors
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        filters = filter_serializer.validated_data
-        
         try:
+            # Check if payment facilitation is enabled
+            PaymentFacilitationService.require_payment_facilitation(tenant)
+            
+            # Validate query parameters
+            filter_serializer = TransactionFilterSerializer(data=request.query_params)
+            if not filter_serializer.is_valid():
+                return Response(
+                    {
+                        'error': 'Invalid query parameters',
+                        'details': filter_serializer.errors
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            filters = filter_serializer.validated_data
+            
             # Get filtered transactions
             transactions = WalletService.get_transactions(
                 tenant=tenant,
@@ -182,6 +210,15 @@ class WalletTransactionsView(APIView):
             serializer = TransactionSerializer(paginated_transactions, many=True)
             
             return paginator.get_paginated_response(serializer.data)
+        
+        except PaymentFacilitationNotEnabled as e:
+            return Response(
+                {
+                    'error': str(e),
+                    'details': e.details
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         except Exception as e:
             logger.error(f"Error listing transactions: {str(e)}", exc_info=True)

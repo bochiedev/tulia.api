@@ -74,6 +74,8 @@ MIDDLEWARE = [
     'apps.tenants.middleware.RequestIDMiddleware',
     'apps.tenants.middleware.TenantContextMiddleware',
     'apps.tenants.middleware.WebhookSubscriptionMiddleware',
+    'apps.core.cors.TenantCORSMiddleware',
+    'apps.core.rate_limiting.RateLimitMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'

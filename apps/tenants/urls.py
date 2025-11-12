@@ -17,6 +17,7 @@ from apps.tenants.views_settings import (
     set_openai_credentials,
     get_payment_methods
 )
+from apps.tenants.views_payment_features import PaymentFeaturesView
 
 urlpatterns = [
     # Settings endpoints
@@ -26,6 +27,9 @@ urlpatterns = [
     path('settings/integrations/twilio', set_twilio_credentials, name='settings-twilio'),
     path('settings/integrations/openai', set_openai_credentials, name='settings-openai'),
     path('settings/payment-methods', get_payment_methods, name='settings-payment-methods'),
+    
+    # Payment features
+    path('payment-features', PaymentFeaturesView.as_view(), name='payment-features'),
     
     # Wallet endpoints
     path('wallet/balance', WalletBalanceView.as_view(), name='wallet-balance'),

@@ -73,6 +73,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     customer_phone = serializers.CharField(source='customer.phone_e164', read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
     item_count = serializers.IntegerField(read_only=True)
+    checkout_url = serializers.SerializerMethodField()
+    payment_provider = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
@@ -80,13 +82,36 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'id', 'tenant_name', 'customer', 'customer_name',
             'customer_phone', 'currency', 'subtotal', 'shipping', 'total',
             'status', 'items', 'item_count', 'payment_ref', 'paid_at',
-            'fulfilled_at', 'tracking_number', 'metadata',
-            'created_at', 'updated_at'
+            'fulfilled_at', 'tracking_number', 'checkout_url', 'payment_provider',
+            'metadata', 'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'tenant_name', 'customer_name', 'customer_phone',
-            'created_at', 'updated_at'
+            'checkout_url', 'payment_provider', 'created_at', 'updated_at'
         ]
+    
+    def get_checkout_url(self, obj):
+        """Generate checkout URL for unpaid orders."""
+        # Only generate checkout URL for draft/placed orders
+        if obj.status not in ['draft', 'placed']:
+            return None
+        
+        # If payment_ref exists, try to retrieve existing checkout URL
+        if obj.payment_ref:
+            # For Stripe, we can reconstruct the checkout URL
+            if obj.payment_ref.startswith('cs_'):  # Stripe session ID
+                return f"https://checkout.stripe.com/c/pay/{obj.payment_ref}"
+            # For other providers, return None (would need to be stored in metadata)
+            return obj.metadata.get('checkout_url')
+        
+        return None
+    
+    def get_payment_provider(self, obj):
+        """Get payment provider for the order."""
+        from apps.integrations.services.payment_service import PaymentService
+        
+        provider = PaymentService.get_configured_provider(obj.tenant)
+        return provider if provider else 'external'
 
 
 class OrderCreateSerializer(serializers.ModelSerializer):

@@ -406,9 +406,28 @@ class ProductIntentHandler:
             items=cart.items
         )
         
-        # Generate checkout link (stub for now)
-        # TODO: Integrate with payment gateway
-        checkout_link = f"https://checkout.example.com/order/{order.id}"
+        # Generate checkout link using payment service
+        from apps.integrations.services.payment_service import PaymentService, PaymentProviderNotConfigured
+        
+        try:
+            checkout_data = PaymentService.generate_checkout_link(order)
+            checkout_link = checkout_data['checkout_url']
+            provider = checkout_data.get('provider', 'unknown')
+            
+            logger.info(
+                f"Checkout link generated for order {order.id}",
+                extra={
+                    'order_id': str(order.id),
+                    'provider': provider,
+                    'amount': float(order.total)
+                }
+            )
+        except PaymentProviderNotConfigured:
+            # Fallback to external checkout if payment facilitation not enabled
+            checkout_link = f"https://checkout.example.com/order/{order.id}"
+            logger.info(
+                f"Payment facilitation not enabled, using external checkout for order {order.id}"
+            )
         
         # Format response
         message = f"🛒 *Order Summary*\n\n"

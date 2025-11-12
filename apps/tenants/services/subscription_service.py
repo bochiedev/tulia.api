@@ -285,7 +285,11 @@ class SubscriptionService:
     @staticmethod
     def change_tier(subscription, new_tier):
         """
-        Change subscription tier.
+        Change subscription tier with payment facilitation handling.
+        
+        Handles:
+        - Wallet auto-creation on upgrade to payment facilitation tier
+        - Balance validation on downgrade from payment facilitation tier
         
         Args:
             subscription: Subscription instance
@@ -293,24 +297,43 @@ class SubscriptionService:
             
         Returns:
             Subscription: Updated subscription
+            
+        Raises:
+            WalletBalanceNotZero: If downgrading with non-zero wallet balance
         """
-        old_tier = subscription.tier
+        from apps.tenants.services.payment_facilitation_service import PaymentFacilitationService
         
+        old_tier = subscription.tier
+        tenant = subscription.tenant
+        
+        # Validate tier downgrade if losing payment facilitation
+        PaymentFacilitationService.validate_tier_downgrade(tenant, new_tier)
+        
+        # Update subscription tier
         subscription.tier = new_tier
         subscription.save(update_fields=['tier'])
         
         # Update tenant tier
-        subscription.tenant.subscription_tier = new_tier
-        subscription.tenant.save(update_fields=['subscription_tier'])
+        tenant.subscription_tier = new_tier
+        tenant.save(update_fields=['subscription_tier'])
+        
+        # Handle tier upgrade (auto-create wallet if needed)
+        wallet_result = PaymentFacilitationService.handle_tier_upgrade(tenant, new_tier)
         
         # Log event
+        event_metadata = {
+            'previous_tier': old_tier.name,
+            'new_tier': new_tier.name
+        }
+        
+        if wallet_result['wallet_created']:
+            event_metadata['wallet_created'] = True
+            event_metadata['wallet_id'] = wallet_result['wallet_id']
+        
         SubscriptionEvent.objects.create(
             subscription=subscription,
             event_type='tier_changed',
-            metadata={
-                'previous_tier': old_tier.name,
-                'new_tier': new_tier.name
-            }
+            metadata=event_metadata
         )
         
         return subscription

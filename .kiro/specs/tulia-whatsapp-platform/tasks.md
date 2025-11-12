@@ -553,36 +553,36 @@ This implementation plan breaks down the Tulia AI WhatsApp Commerce & Services p
     - Trigger automated messages on status changes
     - _Requirements: 41.1, 41.2_
 
-- [ ] 17. Implement payment facilitation integration
-  - [ ] 17.1 Add payment processing to order workflow
-    - Integrate payment gateway (Pesapal/Mpesa/Stripe) for checkout links
+- [x] 17. Implement payment facilitation integration
+  - [x] 17.1 Add payment processing to order workflow
+    - Integrate payment gateway (Pesapal/Mpesa/Stripe/Paystack) for checkout links
     - Handle payment webhooks for order status updates
     - Trigger wallet credit on successful payment
     - Calculate and apply transaction fees based on tier
     - _Requirements: 32.2, 32.3, 32.4, 35.4, 35.5, 37.3_
   
-  - [ ] 17.2 Add payment facilitation checks based on subscription tier
+  - [x] 17.2 Add payment facilitation checks based on subscription tier
     - Check payment_facilitation flag before enabling wallet features
     - Allow external checkout links for tiers without facilitation
     - Auto-create wallet on tier upgrade
     - Require zero balance before tier downgrade
     - _Requirements: 37.1, 37.2, 37.4, 37.5_
 
-- [ ] 18. Implement rate limiting and security features
-  - [ ] 18.1 Implement Redis-based rate limiting
+- [x] 18. Implement rate limiting and security features
+  - [x] 18.1 Implement Redis-based rate limiting
     - Create rate limiter using Redis sliding window algorithm
     - Apply per-tenant limits based on subscription tier
     - Track API requests and webhook calls separately
     - Return 429 with Retry-After header when limit exceeded
     - _Requirements: 22.1, 22.2, 22.3, 22.4, 22.5_
   
-  - [ ] 18.2 Implement CORS validation
+  - [x] 18.2 Implement CORS validation
     - Validate Origin header against tenant.allowed_origins
     - Support wildcard for development environments
     - Apply strict mode for production
     - _Requirements: 1.8_
   
-  - [ ] 18.3 Implement PII encryption utilities
+  - [x] 18.3 Implement PII encryption utilities
     - Create encryption/decryption functions using AES-256-GCM
     - Implement custom Django field for encrypted data
     - Support encrypted field lookups in queries
