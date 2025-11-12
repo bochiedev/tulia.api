@@ -61,6 +61,22 @@ def task_failure_handler(sender=None, task_id=None, exception=None, args=None, k
         },
         exc_info=einfo
     )
+    
+    # Send to Sentry with additional context
+    try:
+        from apps.core.sentry_utils import capture_exception
+        capture_exception(
+            exception,
+            task={
+                'task_id': task_id,
+                'task_name': sender.name,
+                'args': args,
+                'kwargs': kwargs,
+            }
+        )
+    except Exception as e:
+        # Don't fail if Sentry capture fails
+        logger.warning(f"Failed to send task failure to Sentry: {e}")
 
 
 @task_retry.connect

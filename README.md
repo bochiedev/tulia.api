@@ -1,5 +1,7 @@
 # Tulia AI - WhatsApp Commerce & Services Platform
 
+> Multi-tenant WhatsApp commerce and services platform with AI-powered conversational commerce, comprehensive RBAC, and subscription management.
+
 Multi-tenant WhatsApp-based commerce and services platform powered by AI.
 
 ## Features
@@ -126,6 +128,27 @@ Once the server is running, access the API documentation at:
 - **OpenAPI Schema**: http://localhost:8000/schema/
 - **Swagger UI**: http://localhost:8000/schema/swagger/
 
+## Django Admin Panel
+
+Access the Django admin panel to manage your data:
+
+- **Admin Panel**: http://localhost:8000/admin
+- **Login**: Use your superuser credentials
+
+Create a superuser if you haven't already:
+```bash
+python manage.py createsuperuser
+# Or with Docker:
+docker-compose exec web python manage.py createsuperuser
+```
+
+The admin panel provides full CRUD access to:
+- Tenants, subscriptions, and wallets
+- RBAC (roles, permissions, users)
+- Products, services, and appointments
+- Customers, conversations, and messages
+- Orders and analytics
+
 ## Health Check
 
 Check system health at: http://localhost:8000/v1/health/
@@ -212,6 +235,41 @@ logger.info("Processing order", extra={
 ## License
 
 Proprietary - All rights reserved
+
+## Documentation
+
+All documentation is organized in the **[docs/](docs/)** folder:
+
+- **[Quick Start](docs/QUICKSTART_DEPLOYMENT.md)** - Get up and running in 10 minutes
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Complete deployment guide
+- **[Twilio Webhook Setup](docs/TWILIO_WEBHOOK_SETUP.md)** - Configure Twilio webhooks
+- **[API Documentation](docs/api/)** - API reference and Postman guides
+- **[Complete Documentation Index](docs/README.md)** - Browse all documentation
+
+### Quick Production Deployment
+
+```bash
+# 1. Clone and configure
+git clone <repository-url>
+cd tulia
+cp .env.example .env
+# Edit .env with production values
+
+# 2. Start services with production configuration
+docker-compose -f docker-compose.prod.yml up -d
+
+# 3. Run migrations
+docker-compose exec web python manage.py migrate
+
+# 4. Seed initial data
+docker-compose exec web python manage.py seed_permissions
+docker-compose exec web python manage.py seed_subscription_tiers
+
+# 5. Verify deployment
+curl https://api.yourdomain.com/v1/health
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
 
 ## Support
 

@@ -78,6 +78,10 @@ MIDDLEWARE = [
     'apps.core.rate_limiting.RateLimitMiddleware',
 ]
 
+# Add query logging middleware in development
+if DEBUG:
+    MIDDLEWARE.append('apps.core.query_logging.QueryLoggingMiddleware')
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
@@ -340,6 +344,7 @@ curl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve
         {'name': 'Messaging', 'description': 'WhatsApp messaging and conversations'},
         {'name': 'Analytics', 'description': 'Business analytics and reporting'},
         {'name': 'Integrations', 'description': 'External service integrations'},
+        {'name': 'Test Utilities', 'description': 'Testing and development utilities (disable in production)'},
     ],
 }
 
@@ -467,6 +472,9 @@ LOGGING = {
 
 # Sentry Configuration
 SENTRY_DSN = env('SENTRY_DSN', default=None)
+SENTRY_ENVIRONMENT = env('SENTRY_ENVIRONMENT', default='development')
+SENTRY_RELEASE = env('SENTRY_RELEASE', default=None)
+
 if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
@@ -474,10 +482,18 @@ if SENTRY_DSN:
             DjangoIntegration(),
             CeleryIntegration(),
         ],
-        environment=env('SENTRY_ENVIRONMENT', default='development'),
+        environment=SENTRY_ENVIRONMENT,
+        release=SENTRY_RELEASE,
         traces_sample_rate=0.1 if not DEBUG else 1.0,
+        profiles_sample_rate=0.1 if not DEBUG else 0.0,
         send_default_pii=False,
         before_send=lambda event, hint: event if not DEBUG else None,
+        # Attach stack traces to all messages
+        attach_stacktrace=True,
+        # Maximum breadcrumbs to capture
+        max_breadcrumbs=50,
+        # Enable performance monitoring
+        enable_tracing=True,
     )
 
 # OpenAI/Claude Configuration

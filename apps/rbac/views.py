@@ -485,6 +485,7 @@ class RoleListView(APIView):
     
     No specific scope required - all authenticated users can view roles.
     """
+    pagination_class = StandardResultsSetPagination
     
     def get(self, request):
         """List roles for the tenant."""
@@ -500,11 +501,18 @@ class RoleListView(APIView):
         elif role_type == 'custom':
             roles = roles.filter(is_system=False)
         
+        # Paginate
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(roles, request)
+        
         serializer = RoleSerializer(
-            roles,
+            page if page is not None else roles,
             many=True,
             context={'include_permissions': request.query_params.get('include_permissions') == 'true'}
         )
+        
+        if page is not None:
+            return paginator.get_paginated_response(serializer.data)
         
         return Response({
             'count': roles.count(),
@@ -993,6 +1001,7 @@ class PermissionListView(APIView):
     
     No specific scope required - all authenticated users can view available permissions.
     """
+    pagination_class = StandardResultsSetPagination
     
     def get(self, request):
         """List all permissions."""
@@ -1004,10 +1013,9 @@ class PermissionListView(APIView):
         if category:
             permissions = permissions.filter(category=category)
         
-        serializer = PermissionSerializer(permissions, many=True)
-        
-        # Group by category if requested
+        # Group by category if requested (skip pagination for grouped view)
         if request.query_params.get('group_by_category') == 'true':
+            serializer = PermissionSerializer(permissions, many=True)
             grouped = {}
             for perm in serializer.data:
                 cat = perm['category']
@@ -1019,6 +1027,15 @@ class PermissionListView(APIView):
                 'count': permissions.count(),
                 'permissions_by_category': grouped
             })
+        
+        # Paginate
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(permissions, request)
+        
+        serializer = PermissionSerializer(page if page is not None else permissions, many=True)
+        
+        if page is not None:
+            return paginator.get_paginated_response(serializer.data)
         
         return Response({
             'count': permissions.count(),

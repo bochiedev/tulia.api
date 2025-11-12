@@ -14,10 +14,38 @@ from apps.messaging.views import (
     CampaignExecuteView,
     CampaignReportView,
 )
+from apps.messaging.views_conversation import (
+    ConversationListView,
+    ConversationDetailView,
+    ConversationMessagesView,
+    ConversationHandoffView,
+)
 
 app_name = 'messaging'
 
 urlpatterns = [
+    # Conversation endpoints
+    path(
+        'conversations',
+        ConversationListView.as_view(),
+        name='conversation-list'
+    ),
+    path(
+        'conversations/<uuid:id>',
+        ConversationDetailView.as_view(),
+        name='conversation-detail'
+    ),
+    path(
+        'conversations/<uuid:id>/messages',
+        ConversationMessagesView.as_view(),
+        name='conversation-messages'
+    ),
+    path(
+        'conversations/<uuid:id>/handoff',
+        ConversationHandoffView.as_view(),
+        name='conversation-handoff'
+    ),
+    
     # Customer preferences endpoints
     path(
         'customers/<uuid:customer_id>/preferences',

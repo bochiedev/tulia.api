@@ -147,3 +147,130 @@ class TransactionFilterSerializer(serializers.Serializer):
         default=50,
         help_text="Number of items per page"
     )
+
+
+
+class AdminTenantListSerializer(serializers.ModelSerializer):
+    """Serializer for admin tenant list view."""
+    
+    tier_name = serializers.CharField(source='subscription_tier.name', read_only=True, allow_null=True)
+    subscription_status = serializers.SerializerMethodField()
+    wallet_balance = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Tenant
+        fields = [
+            'id', 'name', 'slug', 'status', 'tier_name',
+            'subscription_status', 'subscription_waived',
+            'trial_start_date', 'trial_end_date',
+            'whatsapp_number', 'contact_email', 'contact_phone',
+            'wallet_balance', 'created_at', 'updated_at'
+        ]
+        read_only_fields = fields
+    
+    def get_subscription_status(self, obj):
+        """Get subscription status."""
+        try:
+            if hasattr(obj, 'subscription'):
+                return obj.subscription.status
+            return None
+        except:
+            return None
+    
+    def get_wallet_balance(self, obj):
+        """Get wallet balance if exists."""
+        try:
+            if hasattr(obj, 'wallet'):
+                return {
+                    'balance': float(obj.wallet.balance),
+                    'currency': obj.wallet.currency
+                }
+            return None
+        except:
+            return None
+
+
+class AdminTenantDetailSerializer(serializers.ModelSerializer):
+    """Serializer for admin tenant detail view."""
+    
+    tier_name = serializers.CharField(source='subscription_tier.name', read_only=True, allow_null=True)
+    subscription = serializers.SerializerMethodField()
+    wallet = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Tenant
+        fields = [
+            'id', 'name', 'slug', 'status', 'subscription_tier', 'tier_name',
+            'subscription_waived', 'trial_start_date', 'trial_end_date',
+            'whatsapp_number', 'contact_email', 'contact_phone',
+            'timezone', 'quiet_hours_start', 'quiet_hours_end',
+            'allowed_origins', 'subscription', 'wallet',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = fields
+    
+    def get_subscription(self, obj):
+        """Get subscription details."""
+        try:
+            if hasattr(obj, 'subscription'):
+                sub = obj.subscription
+                return {
+                    'id': str(sub.id),
+                    'tier': sub.tier.name,
+                    'billing_cycle': sub.billing_cycle,
+                    'status': sub.status,
+                    'start_date': sub.start_date,
+                    'next_billing_date': sub.next_billing_date,
+                }
+            return None
+        except:
+            return None
+    
+    def get_wallet(self, obj):
+        """Get wallet details."""
+        try:
+            if hasattr(obj, 'wallet'):
+                wallet = obj.wallet
+                return {
+                    'id': str(wallet.id),
+                    'balance': float(wallet.balance),
+                    'currency': wallet.currency,
+                    'minimum_withdrawal': float(wallet.minimum_withdrawal),
+                }
+            return None
+        except:
+            return None
+
+
+class AdminSubscriptionChangeSerializer(serializers.Serializer):
+    """Serializer for admin subscription tier change."""
+    
+    tier_id = serializers.UUIDField(
+        required=True,
+        help_text="ID of the new subscription tier"
+    )
+    billing_cycle = serializers.ChoiceField(
+        choices=['monthly', 'yearly'],
+        required=False,
+        default='monthly',
+        help_text="Billing cycle"
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Admin notes for the change"
+    )
+
+
+class AdminSubscriptionWaiverSerializer(serializers.Serializer):
+    """Serializer for admin subscription waiver."""
+    
+    waived = serializers.BooleanField(
+        required=True,
+        help_text="Whether to waive subscription fees"
+    )
+    notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Admin notes for the waiver"
+    )

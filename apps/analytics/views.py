@@ -303,6 +303,8 @@ def admin_analytics_revenue(request):
     
     Example:
         GET /v1/admin/analytics/revenue?range=30d&group_by=tier
+    
+    Required scope: Platform operator (superuser)
     """
     # Check if user is superuser (platform operator)
     if not request.user.is_superuser:
@@ -318,6 +320,13 @@ def admin_analytics_revenue(request):
     if not date_range.endswith('d') or not date_range[:-1].isdigit():
         return Response(
             {'error': 'Invalid date range format. Use format like "7d", "30d"'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate group_by parameter
+    if group_by not in ['date', 'tier', 'tenant']:
+        return Response(
+            {'error': 'Invalid group_by parameter. Use "date", "tier", or "tenant"'},
             status=status.HTTP_400_BAD_REQUEST
         )
     
@@ -353,6 +362,55 @@ def admin_analytics_revenue(request):
         status='active'
     ).count()
     
+    # Group by date if requested
+    by_date = []
+    if group_by == 'date':
+        from django.db.models.functions import TruncDate
+        
+        daily_payments = Transaction.objects.filter(
+            transaction_type='customer_payment',
+            status='completed',
+            created_at__gte=start_date
+        ).annotate(
+            date=TruncDate('created_at')
+        ).values('date').annotate(
+            volume=Sum('amount'),
+            fees=Sum('fee')
+        ).order_by('date')
+        
+        daily_subscriptions = Transaction.objects.filter(
+            transaction_type='subscription_charge',
+            status='completed',
+            created_at__gte=start_date
+        ).annotate(
+            date=TruncDate('created_at')
+        ).values('date').annotate(
+            revenue=Sum('amount')
+        ).order_by('date')
+        
+        # Merge daily data
+        date_map = {}
+        for item in daily_payments:
+            date_map[item['date']] = {
+                'date': item['date'],
+                'payment_volume': float(item['volume'] or 0),
+                'platform_fees': float(item['fees'] or 0),
+                'subscription_revenue': 0,
+            }
+        
+        for item in daily_subscriptions:
+            if item['date'] in date_map:
+                date_map[item['date']]['subscription_revenue'] = float(item['revenue'] or 0)
+            else:
+                date_map[item['date']] = {
+                    'date': item['date'],
+                    'payment_volume': 0,
+                    'platform_fees': 0,
+                    'subscription_revenue': float(item['revenue'] or 0),
+                }
+        
+        by_date = list(date_map.values())
+    
     # Group by tier if requested
     by_tier = []
     if group_by == 'tier':
@@ -375,11 +433,61 @@ def admin_analytics_revenue(request):
                 fees=Sum('fee')
             )
             
+            tier_sub_revenue = Transaction.objects.filter(
+                tenant__subscription__tier=tier,
+                transaction_type='subscription_charge',
+                status='completed',
+                created_at__gte=start_date
+            ).aggregate(revenue=Sum('amount'))
+            
             by_tier.append({
                 'tier_name': tier.name,
                 'active_subscriptions': tier_subs,
                 'payment_volume': float(tier_revenue['volume'] or 0),
                 'platform_fees': float(tier_revenue['fees'] or 0),
+                'subscription_revenue': float(tier_sub_revenue['revenue'] or 0),
+            })
+    
+    # Group by tenant if requested
+    by_tenant = []
+    if group_by == 'tenant':
+        from apps.tenants.models import Tenant
+        
+        # Get tenants with transactions in the period
+        tenant_ids = Transaction.objects.filter(
+            transaction_type__in=['customer_payment', 'subscription_charge'],
+            status='completed',
+            created_at__gte=start_date
+        ).values_list('tenant_id', flat=True).distinct()
+        
+        tenants = Tenant.objects.filter(id__in=tenant_ids)
+        
+        for tenant in tenants:
+            tenant_payments = Transaction.objects.filter(
+                tenant=tenant,
+                transaction_type='customer_payment',
+                status='completed',
+                created_at__gte=start_date
+            ).aggregate(
+                volume=Sum('amount'),
+                fees=Sum('fee')
+            )
+            
+            tenant_sub_revenue = Transaction.objects.filter(
+                tenant=tenant,
+                transaction_type='subscription_charge',
+                status='completed',
+                created_at__gte=start_date
+            ).aggregate(revenue=Sum('amount'))
+            
+            by_tenant.append({
+                'tenant_id': str(tenant.id),
+                'tenant_name': tenant.name,
+                'tenant_slug': tenant.slug,
+                'tier_name': tenant.subscription_tier.name if tenant.subscription_tier else None,
+                'payment_volume': float(tenant_payments['volume'] or 0),
+                'platform_fees': float(tenant_payments['fees'] or 0),
+                'subscription_revenue': float(tenant_sub_revenue['revenue'] or 0),
             })
     
     # Build response
@@ -387,11 +495,14 @@ def admin_analytics_revenue(request):
         'date_range': date_range,
         'start_date': start_date.date(),
         'end_date': end_date.date(),
+        'group_by': group_by,
         'payment_volume': payment_volume,
         'platform_fees': platform_fees,
         'subscription_revenue': subscription_revenue,
         'active_subscriptions': active_subscriptions,
+        'by_date': by_date,
         'by_tier': by_tier,
+        'by_tenant': by_tenant,
     }
     
     serializer = RevenueAnalyticsSerializer(revenue_data)

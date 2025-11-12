@@ -16,6 +16,9 @@ from apps.rbac.models import (
     TenantUser, Permission, Role, RolePermission,
     TenantUserRole, UserPermission, AuditLog
 )
+from apps.core.cache import (
+    CacheService, CacheKeys, CacheTTL, TenantCacheInvalidator
+)
 
 
 class RBACService:
@@ -51,15 +54,16 @@ class RBACService:
         Returns:
             Set of permission codes (e.g., {'catalog:view', 'catalog:edit'})
         """
-        # Check cache first (gracefully handle cache failures)
-        cache_key = f"rbac:scopes:tenant_user:{tenant_user.id}"
-        try:
-            cached_scopes = cache.get(cache_key)
-            if cached_scopes is not None:
-                return cached_scopes
-        except Exception:
-            # Cache unavailable, continue without caching
-            pass
+        # Check cache first using centralized cache service
+        cache_key = CacheKeys.format(
+            CacheKeys.USER_SCOPES,
+            tenant_id=str(tenant_user.tenant_id),
+            user_id=str(tenant_user.user_id)
+        )
+        
+        cached_scopes = CacheService.get(cache_key)
+        if cached_scopes is not None:
+            return cached_scopes
         
         # Start with empty set
         scopes = set()
@@ -93,12 +97,8 @@ class RBACService:
         # Remove all denies (deny wins over role grants and explicit grants)
         scopes -= denies
         
-        # Cache the result (gracefully handle cache failures)
-        try:
-            cache.set(cache_key, scopes, cls.SCOPE_CACHE_TTL)
-        except Exception:
-            # Cache unavailable, continue without caching
-            pass
+        # Cache the result using centralized cache service
+        CacheService.set(cache_key, scopes, CacheTTL.RBAC_SCOPES)
         
         return scopes
     
@@ -112,12 +112,10 @@ class RBACService:
         Args:
             tenant_user: TenantUser instance to invalidate cache for
         """
-        cache_key = f"rbac:scopes:tenant_user:{tenant_user.id}"
-        try:
-            cache.delete(cache_key)
-        except Exception:
-            # Cache unavailable, continue without caching
-            pass
+        TenantCacheInvalidator.invalidate_user_scopes(
+            str(tenant_user.tenant_id),
+            str(tenant_user.user_id)
+        )
     
     @classmethod
     @transaction.atomic

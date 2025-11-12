@@ -4,11 +4,16 @@ Catalog service for product operations.
 Handles product search, retrieval, and feature limit enforcement
 with strict tenant scoping.
 """
+import hashlib
+import json
 from django.db.models import Q, Prefetch
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from apps.catalog.models import Product, ProductVariant
 from apps.tenants.services.subscription_service import SubscriptionService
 from apps.core.exceptions import FeatureLimitExceeded
+from apps.core.cache import (
+    CacheService, CacheKeys, CacheTTL, TenantCacheInvalidator
+)
 
 
 class CatalogService:
@@ -28,8 +33,13 @@ class CatalogService:
         Returns:
             QuerySet: Filtered and ordered products
         """
-        # Start with tenant-scoped queryset
-        products = Product.objects.for_tenant(tenant).select_related('tenant')
+        # Start with tenant-scoped queryset with optimized joins
+        products = Product.objects.for_tenant(tenant).select_related('tenant').prefetch_related(
+            Prefetch(
+                'variants',
+                queryset=ProductVariant.objects.order_by('title')
+            )
+        )
         
         # Apply search query
         if query:
@@ -86,6 +96,18 @@ class CatalogService:
         Returns:
             Product: Product instance or None
         """
+        # Try cache first
+        cache_key = CacheKeys.format(
+            CacheKeys.PRODUCT_DETAIL,
+            tenant_id=str(tenant.id),
+            product_id=str(product_id)
+        )
+        
+        cached_product = CacheService.get(cache_key)
+        if cached_product is not None:
+            return cached_product
+        
+        # Cache miss - fetch from database
         queryset = Product.objects.for_tenant(tenant).select_related('tenant')
         
         if include_variants:
@@ -97,7 +119,10 @@ class CatalogService:
             )
         
         try:
-            return queryset.get(id=product_id)
+            product = queryset.get(id=product_id)
+            # Cache the result
+            CacheService.set(cache_key, product, CacheTTL.CATALOG)
+            return product
         except Product.DoesNotExist:
             return None
     
@@ -155,6 +180,9 @@ class CatalogService:
         # Create product
         product = Product.objects.create(**product_data)
         
+        # Invalidate catalog cache
+        TenantCacheInvalidator.invalidate_product_catalog(str(tenant.id))
+        
         return product
     
     @staticmethod
@@ -181,6 +209,10 @@ class CatalogService:
                 setattr(product, field, value)
         
         product.save()
+        
+        # Invalidate cache for this product
+        TenantCacheInvalidator.invalidate_product_catalog(str(tenant.id), str(product_id))
+        
         return product
     
     @staticmethod
@@ -205,6 +237,9 @@ class CatalogService:
             product.delete()  # Soft delete via BaseModel
         else:
             product.hard_delete()
+        
+        # Invalidate cache for this product
+        TenantCacheInvalidator.invalidate_product_catalog(str(tenant.id), str(product_id))
         
         return True
     

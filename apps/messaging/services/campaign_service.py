@@ -12,7 +12,6 @@ from apps.messaging.models import MessageCampaign, Message, Conversation
 from apps.messaging.services.messaging_service import MessagingService
 from apps.messaging.services.consent_service import ConsentService
 from apps.tenants.models import Customer
-from apps.tenants.services.subscription_service import SubscriptionService
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,6 @@ class CampaignService:
     def __init__(self):
         self.messaging_service = MessagingService()
         self.consent_service = ConsentService()
-        self.subscription_service = SubscriptionService()
     
     def create_campaign(
         self,
@@ -78,13 +76,22 @@ class CampaignService:
                 raise ValueError("A/B test requires at least 2 variants")
             
             # Check tier limits for variant count
-            subscription = self.subscription_service.get_subscription(tenant)
-            if subscription:
-                tier = subscription.tier
-                max_variants = tier.ab_test_variants if hasattr(tier, 'ab_test_variants') else 2
+            try:
+                subscription = tenant.subscription
+                if subscription:
+                    tier = subscription.tier
+                    max_variants = tier.ab_test_variants if hasattr(tier, 'ab_test_variants') else 2
+                    if len(variants) > max_variants:
+                        raise ValueError(
+                            f"Your subscription tier allows maximum {max_variants} variants. "
+                            f"Upgrade to test more variants."
+                        )
+            except Exception:
+                # No subscription found, use default limit
+                max_variants = 2
                 if len(variants) > max_variants:
                     raise ValueError(
-                        f"Your subscription tier allows maximum {max_variants} variants. "
+                        f"Maximum {max_variants} variants allowed. "
                         f"Upgrade to test more variants."
                     )
         
@@ -231,21 +238,24 @@ class CampaignService:
             raise ValueError(f"Cannot execute campaign in status: {campaign.status}")
         
         # Check subscription tier limits
-        subscription = self.subscription_service.get_subscription(campaign.tenant)
-        if subscription:
-            tier = subscription.tier
-            if hasattr(tier, 'max_campaign_sends') and tier.max_campaign_sends:
-                # Check if tenant has exceeded monthly campaign limit
-                # This would require tracking monthly sends - simplified for now
-                pass
+        try:
+            subscription = campaign.tenant.subscription
+            if subscription:
+                tier = subscription.tier
+                if hasattr(tier, 'max_campaign_sends') and tier.max_campaign_sends:
+                    # Check if tenant has exceeded monthly campaign limit
+                    # This would require tracking monthly sends - simplified for now
+                    pass
+        except Exception:
+            # No subscription found, continue
+            pass
         
         # Mark campaign as sending
         campaign.mark_sending()
         
         # Get matching customers
         queryset = Customer.objects.filter(
-            tenant=campaign.tenant,
-            is_active=True
+            tenant=campaign.tenant
         )
         
         # Apply target criteria filtering
@@ -304,7 +314,7 @@ class CampaignService:
                     customer=customer,
                     content=message_content,
                     message_type='scheduled_promotional',
-                    template=campaign.template,
+                    template_id=campaign.template.id if campaign.template else None,
                     conversation=conversation
                 )
                 

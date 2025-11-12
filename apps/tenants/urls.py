@@ -2,12 +2,18 @@
 Tenant API URLs.
 """
 from django.urls import path
+
+app_name = 'tenants'
 from apps.tenants.views import (
     WalletBalanceView,
     WalletTransactionsView,
     WalletWithdrawView,
     WalletWithdrawalApproveView,
-    AdminWithdrawalProcessView
+)
+from apps.tenants.views_customer import (
+    CustomerListView,
+    CustomerDetailView,
+    CustomerExportView,
 )
 from apps.tenants.views_settings import (
     tenant_settings_view,
@@ -18,8 +24,20 @@ from apps.tenants.views_settings import (
     get_payment_methods
 )
 from apps.tenants.views_payment_features import PaymentFeaturesView
+from apps.tenants.views_admin import (
+    AdminTenantListView,
+    AdminTenantDetailView,
+    AdminSubscriptionChangeView,
+    AdminSubscriptionWaiverView,
+    AdminWithdrawalProcessView
+)
 
 urlpatterns = [
+    # Customer endpoints
+    path('customers', CustomerListView.as_view(), name='customer-list'),
+    path('customers/<uuid:id>', CustomerDetailView.as_view(), name='customer-detail'),
+    path('customers/<uuid:id>/export', CustomerExportView.as_view(), name='customer-export'),
+    
     # Settings endpoints
     path('settings', tenant_settings_view, name='tenant-settings'),
     path('settings/integrations/woocommerce', set_woocommerce_credentials, name='settings-woocommerce'),
@@ -39,7 +57,15 @@ urlpatterns = [
          WalletWithdrawalApproveView.as_view(), 
          name='wallet-withdrawal-approve'),
     
-    # Admin endpoints (deprecated)
+    # Admin endpoints
+    path('admin/tenants', AdminTenantListView.as_view(), name='admin-tenant-list'),
+    path('admin/tenants/<uuid:tenant_id>', AdminTenantDetailView.as_view(), name='admin-tenant-detail'),
+    path('admin/tenants/<uuid:tenant_id>/subscription', 
+         AdminSubscriptionChangeView.as_view(), 
+         name='admin-subscription-change'),
+    path('admin/tenants/<uuid:tenant_id>/subscription/waiver', 
+         AdminSubscriptionWaiverView.as_view(), 
+         name='admin-subscription-waiver'),
     path('admin/wallet/withdrawals/<uuid:transaction_id>/process', 
          AdminWithdrawalProcessView.as_view(), 
          name='admin-withdrawal-process'),

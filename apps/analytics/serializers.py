@@ -120,6 +120,7 @@ class RevenueAnalyticsSerializer(serializers.Serializer):
     date_range = serializers.CharField()
     start_date = serializers.DateField()
     end_date = serializers.DateField()
+    group_by = serializers.CharField()
     
     # Payment facilitation
     payment_volume = serializers.DecimalField(max_digits=12, decimal_places=2)
@@ -129,5 +130,7 @@ class RevenueAnalyticsSerializer(serializers.Serializer):
     subscription_revenue = serializers.DecimalField(max_digits=12, decimal_places=2)
     active_subscriptions = serializers.IntegerField()
     
-    # By tier
-    by_tier = serializers.ListField(child=serializers.DictField())
+    # Grouped data
+    by_date = serializers.ListField(child=serializers.DictField(), required=False)
+    by_tier = serializers.ListField(child=serializers.DictField(), required=False)
+    by_tenant = serializers.ListField(child=serializers.DictField(), required=False)

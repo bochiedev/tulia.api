@@ -119,6 +119,10 @@ class TenantContextMiddleware(MiddlewareMixin):
         import threading
         threading.current_thread().tenant_id = str(tenant.id)
         
+        # Set Sentry context for error tracking
+        from apps.core.sentry_utils import set_tenant_context
+        set_tenant_context(tenant)
+        
         # RBAC: Validate TenantUser membership and resolve scopes
         # Check if request has authenticated user (from Django auth or JWT)
         if hasattr(request, 'user') and request.user and request.user.is_authenticated:
@@ -159,6 +163,10 @@ class TenantContextMiddleware(MiddlewareMixin):
                 # Attach to request
                 request.membership = membership
                 request.scopes = scopes
+                
+                # Set Sentry user context for error tracking
+                from apps.core.sentry_utils import set_user_context
+                set_user_context(request.user, membership)
                 
                 # Update last_seen_at timestamp (async to avoid blocking)
                 try:

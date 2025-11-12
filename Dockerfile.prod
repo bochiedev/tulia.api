@@ -1,0 +1,84 @@
+FROM python:3.12-slim AS builder
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    gcc \
+    python3-dev \
+    musl-dev \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN useradd -m -u 1000 tulia && \
+    mkdir -p /app /app/logs /app/staticfiles && \
+    chown -R tulia:tulia /app
+
+# Set work directory
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt && \
+    pip install gunicorn==21.2.0
+
+# Production stage
+FROM python:3.12-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/home/tulia/.local/bin:$PATH"
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN useradd -m -u 1000 tulia && \
+    mkdir -p /app /app/logs /app/staticfiles && \
+    chown -R tulia:tulia /app
+
+# Set work directory
+WORKDIR /app
+
+# Copy Python dependencies from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY --chown=tulia:tulia . .
+
+# Switch to non-root user
+USER tulia
+
+# Collect static files (will be overridden by volume in production)
+RUN python manage.py collectstatic --noinput || true
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/v1/health || exit 1
+
+# Expose port
+EXPOSE 8000
+
+# Default command (can be overridden in docker-compose)
+CMD ["gunicorn", "config.wsgi:application", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "4", \
+     "--threads", "2", \
+     "--timeout", "60", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--log-level", "info"]

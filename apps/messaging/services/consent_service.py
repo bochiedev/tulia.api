@@ -11,6 +11,9 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 from apps.messaging.models import CustomerPreferences, ConsentEvent
+from apps.core.cache import (
+    CacheService, CacheKeys, CacheTTL, TenantCacheInvalidator
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,18 @@ class ConsentService:
         Returns:
             CustomerPreferences: Preferences record
         """
+        # Try cache first
+        cache_key = CacheKeys.format(
+            CacheKeys.CUSTOMER_PREFERENCES,
+            tenant_id=str(tenant.id),
+            customer_id=str(customer.id)
+        )
+        
+        cached_prefs = CacheService.get(cache_key)
+        if cached_prefs is not None:
+            return cached_prefs
+        
+        # Cache miss - fetch from database
         prefs, created = CustomerPreferences.objects.get_or_create_for_customer(
             tenant=tenant,
             customer=customer
@@ -51,6 +66,9 @@ class ConsentService:
             
             # Log initial consent events
             ConsentService._log_initial_consent_events(prefs)
+        
+        # Cache the result
+        CacheService.set(cache_key, prefs, CacheTTL.CUSTOMER_PREFERENCES)
         
         return prefs
     
@@ -129,6 +147,12 @@ class ConsentService:
         if reason:
             prefs.notes = reason
         prefs.save()
+        
+        # Invalidate cache
+        TenantCacheInvalidator.invalidate_customer_preferences(
+            str(tenant.id),
+            str(customer.id)
+        )
         
         # Create audit event
         event = ConsentEvent.objects.create(

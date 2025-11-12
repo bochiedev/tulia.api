@@ -60,6 +60,8 @@ class ServiceViewSet(viewsets.ModelViewSet):
         parameters=[
             OpenApiParameter('is_active', bool, description='Filter by active status'),
             OpenApiParameter('search', str, description='Search in title and description'),
+            OpenApiParameter('page', int, description='Page number'),
+            OpenApiParameter('page_size', int, description='Number of items per page (max 100)'),
         ],
         responses={200: ServiceListSerializer(many=True)}
     )
@@ -77,6 +79,12 @@ class ServiceViewSet(viewsets.ModelViewSet):
         search = request.query_params.get('search')
         if search:
             queryset = queryset.filter(title__icontains=search) | queryset.filter(description__icontains=search)
+        
+        # Paginate (ViewSets automatically use pagination_class from settings)
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
@@ -274,6 +282,8 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             OpenApiParameter('status', str, description='Filter by status'),
             OpenApiParameter('from_dt', str, description='Filter by start datetime >= from_dt'),
             OpenApiParameter('to_dt', str, description='Filter by start datetime <= to_dt'),
+            OpenApiParameter('page', int, description='Page number'),
+            OpenApiParameter('page_size', int, description='Number of items per page (max 100)'),
         ],
         responses={200: AppointmentListSerializer(many=True)}
     )
@@ -309,6 +319,12 @@ class AppointmentViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(start_dt__lte=to_dt)
             except ValueError:
                 pass
+        
+        # Paginate (ViewSets automatically use pagination_class from settings)
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
