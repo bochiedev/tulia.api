@@ -33,7 +33,12 @@ class TenantContextMiddleware(MiddlewareMixin):
     PUBLIC_PATHS = [
         '/v1/webhooks/',  # External webhook callbacks (verified by signature)
         '/v1/health',     # Health check endpoint for monitoring
-        '/v1/auth/',      # Authentication endpoints (register, login, etc.)
+        '/v1/auth/register',  # Registration endpoint
+        '/v1/auth/login',     # Login endpoint
+        '/v1/auth/verify-email',  # Email verification
+        '/v1/auth/forgot-password',  # Password reset request
+        '/v1/auth/reset-password',   # Password reset
+        '/v1/auth/refresh-token',    # Token refresh
         '/schema',        # OpenAPI schema endpoints for documentation
         '/admin/',        # Django admin interface (uses session authentication)
     ]
@@ -42,15 +47,16 @@ class TenantContextMiddleware(MiddlewareMixin):
     # These are endpoints for managing tenants themselves (list, create)
     JWT_ONLY_PATHS = [
         '/v1/tenants',  # Tenant list and create endpoints
+        '/v1/auth/me',  # User profile endpoint
+        '/v1/auth/logout',  # Logout endpoint
     ]
     
     def process_request(self, request):
         """
         Extract and validate tenant context from headers.
         
-        Supports two authentication methods:
-        1. JWT token (Authorization: Bearer <token>) - for user-based authentication
-        2. API key (X-TENANT-API-KEY) - for service-to-service authentication
+        Authentication method:
+        - JWT token (Authorization: Bearer <token>) - REQUIRED for all user operations
         
         For RBAC-enabled endpoints, this middleware also:
         - Validates TenantUser membership exists
@@ -58,6 +64,9 @@ class TenantContextMiddleware(MiddlewareMixin):
         - Attaches request.tenant, request.membership, request.scopes
         - Updates last_seen_at timestamp on TenantUser
         - Adds request_id to all audit logs
+        
+        Note: API keys are deprecated for user operations. Use JWT tokens exclusively.
+        Webhooks are public and verified by signature (not by this middleware).
         """
         # Generate or extract request ID for tracing
         request_id = request.headers.get('X-Request-ID', str(uuid.uuid4()))
@@ -83,53 +92,43 @@ class TenantContextMiddleware(MiddlewareMixin):
         # Extract authentication headers
         auth_header = request.headers.get('Authorization', '')
         tenant_id = request.headers.get('X-TENANT-ID')
-        api_key = request.headers.get('X-TENANT-API-KEY')
         
         # Handle duplicate headers (comma-separated values) - take first value
         if tenant_id and ',' in tenant_id:
             tenant_id = tenant_id.split(',')[0].strip()
-        if api_key and ',' in api_key:
-            api_key = api_key.split(',')[0].strip()
         
-        # Determine authentication method
+        # JWT authentication is REQUIRED for all user operations
         user = None
-        auth_method = None
         
-        # Try JWT authentication first (if Authorization header present)
-        if auth_header.startswith('Bearer '):
-            jwt_token = auth_header[7:].strip()  # Remove 'Bearer ' prefix
-            user = self._authenticate_jwt(jwt_token, request_id)
-            
-            if user:
-                auth_method = 'jwt'
-                request.user = user
-                logger.debug(
-                    f"JWT authentication successful for user: {user.email}",
-                    extra={'request_id': request_id}
-                )
-            else:
-                # JWT token present but invalid
-                return self._error_response(
-                    'INVALID_TOKEN',
-                    'Invalid or expired JWT token',
-                    status=401
-                )
-        
-        # Fall back to API key authentication if no JWT
-        elif api_key:
-            auth_method = 'api_key'
-            # API key authentication doesn't set request.user
-            request.user = None
-        else:
-            # No authentication credentials provided
+        if not auth_header.startswith('Bearer '):
+            # No JWT token provided
             return self._error_response(
-                'MISSING_CREDENTIALS',
-                'Authorization header (Bearer token) or X-TENANT-API-KEY required',
+                'MISSING_TOKEN',
+                'Authorization header with Bearer token is required. Format: Authorization: Bearer <token>',
                 status=401
             )
         
+        # Extract and validate JWT token
+        jwt_token = auth_header[7:].strip()  # Remove 'Bearer ' prefix
+        user = self._authenticate_jwt(jwt_token, request_id)
+        
+        if not user:
+            # JWT token present but invalid
+            return self._error_response(
+                'INVALID_TOKEN',
+                'Invalid or expired JWT token',
+                status=401
+            )
+        
+        # Set authenticated user on request
+        request.user = user
+        logger.debug(
+            f"JWT authentication successful for user: {user.email}",
+            extra={'request_id': request_id}
+        )
+        
         # For JWT-only paths, skip tenant validation
-        if is_jwt_only_path and auth_method == 'jwt':
+        if is_jwt_only_path:
             # These endpoints don't require tenant context
             request.tenant = None
             request.membership = None
@@ -144,7 +143,7 @@ class TenantContextMiddleware(MiddlewareMixin):
         if not tenant_id:
             return self._error_response(
                 'MISSING_TENANT_ID',
-                'X-TENANT-ID header is required',
+                'X-TENANT-ID header is required for tenant-scoped operations',
                 status=401
             )
         
@@ -161,19 +160,6 @@ class TenantContextMiddleware(MiddlewareMixin):
                 'Invalid tenant ID',
                 status=401
             )
-        
-        # Validate API key if using API key authentication
-        if auth_method == 'api_key':
-            if not self._validate_api_key(tenant, api_key):
-                logger.warning(
-                    f"Invalid API key for tenant: {tenant_id}",
-                    extra={'request_id': request_id}
-                )
-                return self._error_response(
-                    'INVALID_API_KEY',
-                    'Invalid API key',
-                    status=401
-                )
         
         # Check if tenant is active
         if not tenant.is_active():
@@ -203,78 +189,71 @@ class TenantContextMiddleware(MiddlewareMixin):
         set_tenant_context(tenant)
         
         # RBAC: Validate TenantUser membership and resolve scopes
-        # Only for JWT-authenticated requests (user-based authentication)
-        if auth_method == 'jwt' and user and user.is_authenticated:
-            # Import here to avoid circular dependency
-            from apps.rbac.models import TenantUser
-            from apps.rbac.services import RBACService
+        # Import here to avoid circular dependency
+        from apps.rbac.models import TenantUser
+        from apps.rbac.services import RBACService
+        
+        # Get TenantUser membership
+        try:
+            membership = TenantUser.objects.get_membership(tenant, user)
             
-            # Get TenantUser membership
-            try:
-                membership = TenantUser.objects.get_membership(tenant, user)
-                
-                if not membership:
-                    logger.warning(
-                        f"User {user.email} attempted access to tenant {tenant.slug} without membership",
-                        extra={'request_id': request_id, 'tenant_id': str(tenant.id)}
-                    )
-                    return self._error_response(
-                        'FORBIDDEN',
-                        'You do not have access to this tenant',
-                        status=403
-                    )
-                
-                # Check if membership is accepted
-                if membership.invite_status != 'accepted':
-                    logger.warning(
-                        f"User {user.email} attempted access with non-accepted membership: {membership.invite_status}",
-                        extra={'request_id': request_id, 'tenant_id': str(tenant.id)}
-                    )
-                    return self._error_response(
-                        'FORBIDDEN',
-                        f'Your invitation status is {membership.invite_status}. Please accept your invitation first.',
-                        status=403
-                    )
-                
-                # Resolve user scopes from roles and permission overrides
-                scopes = RBACService.resolve_scopes(membership)
-                
-                # Attach to request
-                request.membership = membership
-                request.scopes = scopes
-                
-                # Set Sentry user context for error tracking
-                from apps.core.sentry_utils import set_user_context
-                set_user_context(user, membership)
-                
-                # Update last_seen_at timestamp (async to avoid blocking)
-                try:
-                    membership.last_seen_at = timezone.now()
-                    membership.save(update_fields=['last_seen_at'])
-                except Exception as e:
-                    # Log but don't fail request if timestamp update fails
-                    logger.warning(
-                        f"Failed to update last_seen_at for membership {membership.id}: {e}",
-                        extra={'request_id': request_id}
-                    )
-                
-                logger.debug(
-                    f"RBAC context set: {user.email} @ {tenant.slug} with {len(scopes)} scopes",
+            if not membership:
+                logger.warning(
+                    f"User {user.email} attempted access to tenant {tenant.slug} without membership",
                     extra={'request_id': request_id, 'tenant_id': str(tenant.id)}
                 )
-                
-            except Exception as e:
-                logger.error(
-                    f"Error resolving RBAC context: {e}",
-                    extra={'request_id': request_id, 'tenant_id': str(tenant.id)},
-                    exc_info=True
+                return self._error_response(
+                    'FORBIDDEN',
+                    'You do not have access to this tenant',
+                    status=403
                 )
-                # Set empty membership and scopes on error
-                request.membership = None
-                request.scopes = set()
-        else:
-            # API key authentication or no user - set empty membership and scopes
-            # API key authentication is service-to-service and doesn't have user context
+            
+            # Check if membership is accepted
+            if membership.invite_status != 'accepted':
+                logger.warning(
+                    f"User {user.email} attempted access with non-accepted membership: {membership.invite_status}",
+                    extra={'request_id': request_id, 'tenant_id': str(tenant.id)}
+                )
+                return self._error_response(
+                    'FORBIDDEN',
+                    f'Your invitation status is {membership.invite_status}. Please accept your invitation first.',
+                    status=403
+                )
+            
+            # Resolve user scopes from roles and permission overrides
+            scopes = RBACService.resolve_scopes(membership)
+            
+            # Attach to request
+            request.membership = membership
+            request.scopes = scopes
+            
+            # Set Sentry user context for error tracking
+            from apps.core.sentry_utils import set_user_context
+            set_user_context(user, membership)
+            
+            # Update last_seen_at timestamp (async to avoid blocking)
+            try:
+                membership.last_seen_at = timezone.now()
+                membership.save(update_fields=['last_seen_at'])
+            except Exception as e:
+                # Log but don't fail request if timestamp update fails
+                logger.warning(
+                    f"Failed to update last_seen_at for membership {membership.id}: {e}",
+                    extra={'request_id': request_id}
+                )
+            
+            logger.debug(
+                f"RBAC context set: {user.email} @ {tenant.slug} with {len(scopes)} scopes",
+                extra={'request_id': request_id, 'tenant_id': str(tenant.id)}
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Error resolving RBAC context: {e}",
+                extra={'request_id': request_id, 'tenant_id': str(tenant.id)},
+                exc_info=True
+            )
+            # Set empty membership and scopes on error
             request.membership = None
             request.scopes = set()
         
@@ -329,30 +308,6 @@ class TenantContextMiddleware(MiddlewareMixin):
                 exc_info=True
             )
             return None
-    
-    def _validate_api_key(self, tenant, api_key):
-        """
-        Validate API key against tenant's stored keys.
-        
-        API keys are stored as hashed values in tenant.api_keys list.
-        Each entry is a dict with: {key_hash, name, created_at}
-        """
-        if not tenant.api_keys:
-            return False
-        
-        # Hash the provided API key
-        api_key_hash = self._hash_api_key(api_key)
-        
-        # Check if hash matches any stored key
-        for key_entry in tenant.api_keys:
-            if key_entry.get('key_hash') == api_key_hash:
-                return True
-        
-        return False
-    
-    def _hash_api_key(self, api_key):
-        """Hash API key using SHA-256."""
-        return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
     
     def _error_response(self, code, message, status=400, details=None):
         """Generate standardized error response."""

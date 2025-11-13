@@ -40,7 +40,7 @@ class OrderItemSerializer(serializers.Serializer):
     title = serializers.CharField()
     quantity = serializers.IntegerField(min_value=1)
     price = serializers.DecimalField(max_digits=10, decimal_places=2)
-    currency = serializers.CharField(max_length=3)
+    currency = serializers.CharField(max_length=3, required=False, allow_null=True)
 
 
 class OrderListSerializer(serializers.ModelSerializer):

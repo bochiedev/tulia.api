@@ -211,13 +211,30 @@ def twilio_webhook(request):
         signature = request.META.get('HTTP_X_TWILIO_SIGNATURE', '')
         full_url = request.build_absolute_uri()
         
+        # Get Twilio credentials from TenantSettings (preferred) or Tenant model (fallback)
+        try:
+            settings = tenant.settings
+            if settings.has_twilio_configured():
+                twilio_sid = settings.twilio_sid
+                twilio_token = settings.twilio_token
+            else:
+                # Fallback to Tenant model
+                twilio_sid = tenant.twilio_sid
+                twilio_token = tenant.twilio_token
+        except AttributeError:
+            # Fallback to Tenant model
+            twilio_sid = tenant.twilio_sid
+            twilio_token = tenant.twilio_token
+        
         twilio_service = TwilioService(
-            account_sid=tenant.twilio_sid,
-            auth_token=tenant.twilio_token,
+            account_sid=twilio_sid,
+            auth_token=twilio_token,
             from_number=tenant.whatsapp_number
         )
         
-        if not twilio_service.verify_signature(full_url, payload, signature, tenant.webhook_secret):
+        # Verify signature using auth_token (not webhook_secret)
+        # Pass None to use the auth_token from the TwilioService instance
+        if not twilio_service.verify_signature(full_url, payload, signature):
             webhook_log.mark_unauthorized('Twilio signature verification failed')
             logger.warning(
                 f"Twilio signature verification failed",

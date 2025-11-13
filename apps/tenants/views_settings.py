@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.db import transaction
+from django.views.decorators.csrf import csrf_exempt
 from django_ratelimit.decorators import ratelimit
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
@@ -160,15 +161,15 @@ Manage WooCommerce integration credentials with validation.
         )
     ]
 )
-@api_view(['GET', 'PUT', 'DELETE'])
+@api_view(['GET', 'POST', 'DELETE'])
 @permission_classes([HasTenantScopes])
-@ratelimit(key='user_or_ip', rate='60/m', method=['PUT', 'DELETE'])
+@ratelimit(key='user_or_ip', rate='60/m', method=['POST', 'DELETE'])
 def woocommerce_credentials_view(request):
     """
     Manage WooCommerce integration credentials.
     
     GET: Return masked credentials and configuration status
-    PUT: Update credentials with validation
+    POST: Create/update credentials with validation
     DELETE: Remove credentials
     
     Required scope: integrations:manage
@@ -202,7 +203,7 @@ def woocommerce_credentials_view(request):
             'integration_status': settings.integrations_status.get('woocommerce', {})
         })
     
-    elif request.method == 'PUT':
+    elif request.method == 'POST':
         from apps.tenants.services.settings_service import SettingsService, CredentialValidationError
         
         serializer = WooCommerceCredentialsSerializer(data=request.data)
@@ -307,15 +308,15 @@ Manage Shopify integration credentials with validation.
         )
     ]
 )
-@api_view(['GET', 'PUT', 'DELETE'])
+@api_view(['GET', 'POST', 'DELETE'])
 @permission_classes([HasTenantScopes])
-@ratelimit(key='user_or_ip', rate='60/m', method=['PUT', 'DELETE'])
+@ratelimit(key='user_or_ip', rate='60/m', method=['POST', 'DELETE'])
 def shopify_credentials_view(request):
     """
     Manage Shopify integration credentials.
     
     GET: Return masked credentials and configuration status
-    PUT: Update credentials with validation
+    POST: Create/update credentials with validation
     DELETE: Remove credentials
     
     Required scope: integrations:manage
@@ -348,7 +349,7 @@ def shopify_credentials_view(request):
             'integration_status': settings.integrations_status.get('shopify', {})
         })
     
-    elif request.method == 'PUT':
+    elif request.method == 'POST':
         from apps.tenants.services.settings_service import SettingsService, CredentialValidationError
         
         serializer = ShopifyCredentialsSerializer(data=request.data)
@@ -452,15 +453,15 @@ Manage Twilio integration credentials with validation.
         )
     ]
 )
-@api_view(['GET', 'PUT', 'DELETE'])
+@api_view(['GET', 'POST', 'DELETE'])
 @permission_classes([HasTenantScopes])
-@ratelimit(key='user_or_ip', rate='60/m', method=['PUT', 'DELETE'])
+@ratelimit(key='user_or_ip', rate='60/m', method=['POST', 'DELETE'])
 def twilio_credentials_view(request):
     """
     Manage Twilio integration credentials.
     
     GET: Return masked credentials and configuration status
-    PUT: Update credentials with validation
+    POST: Create/update credentials with validation
     DELETE: Remove credentials
     
     Required scope: integrations:manage
@@ -493,7 +494,7 @@ def twilio_credentials_view(request):
             'integration_status': settings.integrations_status.get('twilio', {})
         })
     
-    elif request.method == 'PUT':
+    elif request.method == 'POST':
         from apps.tenants.services.settings_service import SettingsService, CredentialValidationError
         
         serializer = TwilioCredentialsSerializer(data=request.data)

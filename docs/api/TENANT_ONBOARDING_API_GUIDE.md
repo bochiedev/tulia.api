@@ -435,7 +435,7 @@ All settings endpoints require tenant context headers.
 
 Configure Twilio credentials for WhatsApp messaging.
 
-**Endpoint:** `PUT /v1/settings/integrations/twilio`
+**Endpoint:** `POST /v1/settings/integrations/twilio`
 
 **Headers:**
 ```
@@ -492,7 +492,7 @@ curl -X PUT http://localhost:8000/v1/settings/integrations/twilio \
 
 Configure WooCommerce store credentials.
 
-**Endpoint:** `PUT /v1/settings/integrations/woocommerce`
+**Endpoint:** `POST /v1/settings/integrations/woocommerce`
 
 **Headers:**
 ```
@@ -541,7 +541,7 @@ curl -X PUT http://localhost:8000/v1/settings/integrations/woocommerce \
 
 Configure Shopify store credentials.
 
-**Endpoint:** `PUT /v1/settings/integrations/shopify`
+**Endpoint:** `POST /v1/settings/integrations/shopify`
 
 **Headers:**
 ```

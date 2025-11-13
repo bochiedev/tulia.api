@@ -32,6 +32,11 @@ DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
+# Proxy/ngrok support for correct URL scheme detection
+# Required for Twilio webhook signature verification
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -165,6 +170,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
     ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [],  # Authentication handled by TenantContextMiddleware
+    'DEFAULT_PERMISSION_CLASSES': [],
     'EXCEPTION_HANDLER': 'apps.core.exceptions.custom_exception_handler',
 }
 
@@ -176,9 +183,11 @@ Multi-tenant WhatsApp commerce and services platform with comprehensive RBAC.
 
 ## Authentication
 
-All API requests require authentication via headers:
-- `X-TENANT-ID`: UUID of the tenant context
-- `X-TENANT-API-KEY`: API key for the tenant
+All API requests require JWT authentication:
+- `Authorization: Bearer <token>` - JWT token obtained from `/v1/auth/login` or `/v1/auth/register`
+- `X-TENANT-ID`: UUID of the tenant context (required for tenant-scoped operations)
+
+**Note:** Webhooks are public endpoints verified by signature, not by JWT tokens.
 
 ## Authorization (RBAC)
 
@@ -239,12 +248,27 @@ The `X-TENANT-ID` header determines which tenant context is active for the reque
 
 ## Example Workflows
 
+### Login and Get JWT Token
+```bash
+# Login to get JWT token
+curl -X POST https://api.tulia.ai/v1/auth/login \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "email": "user@example.com",
+    "password": "your-password"
+  }'
+# Returns: {"token": "eyJ...", "user": {...}}
+
+# Use the token in subsequent requests
+export TOKEN="eyJ..."
+```
+
 ### Invite a User and Assign Roles
 ```bash
 # 1. Invite user (requires users:manage scope)
 curl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite \\
+  -H "Authorization: Bearer $TOKEN" \\
   -H "X-TENANT-ID: {tenant_id}" \\
-  -H "X-TENANT-API-KEY: {api_key}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "email": "newuser@example.com",
@@ -255,8 +279,8 @@ curl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite \\
 
 # 3. Assign additional roles
 curl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/{user_id}/roles \\
+  -H "Authorization: Bearer $TOKEN" \\
   -H "X-TENANT-ID: {tenant_id}" \\
-  -H "X-TENANT-API-KEY: {api_key}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "role_ids": ["role-uuid-3"]
@@ -267,8 +291,8 @@ curl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/{user_id}/roles \\
 ```bash
 # Grant a specific permission to a user (overrides role permissions)
 curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \\
+  -H "Authorization: Bearer $TOKEN" \\
   -H "X-TENANT-ID: {tenant_id}" \\
-  -H "X-TENANT-API-KEY: {api_key}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "permission_code": "finance:reconcile",
@@ -278,8 +302,8 @@ curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \\
 
 # Deny a permission (even if granted by role)
 curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \\
+  -H "Authorization: Bearer $TOKEN" \\
   -H "X-TENANT-ID: {tenant_id}" \\
-  -H "X-TENANT-API-KEY: {api_key}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "permission_code": "catalog:edit",
@@ -292,8 +316,8 @@ curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \\
 ```bash
 # 1. User A initiates withdrawal (requires finance:withdraw:initiate)
 curl -X POST https://api.tulia.ai/v1/wallet/withdraw \\
+  -H "Authorization: Bearer $TOKEN_USER_A" \\
   -H "X-TENANT-ID: {tenant_id}" \\
-  -H "X-TENANT-API-KEY: {api_key}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "amount": 1000.00,
@@ -304,8 +328,8 @@ curl -X POST https://api.tulia.ai/v1/wallet/withdraw \\
 
 # 2. User B approves withdrawal (requires finance:withdraw:approve, must be different user)
 curl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve \\
+  -H "Authorization: Bearer $TOKEN_USER_B" \\
   -H "X-TENANT-ID: {tenant_id}" \\
-  -H "X-TENANT-API-KEY: {api_key}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "notes": "Approved for monthly payout"
@@ -328,25 +352,16 @@ curl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve
     },
     'SECURITY': [
         {
-            'TenantAuth': []
-        },
-        {
             'JWTAuth': []
         }
     ],
     'APPEND_COMPONENTS': {
         'securitySchemes': {
-            'TenantAuth': {
-                'type': 'apiKey',
-                'in': 'header',
-                'name': 'X-TENANT-ID',
-                'description': 'Tenant UUID for multi-tenant context. Must be accompanied by X-TENANT-API-KEY header.',
-            },
             'JWTAuth': {
                 'type': 'http',
                 'scheme': 'bearer',
                 'bearerFormat': 'JWT',
-                'description': 'JWT token obtained from /v1/auth/login or /v1/auth/register. Include as: Authorization: Bearer <token>',
+                'description': 'JWT token obtained from /v1/auth/login or /v1/auth/register. Include as: Authorization: Bearer <token>. For tenant-scoped operations, also include X-TENANT-ID header.',
             }
         }
     },

@@ -80,7 +80,7 @@ Return JWT token + tenant info
 
 #### Settings Update Flow
 ```
-User → PUT /v1/settings/integrations/twilio
+User → POST /v1/settings/integrations/twilio
   ↓
 Middleware: Validate JWT
   ↓
@@ -236,13 +236,13 @@ POST   /v1/settings/onboarding/complete     # Mark step as complete
 # Integration Credentials
 GET    /v1/settings/integrations            # List all integrations
 GET    /v1/settings/integrations/twilio    # Get Twilio settings
-PUT    /v1/settings/integrations/twilio    # Update Twilio credentials
+POST   /v1/settings/integrations/twilio    # Create/update Twilio credentials
 DELETE /v1/settings/integrations/twilio    # Remove Twilio credentials
 GET    /v1/settings/integrations/woocommerce
-PUT    /v1/settings/integrations/woocommerce
+POST   /v1/settings/integrations/woocommerce  # Create/update WooCommerce credentials
 DELETE /v1/settings/integrations/woocommerce
 GET    /v1/settings/integrations/shopify
-PUT    /v1/settings/integrations/shopify
+POST   /v1/settings/integrations/shopify   # Create/update Shopify credentials
 DELETE /v1/settings/integrations/shopify
 
 # Payment Methods
@@ -634,7 +634,7 @@ class OnboardingIncompleteError(TuliaException):
 
 **Settings Update Flow:**
 1. Login and get JWT token
-2. PUT /v1/settings/integrations/twilio with credentials
+2. POST /v1/settings/integrations/twilio with credentials
 3. Verify credentials validated with Twilio API
 4. Verify credentials encrypted in database
 5. Verify onboarding status updated

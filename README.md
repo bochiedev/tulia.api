@@ -128,6 +128,45 @@ Once the server is running, access the API documentation at:
 - **OpenAPI Schema**: http://localhost:8000/schema/
 - **Swagger UI**: http://localhost:8000/schema/swagger/
 
+### Authentication
+
+All API requests require **JWT authentication**:
+
+```bash
+# 1. Login to get JWT token
+curl -X POST http://localhost:8000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"your-password"}'
+
+# Response: {"token": "eyJ...", "user": {...}}
+
+# 2. Use token in subsequent requests
+curl -X GET http://localhost:8000/v1/products \
+  -H "Authorization: Bearer eyJ..." \
+  -H "X-TENANT-ID: tenant-uuid"
+```
+
+**Key Points:**
+- JWT tokens are required for all user operations
+- Tokens expire after 24 hours
+- Webhooks are public (verified by signature)
+- See [Authentication Guide](docs/AUTHENTICATION.md) for details
+
+### Postman Collection
+
+For API testing and development, we provide a comprehensive Postman collection:
+
+```bash
+# Generate Postman collection and environment
+python scripts/generate_postman_collection.py
+```
+
+This creates:
+- `postman_collection.json` - Complete API request collection
+- `postman_environment_template.json` - Environment variables template
+
+Import both files into Postman and follow the [Postman Guide](docs/POSTMAN_GUIDE.md) for setup instructions.
+
 ## Django Admin Panel
 
 Access the Django admin panel to manage your data:

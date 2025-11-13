@@ -17,11 +17,11 @@ Rate limiting has been implemented on all authentication and settings endpoints 
 All POST/PUT/DELETE operations on settings endpoints - 60 requests/minute:
 
 - PATCH /v1/settings
-- PUT /v1/settings/integrations/woocommerce
+- POST /v1/settings/integrations/woocommerce
 - DELETE /v1/settings/integrations/woocommerce
-- PUT /v1/settings/integrations/shopify
+- POST /v1/settings/integrations/shopify
 - DELETE /v1/settings/integrations/shopify
-- PUT /v1/settings/integrations/twilio
+- POST /v1/settings/integrations/twilio
 - DELETE /v1/settings/integrations/twilio
 - POST /v1/settings/integrations/openai
 - POST /v1/settings/payment-methods

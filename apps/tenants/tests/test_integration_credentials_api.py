@@ -4,7 +4,7 @@ Tests for integration credentials API endpoints.
 Validates:
 - GET /v1/settings/integrations - list all integrations
 - GET /v1/settings/integrations/twilio - get Twilio credentials
-- PUT /v1/settings/integrations/twilio - update Twilio credentials
+- POST /v1/settings/integrations/twilio - create/update Twilio credentials
 - DELETE /v1/settings/integrations/twilio - remove Twilio credentials
 - Same for WooCommerce and Shopify
 - RBAC enforcement (integrations:manage scope required)

@@ -11,6 +11,7 @@ Implements endpoints for:
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
 from django.core.mail import send_mail
 from django_ratelimit.decorators import ratelimit
@@ -785,6 +786,7 @@ class UserProfileView(APIView):
     
     Requires JWT authentication.
     """
+    # No permission_classes - authentication handled by middleware
     
     def get(self, request):
         """Get user profile."""
@@ -794,7 +796,8 @@ class UserProfileView(APIView):
         if not user or not hasattr(user, 'id') or not user.is_authenticated:
             return Response(
                 {
-                    'error': 'Authentication required'
+                    'error': 'Authentication required',
+                    'detail': 'This endpoint requires JWT authentication. Use Authorization: Bearer <token> header.'
                 },
                 status=status.HTTP_401_UNAUTHORIZED
             )

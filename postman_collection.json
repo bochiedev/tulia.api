@@ -1,1882 +1,1497 @@
 {
-	"info": {
-		"_postman_id": "tulia-ai-api-collection",
-		"name": "Tulia AI WhatsApp Commerce Platform API",
-		"description": "Complete API collection for Tulia AI - A multi-tenant WhatsApp commerce and services platform.\n\n## Authentication\n\nAll API endpoints (except webhooks and health check) require:\n- `X-TENANT-ID`: Your tenant UUID\n- `X-TENANT-API-KEY`: Your API key\n\n## Base URL\n\nDevelopment: `http://localhost:8000`\nProduction: `https://api.tulia.ai`\n\n## Rate Limiting\n\nAPI requests are rate-limited per tenant based on subscription tier:\n- Starter: 1000 requests/hour\n- Growth: 10000 requests/hour\n- Enterprise: Unlimited\n\nWhen rate limited, you'll receive a 429 status with a `Retry-After` header.\n\n## Pagination\n\nList endpoints support pagination:\n- `page`: Page number (default: 1)\n- `page_size`: Items per page (default: 50, max: 100)\n\nResponse includes:\n- `count`: Total items\n- `next`: URL to next page\n- `previous`: URL to previous page\n- `results`: Array of items",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "tulia-ai"
-	},
-	"auth": {
-		"type": "apikey",
-		"apikey": [
-			{
-				"key": "value",
-				"value": "{{api_key}}",
-				"type": "string"
-			},
-			{
-				"key": "key",
-				"value": "X-TENANT-API-KEY",
-				"type": "string"
-			}
-		]
-	},
-	"event": [
-		{
-			"listen": "prerequest",
-			"script": {
-				"type": "text/javascript",
-				"exec": [
-					"// Add tenant ID header to all requests",
-					"if (pm.variables.get('tenant_id')) {",
-					"    pm.request.headers.add({",
-					"        key: 'X-TENANT-ID',",
-					"        value: pm.variables.get('tenant_id')",
-					"    });",
-					"}"
-				]
-			}
-		},
-		{
-			"listen": "test",
-			"script": {
-				"type": "text/javascript",
-				"exec": [
-					"// Common test assertions",
-					"pm.test('Status code is not 500', function () {",
-					"    pm.expect(pm.response.code).to.not.equal(500);",
-					"});",
-					"",
-					"// Check for rate limiting",
-					"if (pm.response.code === 429) {",
-					"    pm.test('Rate limit response includes Retry-After header', function () {",
-					"        pm.response.to.have.header('Retry-After');",
-					"    });",
-					"}"
-				]
-			}
-		}
-	],
-	"variable": [
-		{
-			"key": "base_url",
-			"value": "http://localhost:8000",
-			"type": "string"
-		},
-		{
-			"key": "tenant_id",
-			"value": "",
-			"type": "string"
-		},
-		{
-			"key": "api_key",
-			"value": "",
-			"type": "string"
-		}
-	],
-	"item": [
-		{
-			"name": "Health & Status",
-			"item": [
-				{
-					"name": "Health Check",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 200', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response has status field', function () {",
-									"    const jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('status');",
-									"});",
-									"",
-									"pm.test('Database is healthy', function () {",
-									"    const jsonData = pm.response.json();",
-									"    pm.expect(jsonData.database).to.equal('healthy');",
-									"});",
-									"",
-									"pm.test('Redis is healthy', function () {",
-									"    const jsonData = pm.response.json();",
-									"    pm.expect(jsonData.redis).to.equal('healthy');",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"auth": {
-							"type": "noauth"
-						},
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/health/",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "health", ""]
-						},
-						"description": "Check system health status. No authentication required.\n\nReturns:\n- 200: All systems operational\n- 503: One or more dependencies unavailable"
-					},
-					"response": []
-				}
-			],
-			"description": "System health and status endpoints"
-		},
-		{
-			"name": "Catalog - Products",
-			"item": [
-				{
-					"name": "List Products",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 200 or 403', function () {",
-									"    pm.expect(pm.response.code).to.be.oneOf([200, 403]);",
-									"});",
-									"",
-									"if (pm.response.code === 200) {",
-									"    pm.test('Response has pagination', function () {",
-									"        const jsonData = pm.response.json();",
-									"        pm.expect(jsonData).to.have.property('count');",
-									"        pm.expect(jsonData).to.have.property('results');",
-									"    });",
-									"    ",
-									"    pm.test('Results is an array', function () {",
-									"        const jsonData = pm.response.json();",
-									"        pm.expect(jsonData.results).to.be.an('array');",
-									"    });",
-									"}",
-									"",
-									"if (pm.response.code === 403) {",
-									"    pm.test('Missing catalog:view scope', function () {",
-									"        const jsonData = pm.response.json();",
-									"        pm.expect(jsonData.detail).to.include('catalog:view');",
-									"    });",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/products/?page=1&page_size=50&search=&is_active=true",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "products", ""],
-							"query": [
-								{
-									"key": "page",
-									"value": "1",
-									"description": "Page number"
-								},
-								{
-									"key": "page_size",
-									"value": "50",
-									"description": "Items per page (max 100)"
-								},
-								{
-									"key": "search",
-									"value": "",
-									"description": "Search by title or description"
-								},
-								{
-									"key": "is_active",
-									"value": "true",
-									"description": "Filter by active status"
-								}
-							]
-						},
-						"description": "List all products for the authenticated tenant.\n\n**Required scope:** `catalog:view`\n\n**Query Parameters:**\n- `page`: Page number (default: 1)\n- `page_size`: Items per page (default: 50, max: 100)\n- `search`: Search by title or description\n- `is_active`: Filter by active status (true/false)\n- `external_source`: Filter by source (woocommerce, shopify, manual)\n\n**Returns:**\n- 200: Paginated list of products\n- 403: Missing catalog:view scope\n- 429: Rate limit exceeded"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Product Details",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 200, 403, or 404', function () {",
-									"    pm.expect(pm.response.code).to.be.oneOf([200, 403, 404]);",
-									"});",
-									"",
-									"if (pm.response.code === 200) {",
-									"    pm.test('Response has product fields', function () {",
-									"        const jsonData = pm.response.json();",
-									"        pm.expect(jsonData).to.have.property('id');",
-									"        pm.expect(jsonData).to.have.property('title');",
-									"        pm.expect(jsonData).to.have.property('price');",
-									"        pm.expect(jsonData).to.have.property('variants');",
-									"    });",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/products/:product_id",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "products", ":product_id"],
-							"variable": [
-								{
-									"key": "product_id",
-									"value": "",
-									"description": "Product UUID"
-								}
-							]
-						},
-						"description": "Get detailed information about a specific product including variants.\n\n**Required scope:** `catalog:view`\n\n**Returns:**\n- 200: Product details with variants\n- 403: Missing catalog:view scope\n- 404: Product not found"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Product",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 201, 400, or 403', function () {",
-									"    pm.expect(pm.response.code).to.be.oneOf([201, 400, 403]);",
-									"});",
-									"",
-									"if (pm.response.code === 201) {",
-									"    pm.test('Response has product ID', function () {",
-									"        const jsonData = pm.response.json();",
-									"        pm.expect(jsonData).to.have.property('id');",
-									"        pm.variables.set('created_product_id', jsonData.id);",
-									"    });",
-									"}",
-									"",
-									"if (pm.response.code === 403) {",
-									"    const jsonData = pm.response.json();",
-									"    if (jsonData.detail && jsonData.detail.includes('limit')) {",
-									"        pm.test('Feature limit reached', function () {",
-									"            pm.expect(jsonData.detail).to.include('max_products');",
-									"        });",
-									"    } else {",
-									"        pm.test('Missing catalog:edit scope', function () {",
-									"            pm.expect(jsonData.detail).to.include('catalog:edit');",
-									"        });",
-									"    }",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"title\": \"Premium Wireless Headphones\",\n  \"description\": \"High-quality wireless headphones with noise cancellation\",\n  \"price\": \"199.99\",\n  \"currency\": \"USD\",\n  \"sku\": \"WH-1000XM4\",\n  \"stock\": 50,\n  \"is_active\": true,\n  \"images\": [\n    \"https://example.com/images/headphones-1.jpg\",\n    \"https://example.com/images/headphones-2.jpg\"\n  ],\n  \"external_source\": \"manual\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/products/",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "products", ""]
-						},
-						"description": "Create a new product manually.\n\n**Required scope:** `catalog:edit`\n\n**Feature Limit:** Enforces max_products based on subscription tier\n\n**Returns:**\n- 201: Product created successfully\n- 400: Validation error\n- 403: Missing catalog:edit scope or feature limit reached\n- 429: Rate limit exceeded"
-					},
-					"response": []
-				},
-				{
-					"name": "Update Product",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 200, 400, 403, or 404', function () {",
-									"    pm.expect(pm.response.code).to.be.oneOf([200, 400, 403, 404]);",
-									"});",
-									"",
-									"if (pm.response.code === 200) {",
-									"    pm.test('Product updated successfully', function () {",
-									"        const jsonData = pm.response.json();",
-									"        pm.expect(jsonData).to.have.property('id');",
-									"    });",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "PUT",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"title\": \"Premium Wireless Headphones - Updated\",\n  \"price\": \"179.99\",\n  \"stock\": 45,\n  \"is_active\": true\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/products/:product_id",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "products", ":product_id"],
-							"variable": [
-								{
-									"key": "product_id",
-									"value": "{{created_product_id}}",
-									"description": "Product UUID"
-								}
-							]
-						},
-						"description": "Update an existing product.\n\n**Required scope:** `catalog:edit`\n\n**Returns:**\n- 200: Product updated successfully\n- 400: Validation error\n- 403: Missing catalog:edit scope\n- 404: Product not found"
-					},
-					"response": []
-				},
-				{
-					"name": "Delete Product",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 204, 403, or 404', function () {",
-									"    pm.expect(pm.response.code).to.be.oneOf([204, 403, 404]);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "DELETE",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/products/:product_id",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "products", ":product_id"],
-							"variable": [
-								{
-									"key": "product_id",
-									"value": "{{created_product_id}}",
-									"description": "Product UUID"
-								}
-							]
-						},
-						"description": "Delete a product (soft delete).\n\n**Required scope:** `catalog:edit`\n\n**Returns:**\n- 204: Product deleted successfully\n- 403: Missing catalog:edit scope\n- 404: Product not found"
-					},
-					"response": []
-				},
-				{
-					"name": "Sync WooCommerce Products",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 200, 400, or 403', function () {",
-									"    pm.expect(pm.response.code).to.be.oneOf([200, 400, 403]);",
-									"});",
-									"",
-									"if (pm.response.code === 200) {",
-									"    pm.test('Sync completed', function () {",
-									"        const jsonData = pm.response.json();",
-									"        pm.expect(jsonData).to.have.property('status');",
-									"        pm.expect(jsonData).to.have.property('products_synced');",
-									"    });",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"store_url\": \"https://example.com\",\n  \"consumer_key\": \"ck_xxxxxxxxxxxxx\",\n  \"consumer_secret\": \"cs_xxxxxxxxxxxxx\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/webhooks/catalog/sync/woocommerce",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "webhooks", "catalog", "sync", "woocommerce"]
-						},
-						"description": "Trigger a WooCommerce product sync.\n\n**Required scope:** `integrations:manage`\n\n**Returns:**\n- 200: Sync initiated successfully\n- 400: Invalid credentials\n- 403: Missing integrations:manage scope"
-					},
-					"response": []
-				},
-				{
-					"name": "Sync Shopify Products",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 200, 400, or 403', function () {",
-									"    pm.expect(pm.response.code).to.be.oneOf([200, 400, 403]);",
-									"});",
-									"",
-									"if (pm.response.code === 200) {",
-									"    pm.test('Sync completed', function () {",
-									"        const jsonData = pm.response.json();",
-									"        pm.expect(jsonData).to.have.property('status');",
-									"        pm.expect(jsonData).to.have.property('products_synced');",
-									"    });",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"shop_domain\": \"example.myshopify.com\",\n  \"access_token\": \"shpat_xxxxxxxxxxxxx\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/webhooks/catalog/sync/shopify",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "webhooks", "catalog", "sync", "shopify"]
-						},
-						"description": "Trigger a Shopify product sync.\n\n**Required scope:** `integrations:manage`\n\n**Returns:**\n- 200: Sync initiated successfully\n- 400: Invalid credentials\n- 403: Missing integrations:manage scope"
-					},
-					"response": []
-				}
-			],
-			"description": "Product catalog management endpoints"
-		},
-		{
-			"name": "Services & Appointments",
-			"item": [
-				{
-					"name": "List Services",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 200 or 403', function () {",
-									"    pm.expect(pm.response.code).to.be.oneOf([200, 403]);",
-									"});",
-									"",
-									"if (pm.response.code === 200) {",
-									"    pm.test('Response has pagination', function () {",
-									"        const jsonData = pm.response.json();",
-									"        pm.expect(jsonData).to.have.property('count');",
-									"        pm.expect(jsonData).to.have.property('results');",
-									"    });",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/services/?page=1&page_size=50",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "services", ""],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "page_size",
-									"value": "50"
-								}
-							]
-						},
-						"description": "List all bookable services.\n\n**Required scope:** `services:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Service",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"if (pm.response.code === 201) {",
-									"    const jsonData = pm.response.json();",
-									"    pm.variables.set('created_service_id', jsonData.id);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"title\": \"Haircut & Styling\",\n  \"description\": \"Professional haircut with styling consultation\",\n  \"base_price\": \"45.00\",\n  \"currency\": \"USD\",\n  \"is_active\": true,\n  \"requires_slot\": true,\n  \"images\": [\"https://example.com/haircut.jpg\"]\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/services/",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "services", ""]
-						},
-						"description": "Create a new bookable service.\n\n**Required scope:** `services:edit`"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Service Availability",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/services/:service_id/availability?from_date=2025-11-15&to_date=2025-11-22",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "services", ":service_id", "availability"],
-							"query": [
-								{
-									"key": "from_date",
-									"value": "2025-11-15"
-								},
-								{
-									"key": "to_date",
-									"value": "2025-11-22"
-								}
-							],
-							"variable": [
-								{
-									"key": "service_id",
-									"value": "{{created_service_id}}"
-								}
-							]
-						},
-						"description": "Get available time slots for a service.\n\n**Required scope:** `services:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "List Appointments",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/services/appointments?status=confirmed&from_date=2025-11-01",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "services", "appointments"],
-							"query": [
-								{
-									"key": "status",
-									"value": "confirmed"
-								},
-								{
-									"key": "from_date",
-									"value": "2025-11-01"
-								}
-							]
-						},
-						"description": "List appointments with filtering.\n\n**Required scope:** `appointments:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Appointment",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"if (pm.response.code === 201) {",
-									"    const jsonData = pm.response.json();",
-									"    pm.variables.set('created_appointment_id', jsonData.id);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"service\": \"{{created_service_id}}\",\n  \"customer\": \"customer-uuid-here\",\n  \"start_dt\": \"2025-11-15T10:00:00Z\",\n  \"end_dt\": \"2025-11-15T11:00:00Z\",\n  \"notes\": \"First time customer\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/services/appointments",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "services", "appointments"]
-						},
-						"description": "Book a new appointment with capacity validation.\n\n**Required scope:** `appointments:edit`"
-					},
-					"response": []
-				},
-				{
-					"name": "Cancel Appointment",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/services/appointments/:appointment_id/cancel",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "services", "appointments", ":appointment_id", "cancel"],
-							"variable": [
-								{
-									"key": "appointment_id",
-									"value": "{{created_appointment_id}}"
-								}
-							]
-						},
-						"description": "Cancel an appointment.\n\n**Required scope:** `appointments:edit`"
-					},
-					"response": []
-				}
-			],
-			"description": "Service and appointment management"
-		},
-		{
-			"name": "Orders",
-			"item": [
-				{
-					"name": "List Orders",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/orders/?status=paid&page=1",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "orders", ""],
-							"query": [
-								{
-									"key": "status",
-									"value": "paid"
-								},
-								{
-									"key": "page",
-									"value": "1"
-								}
-							]
-						},
-						"description": "List orders with filtering.\n\n**Required scope:** `orders:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Order Details",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/orders/:order_id",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "orders", ":order_id"],
-							"variable": [
-								{
-									"key": "order_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Get detailed order information.\n\n**Required scope:** `orders:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Order",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"customer\": \"customer-uuid\",\n  \"items\": [\n    {\n      \"product\": \"product-uuid\",\n      \"variant\": \"variant-uuid\",\n      \"quantity\": 2,\n      \"price\": \"199.99\"\n    }\n  ],\n  \"currency\": \"USD\",\n  \"subtotal\": \"399.98\",\n  \"shipping\": \"10.00\",\n  \"total\": \"409.98\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/orders/",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "orders", ""]
-						},
-						"description": "Create a new order.\n\n**Required scope:** `orders:edit`"
-					},
-					"response": []
-				},
-				{
-					"name": "Update Order Status",
-					"request": {
-						"method": "PUT",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"status\": \"shipped\",\n  \"tracking_number\": \"1Z999AA10123456784\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/orders/:order_id",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "orders", ":order_id"],
-							"variable": [
-								{
-									"key": "order_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Update order status (triggers automated messages).\n\n**Required scope:** `orders:edit`"
-					},
-					"response": []
-				}
-			],
-			"description": "Order management endpoints"
-		},
-		{
-			"name": "Messaging & Conversations",
-			"item": [
-				{
-					"name": "List Conversations",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/messages/conversations?status=open&page=1",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "messages", "conversations"],
-							"query": [
-								{
-									"key": "status",
-									"value": "open"
-								},
-								{
-									"key": "page",
-									"value": "1"
-								}
-							]
-						},
-						"description": "List conversations with filtering.\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Conversation Messages",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/messages/conversations/:conversation_id/messages",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "messages", "conversations", ":conversation_id", "messages"],
-							"variable": [
-								{
-									"key": "conversation_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Get message history for a conversation.\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Send Message",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"customer\": \"customer-uuid\",\n  \"text\": \"Thank you for your order! Your items will ship soon.\",\n  \"message_type\": \"manual_outbound\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/messages/send",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "messages", "send"]
-						},
-						"description": "Send an outbound message (respects consent).\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Handoff to Human",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/messages/conversations/:conversation_id/handoff",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "messages", "conversations", ":conversation_id", "handoff"],
-							"variable": [
-								{
-									"key": "conversation_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Mark conversation for human agent handoff.\n\n**Required scope:** `handoff:perform`"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Message Template",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"name\": \"Order Confirmation\",\n  \"content\": \"Hi {{customer_name}}, your order {{order_id}} has been confirmed! Total: {{total}}\",\n  \"category\": \"transactional\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/messages/templates",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "messages", "templates"]
-						},
-						"description": "Create a reusable message template.\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Schedule Message",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"customer\": \"customer-uuid\",\n  \"text\": \"Don't miss our weekend sale!\",\n  \"scheduled_at\": \"2025-11-16T09:00:00Z\",\n  \"message_type\": \"scheduled_promotional\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/messages/schedule",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "messages", "schedule"]
-						},
-						"description": "Schedule a message for future delivery.\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				}
-			],
-			"description": "Messaging and conversation management"
-		},
-		{
-			"name": "Campaigns",
-			"item": [
-				{
-					"name": "List Campaigns",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/messages/campaigns?page=1",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "messages", "campaigns"],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								}
-							]
-						},
-						"description": "List message campaigns.\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Campaign",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"if (pm.response.code === 201) {",
-									"    const jsonData = pm.response.json();",
-									"    pm.variables.set('created_campaign_id', jsonData.id);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"name\": \"Black Friday Sale 2025\",\n  \"content\": \"🎉 Black Friday Sale! Get 50% off all products. Shop now!\",\n  \"target_criteria\": {\n    \"tags\": [\"vip\", \"active\"],\n    \"purchased_in_last_days\": 90\n  },\n  \"scheduled_at\": \"2025-11-29T08:00:00Z\",\n  \"is_ab_test\": false\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/messages/campaigns",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "messages", "campaigns"]
-						},
-						"description": "Create a new message campaign.\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Execute Campaign",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/messages/campaigns/:campaign_id/execute",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "messages", "campaigns", ":campaign_id", "execute"],
-							"variable": [
-								{
-									"key": "campaign_id",
-									"value": "{{created_campaign_id}}"
-								}
-							]
-						},
-						"description": "Execute a campaign (sends to all matching customers).\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Campaign Report",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/messages/campaigns/:campaign_id/report",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "messages", "campaigns", ":campaign_id", "report"],
-							"variable": [
-								{
-									"key": "campaign_id",
-									"value": "{{created_campaign_id}}"
-								}
-							]
-						},
-						"description": "Get campaign performance metrics.\n\n**Required scope:** `analytics:view`"
-					},
-					"response": []
-				}
-			],
-			"description": "Campaign management and execution"
-		}
-		,
-		{
-			"name": "Customers & Preferences",
-			"item": [
-				{
-					"name": "List Customers",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/customers?page=1&search=",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "customers"],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "search",
-									"value": ""
-								}
-							]
-						},
-						"description": "List customers with consent indicators.\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Customer Details",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/customers/:customer_id",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "customers", ":customer_id"],
-							"variable": [
-								{
-									"key": "customer_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Get customer details.\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Customer Preferences",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/customers/:customer_id/preferences",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "customers", ":customer_id", "preferences"],
-							"variable": [
-								{
-									"key": "customer_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Get customer consent preferences.\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Update Customer Preferences",
-					"request": {
-						"method": "PUT",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"promotional_messages\": false,\n  \"reminder_messages\": true,\n  \"reason\": \"Customer requested opt-out via phone\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/customers/:customer_id/preferences",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "customers", ":customer_id", "preferences"],
-							"variable": [
-								{
-									"key": "customer_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Update customer consent preferences (requires reason).\n\n**Required scope:** `conversations:view`"
-					},
-					"response": []
-				}
-			],
-			"description": "Customer and consent management"
-		},
-		{
-			"name": "Wallet & Finance",
-			"item": [
-				{
-					"name": "Get Wallet Balance",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/wallet/balance",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "wallet", "balance"]
-						},
-						"description": "Get current wallet balance.\n\n**Required scope:** `finance:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "List Transactions",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/wallet/transactions?transaction_type=customer_payment&page=1",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "wallet", "transactions"],
-							"query": [
-								{
-									"key": "transaction_type",
-									"value": "customer_payment"
-								},
-								{
-									"key": "page",
-									"value": "1"
-								}
-							]
-						},
-						"description": "List wallet transactions with filtering.\n\n**Required scope:** `finance:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Initiate Withdrawal",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"if (pm.response.code === 201) {",
-									"    const jsonData = pm.response.json();",
-									"    pm.variables.set('withdrawal_id', jsonData.id);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"amount\": \"500.00\",\n  \"bank_account\": \"****1234\",\n  \"notes\": \"Monthly withdrawal\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/wallet/withdraw",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "wallet", "withdraw"]
-						},
-						"description": "Initiate a withdrawal request (four-eyes approval required).\n\n**Required scope:** `finance:withdraw:initiate`"
-					},
-					"response": []
-				},
-				{
-					"name": "Approve Withdrawal",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/wallet/withdrawals/:withdrawal_id/approve",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "wallet", "withdrawals", ":withdrawal_id", "approve"],
-							"variable": [
-								{
-									"key": "withdrawal_id",
-									"value": "{{withdrawal_id}}"
-								}
-							]
-						},
-						"description": "Approve a withdrawal (must be different user than initiator).\n\n**Required scope:** `finance:withdraw:approve`\n\n**Returns:**\n- 200: Withdrawal approved\n- 403: Missing scope\n- 409: Same user cannot approve their own withdrawal"
-					},
-					"response": []
-				},
-				{
-					"name": "List Pending Withdrawals",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/wallet/transactions?transaction_type=withdrawal&status=pending",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "wallet", "transactions"],
-							"query": [
-								{
-									"key": "transaction_type",
-									"value": "withdrawal"
-								},
-								{
-									"key": "status",
-									"value": "pending"
-								}
-							]
-						},
-						"description": "List pending withdrawals awaiting approval.\n\n**Required scope:** `finance:view`"
-					},
-					"response": []
-				}
-			],
-			"description": "Wallet and financial transaction management"
-		},
-		{
-			"name": "Analytics",
-			"item": [
-				{
-					"name": "Get Overview Analytics",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/analytics/overview?range=30d",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "analytics", "overview"],
-							"query": [
-								{
-									"key": "range",
-									"value": "30d",
-									"description": "7d, 30d, 90d"
-								}
-							]
-						},
-						"description": "Get high-level analytics overview.\n\n**Required scope:** `analytics:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Daily Metrics",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/analytics/daily?from_date=2025-11-01&to_date=2025-11-30",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "analytics", "daily"],
-							"query": [
-								{
-									"key": "from_date",
-									"value": "2025-11-01"
-								},
-								{
-									"key": "to_date",
-									"value": "2025-11-30"
-								}
-							]
-						},
-						"description": "Get daily analytics breakdown.\n\n**Required scope:** `analytics:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Messaging Analytics",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/analytics/messaging?range=30d",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "analytics", "messaging"],
-							"query": [
-								{
-									"key": "range",
-									"value": "30d"
-								}
-							]
-						},
-						"description": "Get messaging analytics by message type.\n\n**Required scope:** `analytics:view`"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Funnel Analytics",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/analytics/funnel?range=30d",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "analytics", "funnel"],
-							"query": [
-								{
-									"key": "range",
-									"value": "30d"
-								}
-							]
-						},
-						"description": "Get conversion funnel metrics.\n\n**Required scope:** `analytics:view`"
-					},
-					"response": []
-				}
-			],
-			"description": "Analytics and reporting endpoints"
-		},
-		{
-			"name": "RBAC - Roles & Permissions",
-			"item": [
-				{
-					"name": "Get My Memberships",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/memberships/me",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "memberships", "me"]
-						},
-						"description": "List all tenants the current user has access to.\n\n**No scope required** (authenticated users only)"
-					},
-					"response": []
-				},
-				{
-					"name": "Invite User to Tenant",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"email\": \"newuser@example.com\",\n  \"role\": \"Catalog Manager\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/memberships/:tenant_id/invite",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "memberships", ":tenant_id", "invite"],
-							"variable": [
-								{
-									"key": "tenant_id",
-									"value": "{{tenant_id}}"
-								}
-							]
-						},
-						"description": "Invite a user to join the tenant.\n\n**Required scope:** `users:manage`"
-					},
-					"response": []
-				},
-				{
-					"name": "List Roles",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/roles",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "roles"]
-						},
-						"description": "List all roles for the tenant.\n\n**Required scope:** `users:manage`"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Custom Role",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"name\": \"Marketing Manager\",\n  \"description\": \"Manages campaigns and customer communications\",\n  \"permissions\": [\n    \"conversations:view\",\n    \"analytics:view\",\n    \"catalog:view\"\n  ]\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/roles",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "roles"]
-						},
-						"description": "Create a custom role with specific permissions.\n\n**Required scope:** `users:manage`"
-					},
-					"response": []
-				},
-				{
-					"name": "Assign Role to User",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"role_id\": \"role-uuid\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/memberships/:tenant_id/:user_id/roles",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "memberships", ":tenant_id", ":user_id", "roles"],
-							"variable": [
-								{
-									"key": "tenant_id",
-									"value": "{{tenant_id}}"
-								},
-								{
-									"key": "user_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Assign a role to a user.\n\n**Required scope:** `users:manage`"
-					},
-					"response": []
-				},
-				{
-					"name": "List All Permissions",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/permissions",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "permissions"]
-						},
-						"description": "List all available permission codes.\n\n**Required scope:** `users:manage`"
-					},
-					"response": []
-				},
-				{
-					"name": "Grant User Permission Override",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"permission_code\": \"finance:view\",\n  \"granted\": true\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/users/:user_id/permissions",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "users", ":user_id", "permissions"],
-							"variable": [
-								{
-									"key": "user_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Grant or deny a specific permission to a user (overrides role).\n\n**Required scope:** `users:manage`"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Audit Logs",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/audit-logs?action=role_assigned&page=1",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "audit-logs"],
-							"query": [
-								{
-									"key": "action",
-									"value": "role_assigned"
-								},
-								{
-									"key": "page",
-									"value": "1"
-								}
-							]
-						},
-						"description": "Get audit log entries for RBAC changes.\n\n**Required scope:** `analytics:view`"
-					},
-					"response": []
-				}
-			],
-			"description": "Role-Based Access Control management"
-		},
-		{
-			"name": "Admin - Platform Operators",
-			"item": [
-				{
-					"name": "List All Tenants",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/admin/tenants?page=1",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "admin", "tenants"],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								}
-							]
-						},
-						"description": "List all tenants (platform admin only).\n\n**Required:** Platform admin authentication"
-					},
-					"response": []
-				},
-				{
-					"name": "Change Tenant Subscription",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"tier\": \"Growth\",\n  \"billing_cycle\": \"monthly\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/admin/tenants/:tenant_id/subscription",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "admin", "tenants", ":tenant_id", "subscription"],
-							"variable": [
-								{
-									"key": "tenant_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Change a tenant's subscription tier.\n\n**Required:** Platform admin authentication"
-					},
-					"response": []
-				},
-				{
-					"name": "Waive Subscription",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"subscription_waived\": true,\n  \"reason\": \"Strategic partnership\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/admin/tenants/:tenant_id/waive",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "admin", "tenants", ":tenant_id", "waive"],
-							"variable": [
-								{
-									"key": "tenant_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Waive subscription fees for a tenant.\n\n**Required:** Platform admin authentication"
-					},
-					"response": []
-				},
-				{
-					"name": "Get Platform Revenue Analytics",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/admin/analytics/revenue?from_date=2025-11-01&to_date=2025-11-30&group_by=tier",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "admin", "analytics", "revenue"],
-							"query": [
-								{
-									"key": "from_date",
-									"value": "2025-11-01"
-								},
-								{
-									"key": "to_date",
-									"value": "2025-11-30"
-								},
-								{
-									"key": "group_by",
-									"value": "tier",
-									"description": "tier, tenant, date"
-								}
-							]
-						},
-						"description": "Get platform-wide revenue analytics.\n\n**Required:** Platform admin authentication"
-					},
-					"response": []
-				},
-				{
-					"name": "Process Withdrawal",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"status\": \"completed\",\n  \"notes\": \"Processed via bank transfer\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/admin/wallet/withdrawals/:withdrawal_id/process",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "admin", "wallet", "withdrawals", ":withdrawal_id", "process"],
-							"variable": [
-								{
-									"key": "withdrawal_id",
-									"value": ""
-								}
-							]
-						},
-						"description": "Process a withdrawal (complete or fail).\n\n**Required:** Platform admin authentication"
-					},
-					"response": []
-				}
-			],
-			"description": "Platform operator admin endpoints"
-		},
-		{
-			"name": "Webhooks",
-			"item": [
-				{
-					"name": "Twilio Webhook",
-					"request": {
-						"auth": {
-							"type": "noauth"
-						},
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/x-www-form-urlencoded"
-							},
-							{
-								"key": "X-Twilio-Signature",
-								"value": "signature-here"
-							}
-						],
-						"body": {
-							"mode": "urlencoded",
-							"urlencoded": [
-								{
-									"key": "From",
-									"value": "whatsapp:+1234567890",
-									"type": "text"
-								},
-								{
-									"key": "To",
-									"value": "whatsapp:+14155238886",
-									"type": "text"
-								},
-								{
-									"key": "Body",
-									"value": "Hello, I want to browse products",
-									"type": "text"
-								},
-								{
-									"key": "MessageSid",
-									"value": "SM1234567890",
-									"type": "text"
-								}
-							]
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/webhooks/twilio/",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "webhooks", "twilio", ""]
-						},
-						"description": "Twilio WhatsApp webhook endpoint.\n\n**Authentication:** Verified by X-Twilio-Signature header\n\n**Note:** This is called by Twilio, not by API clients"
-					},
-					"response": []
-				}
-			],
-			"description": "Webhook endpoints for external integrations"
-		},
-		{
-			"name": "Test Scenarios",
-			"item": [
-				{
-					"name": "Test Rate Limiting",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"// Run this request multiple times rapidly to test rate limiting",
-									"pm.test('Eventually returns 429', function () {",
-									"    // After enough requests, should get rate limited",
-									"    if (pm.response.code === 429) {",
-									"        pm.test('Has Retry-After header', function () {",
-									"            pm.response.to.have.header('Retry-After');",
-									"        });",
-									"    }",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/products/",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "products", ""]
-						},
-						"description": "Test rate limiting by making rapid requests.\n\nRun this request multiple times in quick succession to trigger rate limiting."
-					},
-					"response": []
-				},
-				{
-					"name": "Test Pagination",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Has pagination metadata', function () {",
-									"    const jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('count');",
-									"    pm.expect(jsonData).to.have.property('next');",
-									"    pm.expect(jsonData).to.have.property('previous');",
-									"    pm.expect(jsonData).to.have.property('results');",
-									"});",
-									"",
-									"pm.test('Page size is respected', function () {",
-									"    const jsonData = pm.response.json();",
-									"    pm.expect(jsonData.results.length).to.be.at.most(10);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/v1/products/?page=1&page_size=10",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "products", ""],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "page_size",
-									"value": "10"
-								}
-							]
-						},
-						"description": "Test pagination functionality."
-					},
-					"response": []
-				},
-				{
-					"name": "Test Missing Scope (403)",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Returns 403 without proper scope', function () {",
-									"    pm.response.to.have.status(403);",
-									"});",
-									"",
-									"pm.test('Error message mentions missing scope', function () {",
-									"    const jsonData = pm.response.json();",
-									"    pm.expect(jsonData.detail).to.include('scope');",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"amount\": \"1000.00\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/v1/wallet/withdraw",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "wallet", "withdraw"]
-						},
-						"description": "Test RBAC enforcement by attempting an action without proper scope.\n\nThis should return 403 if the user doesn't have finance:withdraw:initiate scope."
-					},
-					"response": []
-				},
-				{
-					"name": "Test Tenant Isolation",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Cannot access other tenant data', function () {",
-									"    // Should return 403 or 404, never data from another tenant",
-									"    pm.expect(pm.response.code).to.be.oneOf([403, 404]);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "X-TENANT-ID",
-								"value": "wrong-tenant-id",
-								"description": "Use a different tenant ID"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/v1/products/",
-							"host": ["{{base_url}}"],
-							"path": ["v1", "products", ""]
-						},
-						"description": "Test tenant isolation by using wrong tenant ID.\n\nShould return 403 or 404, never data from another tenant."
-					},
-					"response": []
-				}
-			],
-			"description": "Test scenarios for validation"
-		}
-	]
+  "info": {
+    "name": "Tulia AI API",
+    "description": "Multi-tenant WhatsApp commerce and services platform with comprehensive RBAC",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "tulia-ai-collection",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "User registration, login, and profile management",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Register a new user and create their first tenant",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"business_name\": \"My Business\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticate and receive JWT token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"SecurePassword123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Get current user profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Update user profile",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Smith\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/auth/verify-email",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "description": "Verify email address with token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"verification-token-here\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/auth/forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "Request password reset",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/auth/reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "Reset password with token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"reset-token-here\",\n  \"new_password\": \"NewSecurePassword123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tenant Management",
+      "description": "Tenant creation, listing, and member management",
+      "item": [
+        {
+          "name": "List My Tenants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/tenants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "tenants"
+              ]
+            },
+            "description": "List all tenants where user has membership"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/tenants",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "tenants"
+              ]
+            },
+            "description": "Create a new tenant",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Business\",\n  \"slug\": \"new-business\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tenant Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/tenants/{{tenant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "description": "Get detailed tenant information"
+          },
+          "response": []
+        },
+        {
+          "name": "List Tenant Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/tenants/{{tenant_id}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "tenants",
+                "{{tenant_id}}",
+                "members"
+              ]
+            },
+            "description": "List all members of a tenant"
+          },
+          "response": []
+        },
+        {
+          "name": "Invite Member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/tenants/{{tenant_id}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "tenants",
+                "{{tenant_id}}",
+                "members"
+              ]
+            },
+            "description": "Invite a user to join tenant (requires users:manage)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newmember@example.com\",\n  \"role_ids\": [\n    \"role-uuid-here\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "description": "Product catalog management (requires catalog:view or catalog:edit)",
+      "item": [
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/catalog",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "catalog"
+              ]
+            },
+            "description": "List all products (requires catalog:view)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/catalog/{{product_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "{{product_id}}"
+              ]
+            },
+            "description": "Get product details (requires catalog:view)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/catalog",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "catalog"
+              ]
+            },
+            "description": "Create a new product (requires catalog:edit)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Product\",\n  \"description\": \"Product description\",\n  \"price\": 99.99,\n  \"currency\": \"USD\",\n  \"sku\": \"PROD-001\",\n  \"stock_quantity\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/catalog/{{product_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "{{product_id}}"
+              ]
+            },
+            "description": "Update product (requires catalog:edit)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Product\",\n  \"price\": 89.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/catalog/{{product_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "{{product_id}}"
+              ]
+            },
+            "description": "Delete product (requires catalog:edit)"
+          },
+          "response": []
+        },
+        {
+          "name": "Sync WooCommerce",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/catalog/sync/woocommerce",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "sync",
+                "woocommerce"
+              ]
+            },
+            "description": "Sync products from WooCommerce (requires integrations:manage)"
+          },
+          "response": []
+        },
+        {
+          "name": "Sync Shopify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/catalog/sync/shopify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "catalog",
+                "sync",
+                "shopify"
+              ]
+            },
+            "description": "Sync products from Shopify (requires integrations:manage)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "description": "Order management (requires orders:view or orders:edit)",
+      "item": [
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "orders"
+              ]
+            },
+            "description": "List all orders (requires orders:view)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/orders/{{order_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "orders",
+                "{{order_id}}"
+              ]
+            },
+            "description": "Get order details (requires orders:view)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/orders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "orders"
+              ]
+            },
+            "description": "Create a new order (requires orders:edit)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"customer-uuid\",\n  \"items\": [\n    {\n      \"product_id\": \"product-uuid\",\n      \"quantity\": 2,\n      \"unit_price\": 99.99\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Order Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/orders/{{order_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "orders",
+                "{{order_id}}"
+              ]
+            },
+            "description": "Update order status (requires orders:edit)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"processing\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "RBAC",
+      "description": "Role-based access control (requires users:manage)",
+      "item": [
+        {
+          "name": "List Permissions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/permissions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "permissions"
+              ]
+            },
+            "description": "List all available permissions"
+          },
+          "response": []
+        },
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "roles"
+              ]
+            },
+            "description": "List tenant roles"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Role Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/roles/{{role_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "roles",
+                "{{role_id}}"
+              ]
+            },
+            "description": "Get role with permissions"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "roles"
+              ]
+            },
+            "description": "Create custom role (requires users:manage)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Custom Role\",\n  \"description\": \"Role description\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Permissions to Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/roles/{{role_id}}/permissions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "roles",
+                "{{role_id}}",
+                "permissions"
+              ]
+            },
+            "description": "Add permissions to role (requires users:manage)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permission_codes\": [\n    \"catalog:view\",\n    \"orders:view\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Roles to User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/memberships/{{tenant_id}}/{{user_id}}/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "memberships",
+                "{{tenant_id}}",
+                "{{user_id}}",
+                "roles"
+              ]
+            },
+            "description": "Assign roles to user (requires users:manage)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_ids\": [\n    \"role-uuid-1\",\n    \"role-uuid-2\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Grant User Permission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/users/{{user_id}}/permissions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "users",
+                "{{user_id}}",
+                "permissions"
+              ]
+            },
+            "description": "Grant permission override (requires users:manage)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permission_code\": \"finance:reconcile\",\n  \"granted\": true,\n  \"reason\": \"Temporary access for audit\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/audit-logs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "audit-logs"
+              ]
+            },
+            "description": "View audit trail (requires analytics:view)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "description": "Tenant settings and integrations",
+      "item": [
+        {
+          "name": "Get Business Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/settings/business",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "settings",
+                "business"
+              ]
+            },
+            "description": "Get business settings"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Business Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/settings/business",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "settings",
+                "business"
+              ]
+            },
+            "description": "Update business settings (requires users:manage or integrations:manage)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"timezone\": \"Africa/Nairobi\",\n  \"business_hours\": {\n    \"monday\": {\n      \"open\": \"09:00\",\n      \"close\": \"17:00\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List API Keys",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/settings/api-keys",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "settings",
+                "api-keys"
+              ]
+            },
+            "description": "List API keys (requires users:manage)"
+          },
+          "response": []
+        },
+        {
+          "name": "Generate API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/settings/api-keys",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "settings",
+                "api-keys"
+              ]
+            },
+            "description": "Generate new API key (requires users:manage)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Production Key\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Onboarding Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/settings/onboarding",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "settings",
+                "onboarding"
+              ]
+            },
+            "description": "Get onboarding progress"
+          },
+          "response": []
+        },
+        {
+          "name": "Complete Onboarding Step",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/settings/onboarding/complete",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "settings",
+                "onboarding",
+                "complete"
+              ]
+            },
+            "description": "Mark onboarding step complete",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"step\": \"twilio_configured\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Twilio Credentials",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/settings/integrations/twilio",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "settings",
+                "integrations",
+                "twilio"
+              ]
+            },
+            "description": "Configure Twilio (requires integrations:manage)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_sid\": \"ACxxxxx\",\n  \"auth_token\": \"xxxxx\",\n  \"whatsapp_number\": \"+14155238886\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "description": "Business analytics (requires analytics:view)",
+      "item": [
+        {
+          "name": "Get Analytics Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/analytics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "analytics"
+              ]
+            },
+            "description": "Get analytics overview (requires analytics:view)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Daily Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-TENANT-ID",
+                "value": "{{tenant_id}}",
+                "type": "text"
+              },
+              {
+                "key": "X-TENANT-API-KEY",
+                "value": "{{tenant_api_key}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/analytics/daily",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "analytics",
+                "daily"
+              ]
+            },
+            "description": "Get daily analytics with date range (requires analytics:view)"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
 }

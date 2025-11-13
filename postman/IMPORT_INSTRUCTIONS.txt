@@ -1,0 +1,83 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    TuliaAI POSTMAN COLLECTION                                ║
+║                         Import Instructions                                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📦 FILES TO IMPORT
+  ✓ TuliaAI.postman_collection.json (26KB - 30+ endpoints)
+  ✓ TuliaAI.postman_environment.json (1KB - pre-configured variables)
+
+🚀 IMPORT STEPS
+  1. Open Postman Desktop or Web
+  2. Click "Import" button (top left)
+  3. Drag both JSON files into the import window
+  4. Click "Import" to confirm
+  5. Select environment: "TuliaAI Development" (top right dropdown)
+
+✅ PRE-CONFIGURED VARIABLES (from your .env)
+  • base_url: http://localhost:8000
+  • tenant_id: 604923c8-cff3-49d7-b3a3-fe5143c5c46b
+  • tenant_api_key: a96b73152af3e755424b11a6dad39a44bbebb553c7608f0b138a48ba95e54d68
+
+🎯 FIRST TEST (No Setup Required)
+  1. Open: Utilities → Health Check
+  2. Click: Send
+  3. Expect: 200 OK
+
+🔧 SET TWILIO CREDENTIALS
+  1. Open: Tenant Settings → Integrations → Set Twilio Credentials
+  2. Update body with your Twilio Account SID and Auth Token
+  3. Click: Send
+  4. Expect: 200 OK with masked credentials
+
+📚 DOCUMENTATION
+  • README.md - Full documentation
+  • QUICK_START.md - 6-step quick start guide
+  • Endpoint descriptions - In each request
+
+🔑 AUTHENTICATION
+  Most endpoints use API Key authentication (already configured):
+    X-TENANT-ID: {{tenant_id}}
+    X-TENANT-API-KEY: {{tenant_api_key}}
+
+  For user-specific operations, use JWT (login first):
+    Authorization: Bearer {{access_token}}
+
+📁 COLLECTION STRUCTURE
+  ├── Authentication (5 endpoints)
+  ├── Tenant Management (3 endpoints)
+  ├── Tenant Settings
+  │   ├── Integrations (6 endpoints) ← SET TWILIO HERE
+  │   └── API Keys (2 endpoints)
+  ├── Catalog & Products (3 endpoints)
+  ├── Conversations & Messages (3 endpoints)
+  ├── Orders (2 endpoints)
+  ├── Wallet & Finance (2 endpoints)
+  ├── Analytics (2 endpoints)
+  └── Utilities (2 endpoints)
+
+🐛 TROUBLESHOOTING
+  • 401 Unauthorized → Check API key in environment
+  • 403 Forbidden → Missing RBAC scope (check endpoint description)
+  • 404 Not Found → Verify URL and resource ID
+  • Signature failed → Restart Django after proxy settings update
+
+💡 TIPS
+  • All requests have descriptions with required RBAC scopes
+  • Login request auto-saves access_token to environment
+  • Use {{variable}} syntax to reference environment variables
+  • Check Django logs for detailed error messages
+
+🌐 WEBHOOK TESTING
+  1. Start ngrok: ngrok http 8000
+  2. Update Twilio webhook: https://your-url.ngrok-free.app/v1/webhooks/twilio/
+  3. Send WhatsApp message to test
+
+📞 SUPPORT
+  • API Docs: http://localhost:8000/schema/swagger/
+  • Twilio Console: https://console.twilio.com/
+  • Django Logs: Check terminal for detailed errors
+
+═══════════════════════════════════════════════════════════════════════════════
+Ready to import! Drag both JSON files into Postman now.
+═══════════════════════════════════════════════════════════════════════════════

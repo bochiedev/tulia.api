@@ -60,17 +60,17 @@ urlpatterns = [
     
     # Message sending endpoints
     path(
-        'messages/send',
+        'send',
         SendMessageView.as_view(),
         name='send-message'
     ),
     path(
-        'messages/schedule',
+        'schedule',
         ScheduleMessageView.as_view(),
         name='schedule-message'
     ),
     path(
-        'messages/rate-limit-status',
+        'rate-limit-status',
         RateLimitStatusView.as_view(),
         name='rate-limit-status'
     ),

@@ -10,11 +10,14 @@ Implements:
 - UserPermission (per-user overrides with grant/deny)
 - AuditLog (comprehensive audit trail)
 """
+import logging
 from django.db import models
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.postgres.fields import ArrayField
 from apps.core.models import BaseModel
 from apps.core.fields import EncryptedCharField
+
+logger = logging.getLogger(__name__)
 
 
 class UserManager(models.Manager):
@@ -1099,6 +1102,10 @@ class AuditLog(BaseModel):
         Returns:
             AuditLog instance
         """
+        # Handle AnonymousUser (API key authentication) - set user to None
+        if user and not user.is_authenticated:
+            user = None
+        
         log_data = {
             'action': action,
             'user': user,
@@ -1115,7 +1122,16 @@ class AuditLog(BaseModel):
             log_data['user_agent'] = request.META.get('HTTP_USER_AGENT', '')
             log_data['request_id'] = getattr(request, 'request_id', None)
         
-        return cls.objects.create(**log_data)
+        try:
+            return cls.objects.create(**log_data)
+        except Exception as e:
+            # Fail silently - audit logging should not break the main operation
+            logger.error(
+                f"Failed to create audit log: {str(e)}",
+                extra={'action': action, 'tenant_id': tenant.id if tenant else None},
+                exc_info=True
+            )
+            return None
     
     @staticmethod
     def _get_client_ip(request):

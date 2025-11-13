@@ -173,21 +173,21 @@
 - [x] 10. Create integration credentials API endpoints
   - [x] 10.1 Implement Twilio settings endpoints
     - GET /v1/settings/integrations/twilio - return masked credentials
-    - PUT /v1/settings/integrations/twilio - update credentials
+    - POST /v1/settings/integrations/twilio - create/update credentials
     - DELETE /v1/settings/integrations/twilio - remove credentials
     - Require integrations:manage scope
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 11.1, 11.5_
   
   - [x] 10.2 Implement WooCommerce settings endpoints
     - GET /v1/settings/integrations/woocommerce
-    - PUT /v1/settings/integrations/woocommerce
+    - POST /v1/settings/integrations/woocommerce - create/update credentials
     - DELETE /v1/settings/integrations/woocommerce
     - Require integrations:manage scope
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 11.1, 11.5_
   
   - [x] 10.3 Implement Shopify settings endpoints
     - GET /v1/settings/integrations/shopify
-    - PUT /v1/settings/integrations/shopify
+    - POST /v1/settings/integrations/shopify - create/update credentials
     - DELETE /v1/settings/integrations/shopify
     - Require integrations:manage scope
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 11.1, 11.5_

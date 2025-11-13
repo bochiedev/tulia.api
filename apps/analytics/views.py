@@ -34,7 +34,6 @@ from apps.tenants.models import Subscription, Transaction
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasTenantScopes])
-@requires_scopes('analytics:view')
 def analytics_overview(request):
     """
     Get overview metrics for dashboard with date range aggregation.
@@ -49,7 +48,16 @@ def analytics_overview(request):
     
     Example:
         GET /v1/analytics/overview?range=30d
+    
+    Required scope: analytics:view
     """
+    # Check scope manually for function-based view
+    if 'analytics:view' not in request.scopes:
+        return Response(
+            {'detail': 'Missing required scope: analytics:view'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
     date_range = request.query_params.get('range', '7d')
     
     # Validate date range format
@@ -72,7 +80,6 @@ def analytics_overview(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasTenantScopes])
-@requires_scopes('analytics:view')
 def analytics_daily(request):
     """
     Get daily analytics metrics with optional date filtering.
@@ -89,7 +96,16 @@ def analytics_daily(request):
     
     Example:
         GET /v1/analytics/daily?start_date=2025-11-01&end_date=2025-11-10
+    
+    Required scope: analytics:view
     """
+    # Check scope manually for function-based view
+    if 'analytics:view' not in request.scopes:
+        return Response(
+            {'detail': 'Missing required scope: analytics:view'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
     # Get query parameters
     date_str = request.query_params.get('date')
     start_date_str = request.query_params.get('start_date')
