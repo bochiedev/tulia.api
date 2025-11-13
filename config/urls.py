@@ -14,9 +14,26 @@ urlpatterns = [
     
     # API v1
     path('v1/', include('apps.core.urls')),
-    path('v1/auth/', include('apps.rbac.urls_auth')),  # Authentication endpoints (register, login, etc.)
-    path('v1/', include('apps.tenants.urls')),  # Includes wallet and admin endpoints
-    path('v1/', include('apps.rbac.urls')),  # RBAC endpoints (memberships, roles, permissions, audit logs)
+    
+    # Authentication endpoints
+    path('v1/auth/', include('apps.rbac.urls_auth')),  # Register, login, logout, verify-email, forgot-password, reset-password, refresh-token, me
+    
+    # Tenant management endpoints
+    path('v1/', include('apps.tenants.urls_management')),  # Tenant CRUD and member management
+    
+    # Tenant settings endpoints
+    path('v1/', include('apps.tenants.urls_settings')),  # Onboarding, integrations, payment methods, business settings, API keys
+    
+    # Tenant withdrawal endpoints (four-eyes approval)
+    path('v1/', include('apps.tenants.urls_withdrawal')),  # Withdrawal management with four-eyes approval
+    
+    # Legacy tenant URLs (includes wallet and admin endpoints)
+    path('v1/', include('apps.tenants.urls')),  # Wallet, admin, customers, payment features
+    
+    # RBAC endpoints
+    path('v1/', include('apps.rbac.urls')),  # Memberships, roles, permissions, audit logs
+    
+    # Other API endpoints
     path('v1/messages/', include('apps.messaging.urls')),
     path('v1/products/', include('apps.catalog.urls')),
     path('v1/orders/', include('apps.orders.urls')),

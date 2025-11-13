@@ -14,6 +14,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 import logging
 
 from apps.tenants.models import Tenant
@@ -102,6 +104,7 @@ curl -X GET https://api.tulia.ai/v1/tenants \\
             )
 
 
+@method_decorator(ratelimit(key='user_or_ip', rate='60/m', method='POST', block=True), name='dispatch')
 class TenantCreateView(APIView):
     """
     Create a new tenant.
@@ -116,6 +119,7 @@ class TenantCreateView(APIView):
     - Initializes onboarding status tracking
     
     No specific scope required - all authenticated users can create tenants.
+    Rate limited to 60 requests per minute per user.
     """
     
     @extend_schema(
@@ -350,6 +354,7 @@ curl -X GET https://api.tulia.ai/v1/tenants/{tenant_id} \\
             )
 
 
+@method_decorator(ratelimit(key='user_or_ip', rate='60/m', method='PUT', block=True), name='dispatch')
 class TenantUpdateView(APIView):
     """
     Update tenant information.
@@ -358,6 +363,7 @@ class TenantUpdateView(APIView):
     
     Updates basic tenant information.
     Requires users:manage scope.
+    Rate limited to 60 requests per minute per user.
     """
     permission_classes = [HasTenantScopes]
     required_scopes = {'users:manage'}
@@ -493,6 +499,7 @@ curl -X PUT https://api.tulia.ai/v1/tenants/{tenant_id} \\
             )
 
 
+@method_decorator(ratelimit(key='user_or_ip', rate='60/m', method='DELETE', block=True), name='dispatch')
 class TenantDeleteView(APIView):
     """
     Delete tenant (soft delete).
@@ -501,6 +508,7 @@ class TenantDeleteView(APIView):
     
     Soft deletes the tenant and cascades to all related records.
     Requires users:manage scope and Owner role.
+    Rate limited to 60 requests per minute per user.
     """
     permission_classes = [HasTenantScopes]
     required_scopes = {'users:manage'}
@@ -679,6 +687,7 @@ curl -X GET https://api.tulia.ai/v1/tenants/{tenant_id}/members \\
             )
 
 
+@method_decorator(ratelimit(key='user_or_ip', rate='60/m', method='POST', block=True), name='dispatch')
 class TenantMemberInviteView(APIView):
     """
     Invite user to tenant.
@@ -687,6 +696,7 @@ class TenantMemberInviteView(APIView):
     
     Invites a user to the tenant with specified roles.
     Requires users:manage scope.
+    Rate limited to 60 requests per minute per user.
     """
     permission_classes = [HasTenantScopes]
     required_scopes = {'users:manage'}
@@ -810,6 +820,7 @@ curl -X POST https://api.tulia.ai/v1/tenants/{tenant_id}/members \\
             )
 
 
+@method_decorator(ratelimit(key='user_or_ip', rate='60/m', method='DELETE', block=True), name='dispatch')
 class TenantMemberRemoveView(APIView):
     """
     Remove member from tenant.
@@ -818,6 +829,7 @@ class TenantMemberRemoveView(APIView):
     
     Removes a user's membership from the tenant.
     Requires users:manage scope.
+    Rate limited to 60 requests per minute per user.
     """
     permission_classes = [HasTenantScopes]
     required_scopes = {'users:manage'}

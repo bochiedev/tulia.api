@@ -17,7 +17,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from apps.tenants.models import Tenant, SubscriptionTier, TenantSettings
-from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission
+from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission, TenantUserRole
 
 
 @pytest.mark.django_db
@@ -75,16 +75,24 @@ class TestIntegrationCredentialsAPI(TestCase):
         self.tenant_user = TenantUser.objects.create(
             tenant=self.tenant,
             user=self.user,
-            is_active=True
+            is_active=True,
+            invite_status='accepted'
         )
-        self.tenant_user.user_roles.add(self.admin_role)
+        TenantUserRole.objects.create(
+            tenant_user=self.tenant_user,
+            role=self.admin_role
+        )
+        
+        # Generate JWT token for authentication
+        from apps.rbac.services import AuthService
+        self.jwt_token = AuthService.generate_jwt(self.user)
         
         # Set up API client
         self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
         
-        # Set tenant context headers
+        # Set tenant context headers with JWT authentication
         self.headers = {
+            'HTTP_AUTHORIZATION': f'Bearer {self.jwt_token}',
             'HTTP_X_TENANT_ID': str(self.tenant.id),
         }
     
@@ -349,9 +357,10 @@ class TestIntegrationCredentialsAPI(TestCase):
         other_settings.twilio_token = 'other_token_999999999999999999999'
         other_settings.save()
         
-        # Try to access other tenant's credentials
+        # Try to access other tenant's credentials with valid JWT but wrong tenant
         response = self.client.get(
             '/v1/settings/integrations/twilio',
+            HTTP_AUTHORIZATION=f'Bearer {self.jwt_token}',
             HTTP_X_TENANT_ID=str(other_tenant.id)
         )
         

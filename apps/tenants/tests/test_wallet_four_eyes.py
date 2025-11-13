@@ -201,7 +201,7 @@ class TestWalletFourEyesApproval(TestCase):
                 self.user_initiator.id
             )
         
-        assert 'Four-eyes principle violation' in str(exc_info.value)
+        assert 'Four-eyes validation failed' in str(exc_info.value)
     
     def test_withdrawal_without_initiator_can_be_approved(self):
         """Test that withdrawals without initiator (legacy) can still be approved."""

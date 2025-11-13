@@ -72,7 +72,9 @@ class TenantContextMiddleware(MiddlewareMixin):
             request.tenant = None
             request.membership = None
             request.scopes = set()
-            request.user = None
+            # Don't set request.user for admin paths - let Django's session auth handle it
+            if not request.path.startswith('/admin/'):
+                request.user = None
             return None
         
         # Check if this is a JWT-only path (tenant management endpoints)

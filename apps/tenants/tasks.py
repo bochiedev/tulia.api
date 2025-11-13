@@ -346,3 +346,85 @@ def _send_trial_expiring_notification(tenant, days_remaining):
         f"[STUB] Sending trial expiring notification to {tenant.contact_email}: "
         f"{days_remaining} days remaining"
     )
+
+
+@shared_task
+def send_onboarding_reminders():
+    """
+    Send onboarding reminder emails to tenants with incomplete onboarding.
+    
+    Sends reminders at:
+    - 3 days after tenant creation (if onboarding incomplete)
+    - 7 days after tenant creation (if onboarding still incomplete)
+    
+    This task should run daily.
+    
+    Returns:
+        dict: Statistics about reminders sent
+    """
+    from datetime import date, timedelta
+    from apps.tenants.services.onboarding_service import OnboardingService
+    
+    today = date.today()
+    three_days_ago = today - timedelta(days=3)
+    seven_days_ago = today - timedelta(days=7)
+    
+    # Find tenants created 3 days ago with incomplete onboarding
+    tenants_3d = Tenant.objects.filter(
+        created_at__date=three_days_ago,
+        deleted_at__isnull=True
+    ).select_related('settings')
+    
+    reminders_3d = 0
+    for tenant in tenants_3d:
+        # Check if onboarding is incomplete
+        if not OnboardingService.check_completion(tenant):
+            try:
+                OnboardingService.send_reminder(tenant)
+                reminders_3d += 1
+                logger.info(
+                    f"Sent 3-day onboarding reminder to {tenant.name} "
+                    f"(created: {tenant.created_at.date()})"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to send 3-day reminder to {tenant.name}: {str(e)}",
+                    exc_info=True
+                )
+    
+    # Find tenants created 7 days ago with incomplete onboarding
+    tenants_7d = Tenant.objects.filter(
+        created_at__date=seven_days_ago,
+        deleted_at__isnull=True
+    ).select_related('settings')
+    
+    reminders_7d = 0
+    for tenant in tenants_7d:
+        # Check if onboarding is incomplete
+        if not OnboardingService.check_completion(tenant):
+            try:
+                OnboardingService.send_reminder(tenant)
+                reminders_7d += 1
+                logger.info(
+                    f"Sent 7-day onboarding reminder to {tenant.name} "
+                    f"(created: {tenant.created_at.date()})"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to send 7-day reminder to {tenant.name}: {str(e)}",
+                    exc_info=True
+                )
+    
+    result = {
+        'reminders_3d': reminders_3d,
+        'reminders_7d': reminders_7d,
+        'total': reminders_3d + reminders_7d,
+        'date': str(today)
+    }
+    
+    logger.info(
+        f"Onboarding reminders sent: {result['total']} total "
+        f"({reminders_3d} at 3 days, {reminders_7d} at 7 days)"
+    )
+    
+    return result

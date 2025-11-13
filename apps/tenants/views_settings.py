@@ -6,6 +6,9 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.db import transaction
+from django_ratelimit.decorators import ratelimit
+from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
+from drf_spectacular.types import OpenApiTypes
 
 from apps.core.permissions import HasTenantScopes
 from apps.tenants.models import TenantSettings
@@ -22,8 +25,42 @@ from apps.tenants.serializers_settings import (
 logger = logging.getLogger(__name__)
 
 
+@extend_schema(
+    tags=['Settings'],
+    summary='Get or update tenant settings',
+    description='''
+Get or update general tenant settings including notification preferences, feature flags, business hours, branding, and compliance settings.
+
+**GET**: Requires `integrations:view` scope
+**PATCH**: Requires `integrations:manage` scope
+
+**Rate limit**: 60 requests/minute for PATCH
+    ''',
+    request=TenantSettingsReadSerializer,
+    responses={
+        200: TenantSettingsReadSerializer,
+        403: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Update Settings',
+            value={
+                'notification_settings': {
+                    'email_enabled': True,
+                    'sms_enabled': False
+                },
+                'feature_flags': {
+                    'ai_enabled': True
+                }
+            },
+            request_only=True
+        )
+    ]
+)
 @api_view(['GET', 'PATCH'])
 @permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method=['PATCH'])
 def tenant_settings_view(request):
     """Get or update tenant settings."""
     settings, created = TenantSettings.objects.get_or_create(
@@ -66,8 +103,66 @@ def tenant_settings_view(request):
 
 
 
+@extend_schema(
+    tags=['Integrations'],
+    summary='Manage WooCommerce credentials',
+    description='''
+Manage WooCommerce integration credentials with validation.
+
+**GET**: Return masked credentials and configuration status
+**PUT**: Update credentials with validation against WooCommerce API
+**DELETE**: Remove credentials
+
+**Required scope**: `integrations:manage`
+**Rate limit**: 60 requests/minute for PUT/DELETE
+
+**Requirements**: 6.1, 6.2, 6.3, 6.4, 6.5, 11.1, 11.5
+    ''',
+    request=WooCommerceCredentialsSerializer,
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Update Credentials',
+            value={
+                'store_url': 'https://mystore.com',
+                'consumer_key': 'ck_1234567890abcdef',
+                'consumer_secret': 'cs_1234567890abcdef'
+            },
+            request_only=True
+        ),
+        OpenApiExample(
+            'Success Response',
+            value={
+                'message': 'WooCommerce credentials updated successfully',
+                'configured': True,
+                'credentials': {
+                    'store_url': 'https://mystore.com',
+                    'consumer_key_masked': 'ck_****cdef',
+                    'has_consumer_secret': True,
+                    'has_webhook_secret': True
+                }
+            },
+            response_only=True
+        ),
+        OpenApiExample(
+            'Validation Error',
+            value={
+                'error': 'Invalid WooCommerce credentials',
+                'code': 'CREDENTIAL_VALIDATION_FAILED'
+            },
+            response_only=True,
+            status_codes=['400']
+        )
+    ]
+)
 @api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method=['PUT', 'DELETE'])
 def woocommerce_credentials_view(request):
     """
     Manage WooCommerce integration credentials.
@@ -166,8 +261,55 @@ def woocommerce_credentials_view(request):
         }, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=['Integrations'],
+    summary='Manage Shopify credentials',
+    description='''
+Manage Shopify integration credentials with validation.
+
+**GET**: Return masked credentials and configuration status
+**PUT**: Update credentials with validation against Shopify API
+**DELETE**: Remove credentials
+
+**Required scope**: `integrations:manage`
+**Rate limit**: 60 requests/minute for PUT/DELETE
+
+**Requirements**: 6.1, 6.2, 6.3, 6.4, 6.5, 11.1, 11.5
+    ''',
+    request=ShopifyCredentialsSerializer,
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Update Credentials',
+            value={
+                'shop_domain': 'mystore.myshopify.com',
+                'access_token': 'shpat_1234567890abcdef'
+            },
+            request_only=True
+        ),
+        OpenApiExample(
+            'Success Response',
+            value={
+                'message': 'Shopify credentials updated successfully',
+                'configured': True,
+                'credentials': {
+                    'shop_domain': 'mystore.myshopify.com',
+                    'has_access_token': True,
+                    'has_webhook_secret': True
+                }
+            },
+            response_only=True
+        )
+    ]
+)
 @api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method=['PUT', 'DELETE'])
 def shopify_credentials_view(request):
     """
     Manage Shopify integration credentials.
@@ -262,8 +404,57 @@ def shopify_credentials_view(request):
         }, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=['Integrations'],
+    summary='Manage Twilio credentials',
+    description='''
+Manage Twilio integration credentials with validation.
+
+**GET**: Return masked credentials and configuration status
+**PUT**: Update credentials with validation against Twilio API
+**DELETE**: Remove credentials
+
+**Required scope**: `integrations:manage`
+**Rate limit**: 60 requests/minute for PUT/DELETE
+
+**Requirements**: 5.1, 5.2, 5.3, 5.4, 5.5, 11.1, 11.5
+    ''',
+    request=TwilioCredentialsSerializer,
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Update Credentials',
+            value={
+                'sid': 'AC1234567890abcdef',
+                'token': 'your_auth_token',
+                'webhook_secret': 'your_webhook_secret',
+                'whatsapp_number': 'whatsapp:+1234567890'
+            },
+            request_only=True
+        ),
+        OpenApiExample(
+            'Success Response',
+            value={
+                'message': 'Twilio credentials updated successfully',
+                'configured': True,
+                'credentials': {
+                    'sid_masked': 'AC****cdef',
+                    'has_token': True,
+                    'has_webhook_secret': True
+                }
+            },
+            response_only=True
+        )
+    ]
+)
 @api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method=['PUT', 'DELETE'])
 def twilio_credentials_view(request):
     """
     Manage Twilio integration credentials.
@@ -371,8 +562,36 @@ def _mask_credential(value, prefix=''):
     return f"{prefix}****{value[-4:]}"
 
 
+@extend_schema(
+    tags=['Integrations'],
+    summary='Set OpenAI credentials',
+    description='''
+Set OpenAI API credentials for AI-powered features.
+
+**Required scope**: `integrations:manage`
+**Rate limit**: 60 requests/minute
+    ''',
+    request=OpenAICredentialsSerializer,
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Set Credentials',
+            value={
+                'api_key': 'sk-1234567890abcdef',
+                'org_id': 'org-1234567890'
+            },
+            request_only=True
+        )
+    ]
+)
 @api_view(['POST'])
 @permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method='POST')
 def set_openai_credentials(request):
     """Set OpenAI API credentials."""
     if 'integrations:manage' not in request.scopes:
@@ -399,6 +618,48 @@ def set_openai_credentials(request):
     }, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    tags=['Integrations'],
+    summary='List all integrations',
+    description='''
+List all integrations with their configuration status.
+
+Returns masked credentials and last sync status for each integration (Twilio, WooCommerce, Shopify, OpenAI).
+
+**Required scope**: `integrations:manage`
+
+**Requirements**: 6.5, 11.1
+    ''',
+    responses={
+        200: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Success Response',
+            value={
+                'integrations': [
+                    {
+                        'name': 'twilio',
+                        'display_name': 'Twilio',
+                        'configured': True,
+                        'credentials': {
+                            'sid_masked': 'AC****cdef',
+                            'has_token': True,
+                            'has_webhook_secret': True
+                        },
+                        'status': {
+                            'last_sync': '2024-01-15T10:30:00Z',
+                            'status': 'active'
+                        }
+                    }
+                ],
+                'total_configured': 2
+            },
+            response_only=True
+        )
+    ]
+)
 @api_view(['GET'])
 @permission_classes([HasTenantScopes])
 def integrations_list_view(request):
@@ -515,8 +776,58 @@ def integrations_list_view(request):
     })
 
 
+@extend_schema(
+    tags=['Finance - Payment Methods'],
+    summary='Manage payment methods',
+    description='''
+Manage payment methods for subscription billing.
+
+**GET**: List all payment methods with masked card details
+**POST**: Add new payment method via Stripe tokenization
+
+**Required scope**: `finance:manage`
+**Rate limit**: 60 requests/minute for POST
+
+**Requirements**: 7.1, 7.2, 7.3, 7.4, 7.5, 11.2, 11.5
+    ''',
+    request=OpenApiTypes.OBJECT,
+    responses={
+        200: OpenApiTypes.OBJECT,
+        201: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Add Payment Method',
+            value={
+                'stripe_token': 'tok_1234567890abcdef'
+            },
+            request_only=True
+        ),
+        OpenApiExample(
+            'List Response',
+            value={
+                'stripe_customer_id': 'cus_1234567890',
+                'payment_methods': [
+                    {
+                        'id': 'pm_1234567890',
+                        'last4': '4242',
+                        'brand': 'visa',
+                        'exp_month': 12,
+                        'exp_year': 2025,
+                        'is_default': True
+                    }
+                ]
+            },
+            response_only=True
+        )
+    ]
+)
 @api_view(['GET', 'POST'])
 @permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method='POST')
 def payment_methods_view(request):
     """
     Manage payment methods for subscription billing.
@@ -575,8 +886,28 @@ def payment_methods_view(request):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    tags=['Finance - Payment Methods'],
+    summary='Set default payment method',
+    description='''
+Set a payment method as the default for subscription billing.
+
+**Required scope**: `finance:manage`
+**Rate limit**: 60 requests/minute
+
+**Requirements**: 7.3, 11.2, 11.5
+    ''',
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        404: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    }
+)
 @api_view(['PUT'])
 @permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method='PUT')
 def payment_method_set_default_view(request, payment_method_id):
     """
     Set default payment method.
@@ -612,8 +943,30 @@ def payment_method_set_default_view(request, payment_method_id):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    tags=['Finance - Payment Methods'],
+    summary='Remove payment method',
+    description='''
+Remove a payment method.
+
+Detaches payment method from Stripe and removes from tenant settings.
+
+**Required scope**: `finance:manage`
+**Rate limit**: 60 requests/minute
+
+**Requirements**: 7.5, 11.2, 11.5
+    ''',
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        404: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    }
+)
 @api_view(['DELETE'])
 @permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method='DELETE')
 def payment_method_remove_view(request, payment_method_id):
     """
     Remove payment method.
@@ -651,8 +1004,75 @@ def payment_method_remove_view(request, payment_method_id):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    tags=['Finance - Payout Methods'],
+    summary='Manage payout method',
+    description='''
+Manage payout method for receiving tenant earnings.
+
+**GET**: Return masked payout method details
+**PUT**: Update payout method with encrypted details
+**DELETE**: Remove payout method
+
+**Required scope**: `finance:manage`
+**Rate limit**: 60 requests/minute for PUT/DELETE
+
+**Note**: Payout method configuration requires payment facilitation to be enabled for the tenant's subscription tier.
+
+**Requirements**: 8.1, 8.2, 8.3, 8.4, 8.5, 11.2, 11.5
+    ''',
+    request=OpenApiTypes.OBJECT,
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Bank Transfer',
+            value={
+                'method': 'bank_transfer',
+                'details': {
+                    'account_number': '1234567890',
+                    'routing_number': '021000021',
+                    'account_holder_name': 'John Doe',
+                    'bank_name': 'Chase Bank'
+                }
+            },
+            request_only=True
+        ),
+        OpenApiExample(
+            'Mobile Money',
+            value={
+                'method': 'mobile_money',
+                'details': {
+                    'phone_number': '+254712345678',
+                    'provider': 'M-Pesa'
+                }
+            },
+            request_only=True
+        ),
+        OpenApiExample(
+            'Success Response',
+            value={
+                'message': 'Payout method updated successfully',
+                'configured': True,
+                'payout_method': 'bank_transfer',
+                'details': {
+                    'account_number': '****7890',
+                    'routing_number': '021000021',
+                    'account_holder_name': 'John Doe',
+                    'bank_name': 'Chase Bank'
+                }
+            },
+            response_only=True
+        )
+    ]
+)
 @api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method=['PUT', 'DELETE'])
 def payout_method_view(request):
     """
     Manage payout method for receiving tenant earnings.
@@ -728,7 +1148,7 @@ def payout_method_view(request):
     elif request.method == 'PUT':
         # Update payout method
         from apps.tenants.services.settings_service import SettingsService
-        from apps.core.exceptions import ValidationError
+        from django.core.exceptions import ValidationError
         
         method = request.data.get('method')
         details = request.data.get('details')
@@ -820,8 +1240,71 @@ def payout_method_view(request):
 
 
 
+@extend_schema(
+    tags=['Settings'],
+    summary='Manage business settings',
+    description='''
+Manage business settings including timezone, business hours, quiet hours, and notification preferences.
+
+**GET**: Return current business settings (no specific scope required)
+**PUT**: Update business settings with validation (requires `users:manage` OR `integrations:manage` scope)
+
+**Rate limit**: 60 requests/minute for PUT
+
+**Requirements**: 9.1, 9.2, 9.3, 9.4, 9.5, 11.3, 11.5
+    ''',
+    request=BusinessSettingsSerializer,
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Update Settings',
+            value={
+                'timezone': 'Africa/Nairobi',
+                'business_hours': {
+                    'monday': {'open': '09:00', 'close': '17:00'},
+                    'tuesday': {'open': '09:00', 'close': '17:00'}
+                },
+                'quiet_hours': {
+                    'enabled': True,
+                    'start': '22:00',
+                    'end': '08:00'
+                },
+                'notification_preferences': {
+                    'email': {
+                        'order_created': True,
+                        'payment_received': True
+                    }
+                }
+            },
+            request_only=True
+        ),
+        OpenApiExample(
+            'Success Response',
+            value={
+                'message': 'Business settings updated successfully',
+                'settings': {
+                    'timezone': 'Africa/Nairobi',
+                    'business_hours': {},
+                    'quiet_hours': {
+                        'enabled': True,
+                        'start': '22:00',
+                        'end': '08:00'
+                    },
+                    'notification_preferences': {}
+                }
+            },
+            response_only=True
+        )
+    ]
+)
 @api_view(['GET', 'PUT'])
 @permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method='PUT')
 def business_settings_view(request):
     """
     Manage business settings including timezone, business hours, quiet hours, and notification preferences.

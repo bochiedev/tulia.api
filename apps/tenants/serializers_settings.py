@@ -157,8 +157,33 @@ class ShopifyCredentialsSerializer(serializers.Serializer):
     webhook_secret = serializers.CharField(required=False, allow_blank=True)
     test_connection = serializers.BooleanField(default=True)
     
+    def validate_store_url(self, value):
+        """Validate and normalize WooCommerce store URL."""
+        from apps.core.validators import InputValidator
+        
+        if not value or not value.strip():
+            raise serializers.ValidationError('Store URL is required')
+        
+        value = value.strip()
+        
+        # Normalize URL
+        normalized = InputValidator.normalize_url(value)
+        
+        # Validate URL format
+        if not InputValidator.validate_url(normalized):
+            raise serializers.ValidationError(
+                'Please enter a valid store URL (e.g., https://example.com)'
+            )
+        
+        return normalized
+    
     def validate_shop_domain(self, value):
         """Validate and normalize shop domain."""
+        if not value or not value.strip():
+            raise serializers.ValidationError('Shop domain is required')
+        
+        value = value.strip()
+        
         # Remove protocol if present
         value = value.replace('https://', '').replace('http://', '')
         # Ensure .myshopify.com suffix
@@ -197,15 +222,38 @@ class TwilioCredentialsSerializer(serializers.Serializer):
     
     def validate_sid(self, value):
         """Validate Twilio SID format."""
+        if not value or not value.strip():
+            raise serializers.ValidationError('Twilio SID is required')
+        
+        value = value.strip()
+        
         if not value.startswith('AC'):
             raise serializers.ValidationError('Twilio SID must start with "AC"')
+        
+        if len(value) != 34:
+            raise serializers.ValidationError('Twilio SID must be 34 characters long')
+        
         return value
     
     def validate_whatsapp_number(self, value):
         """Validate WhatsApp number format (E.164)."""
-        if value and not value.startswith('+'):
-            raise serializers.ValidationError('WhatsApp number must be in E.164 format (e.g., +1234567890)')
-        return value
+        from apps.core.validators import InputValidator
+        
+        if not value:
+            return value
+        
+        value = value.strip()
+        
+        # Normalize to E.164 format
+        normalized = InputValidator.normalize_phone_e164(value)
+        
+        # Validate E.164 format
+        if not InputValidator.validate_phone_e164(normalized):
+            raise serializers.ValidationError(
+                'WhatsApp number must be in E.164 format (e.g., +1234567890)'
+            )
+        
+        return normalized
 
 
 class OpenAICredentialsSerializer(serializers.Serializer):
@@ -258,10 +306,23 @@ class BrandingSerializer(serializers.Serializer):
     
     def validate_primary_color(self, value):
         """Validate hex color format."""
-        if value and not value.startswith('#'):
-            raise serializers.ValidationError('Color must be in hex format (#RRGGBB)')
-        if value and len(value) != 7:
-            raise serializers.ValidationError('Color must be 7 characters (#RRGGBB)')
+        from apps.core.validators import InputValidator
+        
+        if not value:
+            return value
+        
+        value = value.strip()
+        
+        # Ensure it starts with #
+        if not value.startswith('#'):
+            value = f'#{value}'
+        
+        # Validate hex color format
+        if not InputValidator.validate_hex_color(value):
+            raise serializers.ValidationError(
+                'Color must be in hex format (e.g., #FF5733)'
+            )
+        
         return value
 
 
@@ -326,6 +387,45 @@ class PayoutMethodSerializer(serializers.Serializer):
                 })
         
         return data
+
+
+class APIKeySerializer(serializers.Serializer):
+    """Serializer for API key (read-only, masked)."""
+    
+    id = serializers.CharField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    key_preview = serializers.CharField(read_only=True, help_text="First 8 characters of the key")
+    created_at = serializers.DateTimeField(read_only=True)
+    created_by = serializers.CharField(read_only=True, help_text="Email of user who created the key")
+    last_used_at = serializers.DateTimeField(read_only=True, allow_null=True)
+
+
+class APIKeyCreateSerializer(serializers.Serializer):
+    """Serializer for creating a new API key."""
+    
+    name = serializers.CharField(
+        required=True,
+        max_length=100,
+        help_text="Descriptive name for the API key"
+    )
+    
+    def validate_name(self, value):
+        """Validate name is not empty."""
+        if not value or not value.strip():
+            raise serializers.ValidationError("API key name cannot be empty")
+        return value.strip()
+
+
+class APIKeyResponseSerializer(serializers.Serializer):
+    """Serializer for API key generation response (includes plain key once)."""
+    
+    message = serializers.CharField()
+    api_key = serializers.CharField(help_text="Plain API key - save this now, it won't be shown again")
+    key_id = serializers.CharField()
+    name = serializers.CharField()
+    key_preview = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    warning = serializers.CharField()
 
 
 class BusinessSettingsSerializer(serializers.Serializer):

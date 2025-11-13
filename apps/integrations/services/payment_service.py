@@ -218,9 +218,68 @@ class PaymentService:
         Returns:
             dict: Checkout details
         """
-        # TODO: Implement Paystack integration
-        logger.warning(f"Paystack integration not yet implemented, generating stub for order {order.id}")
-        return PaymentService._generate_stub_checkout(order, PaymentService.PROVIDER_PAYSTACK)
+        try:
+            from apps.integrations.services.paystack_service import PaystackService, PaystackError
+            
+            # Get customer email (required by Paystack)
+            customer_email = order.customer.metadata.get('email') or order.tenant.contact_email
+            
+            if not customer_email:
+                logger.warning(f"No email for Paystack checkout, using placeholder for order {order.id}")
+                customer_email = f"customer_{order.customer_id}@{order.tenant.slug}.placeholder.com"
+            
+            # Generate unique reference
+            reference = f"order_{order.id}_{timezone.now().strftime('%Y%m%d%H%M%S')}"
+            
+            # Initialize transaction
+            result = PaystackService.initialize_transaction(
+                email=customer_email,
+                amount=order.total,
+                currency=order.currency,
+                reference=reference,
+                callback_url=f"{settings.FRONTEND_URL}/orders/{order.id}/success",
+                metadata={
+                    'order_id': str(order.id),
+                    'tenant_id': str(order.tenant_id),
+                    'customer_id': str(order.customer_id),
+                }
+            )
+            
+            # Update order with payment reference
+            order.payment_ref = result['reference']
+            order.save(update_fields=['payment_ref'])
+            
+            logger.info(
+                f"Paystack checkout created",
+                extra={
+                    'order_id': str(order.id),
+                    'reference': result['reference'],
+                    'amount': float(order.total)
+                }
+            )
+            
+            return {
+                'checkout_url': result['authorization_url'],
+                'provider': PaymentService.PROVIDER_PAYSTACK,
+                'payment_ref': result['reference'],
+                'expires_at': None
+            }
+            
+        except PaystackError as e:
+            logger.error(
+                f"Paystack checkout failed: {str(e)}",
+                exc_info=True,
+                extra={'order_id': str(order.id)}
+            )
+            # Fallback to stub
+            return PaymentService._generate_stub_checkout(order, PaymentService.PROVIDER_PAYSTACK)
+        except Exception as e:
+            logger.error(
+                f"Unexpected error in Paystack checkout: {str(e)}",
+                exc_info=True,
+                extra={'order_id': str(order.id)}
+            )
+            return PaymentService._generate_stub_checkout(order, PaymentService.PROVIDER_PAYSTACK)
     
     @staticmethod
     def _generate_pesapal_checkout(order: Order) -> Dict:
@@ -233,9 +292,72 @@ class PaymentService:
         Returns:
             dict: Checkout details
         """
-        # TODO: Implement Pesapal integration
-        logger.warning(f"Pesapal integration not yet implemented, generating stub for order {order.id}")
-        return PaymentService._generate_stub_checkout(order, PaymentService.PROVIDER_PESAPAL)
+        try:
+            from apps.integrations.services.pesapal_service import PesapalService, PesapalError
+            
+            # Get customer details
+            customer_email = order.customer.metadata.get('email') or order.tenant.contact_email
+            customer_phone = str(order.customer.phone_e164) if hasattr(order.customer, 'phone_e164') else None
+            
+            # Generate unique reference
+            merchant_reference = f"order_{order.id}"
+            
+            # Prepare billing address
+            billing_address = {
+                'country_code': 'KE',
+                'first_name': order.customer.name or 'Customer',
+                'last_name': '',
+                'email_address': customer_email,
+                'phone_number': customer_phone
+            }
+            
+            # Submit order
+            result = PesapalService.submit_order(
+                merchant_reference=merchant_reference,
+                amount=order.total,
+                currency=order.currency,
+                description=f'Order {order.id} - {order.item_count} items',
+                callback_url=f"{settings.FRONTEND_URL}/orders/{order.id}/success",
+                notification_id=settings.PESAPAL_IPN_ID,
+                billing_address=billing_address,
+                customer_email=customer_email,
+                customer_phone=customer_phone
+            )
+            
+            # Update order with payment reference
+            order.payment_ref = result['order_tracking_id']
+            order.save(update_fields=['payment_ref'])
+            
+            logger.info(
+                f"Pesapal checkout created",
+                extra={
+                    'order_id': str(order.id),
+                    'order_tracking_id': result['order_tracking_id'],
+                    'amount': float(order.total)
+                }
+            )
+            
+            return {
+                'checkout_url': result['redirect_url'],
+                'provider': PaymentService.PROVIDER_PESAPAL,
+                'payment_ref': result['order_tracking_id'],
+                'expires_at': None
+            }
+            
+        except PesapalError as e:
+            logger.error(
+                f"Pesapal checkout failed: {str(e)}",
+                exc_info=True,
+                extra={'order_id': str(order.id)}
+            )
+            return PaymentService._generate_stub_checkout(order, PaymentService.PROVIDER_PESAPAL)
+        except Exception as e:
+            logger.error(
+                f"Unexpected error in Pesapal checkout: {str(e)}",
+                exc_info=True,
+                extra={'order_id': str(order.id)}
+            )
+            return PaymentService._generate_stub_checkout(order, PaymentService.PROVIDER_PESAPAL)
     
     @staticmethod
     def _generate_mpesa_checkout(order: Order) -> Dict:
@@ -246,11 +368,64 @@ class PaymentService:
             order: Order instance
             
         Returns:
-            dict: Checkout details
+            dict: Checkout details (STK push initiated)
         """
-        # TODO: Implement M-Pesa integration
-        logger.warning(f"M-Pesa integration not yet implemented, generating stub for order {order.id}")
-        return PaymentService._generate_stub_checkout(order, PaymentService.PROVIDER_MPESA)
+        try:
+            from apps.integrations.services.mpesa_service import MpesaService, MpesaError
+            
+            # Get customer phone number
+            customer_phone = str(order.customer.phone_e164) if hasattr(order.customer, 'phone_e164') else None
+            
+            if not customer_phone:
+                raise MpesaError("Customer phone number required for M-Pesa payment")
+            
+            # Initiate STK push
+            result = MpesaService.stk_push(
+                phone_number=customer_phone,
+                amount=order.total,
+                account_reference=f"ORD{order.id}",
+                transaction_desc=f"Order {order.id}",
+                callback_url=f"{settings.FRONTEND_URL}/api/v1/webhooks/mpesa/callback"
+            )
+            
+            # Update order with payment reference
+            order.payment_ref = result['checkout_request_id']
+            order.metadata['mpesa_merchant_request_id'] = result['merchant_request_id']
+            order.save(update_fields=['payment_ref', 'metadata'])
+            
+            logger.info(
+                f"M-Pesa STK push initiated",
+                extra={
+                    'order_id': str(order.id),
+                    'checkout_request_id': result['checkout_request_id'],
+                    'amount': float(order.total)
+                }
+            )
+            
+            # M-Pesa doesn't have a checkout URL - payment happens on phone
+            return {
+                'checkout_url': None,  # No URL - customer completes on phone
+                'provider': PaymentService.PROVIDER_MPESA,
+                'payment_ref': result['checkout_request_id'],
+                'expires_at': None,
+                'customer_message': result['customer_message'],
+                'stk_push_initiated': True
+            }
+            
+        except MpesaError as e:
+            logger.error(
+                f"M-Pesa STK push failed: {str(e)}",
+                exc_info=True,
+                extra={'order_id': str(order.id)}
+            )
+            return PaymentService._generate_stub_checkout(order, PaymentService.PROVIDER_MPESA)
+        except Exception as e:
+            logger.error(
+                f"Unexpected error in M-Pesa STK push: {str(e)}",
+                exc_info=True,
+                extra={'order_id': str(order.id)}
+            )
+            return PaymentService._generate_stub_checkout(order, PaymentService.PROVIDER_MPESA)
     
     @staticmethod
     def _generate_stub_checkout(order: Order, provider: str) -> Dict:
@@ -420,24 +595,363 @@ class PaymentService:
     
     @staticmethod
     def _process_paystack_webhook(payload: Dict, signature: str) -> Dict:
-        """Process Paystack webhook event."""
-        # TODO: Implement Paystack webhook processing
-        logger.warning("Paystack webhook processing not yet implemented")
-        return {'success': False, 'message': 'Not implemented'}
+        """
+        Process Paystack webhook event.
+        
+        Handles:
+        - charge.success: Payment completed successfully
+        - charge.failed: Payment failed
+        - transfer.success: Payout completed
+        - transfer.failed: Payout failed
+        
+        Args:
+            payload: Webhook payload
+            signature: Paystack signature header
+            
+        Returns:
+            dict: Processing result
+        """
+        try:
+            from apps.integrations.services.paystack_service import PaystackService
+            
+            # Verify signature
+            if signature and not PaystackService.verify_webhook_signature(
+                json.dumps(payload).encode('utf-8'), signature
+            ):
+                raise PaymentProcessingError(
+                    "Invalid Paystack webhook signature",
+                    details={'signature_valid': False}
+                )
+            
+            event_type = payload.get('event')
+            data = payload.get('data', {})
+            
+            # Handle charge.success event (customer payment)
+            if event_type == 'charge.success':
+                reference = data.get('reference')
+                
+                # Verify transaction status with Paystack API for extra security
+                transaction = PaystackService.verify_transaction(reference)
+                
+                if transaction.get('status') != 'success':
+                    logger.warning(
+                        f"Paystack transaction not successful: {transaction.get('status')}",
+                        extra={'reference': reference}
+                    )
+                    return {
+                        'success': False,
+                        'message': f"Transaction status: {transaction.get('status')}"
+                    }
+                
+                # Extract order_id from metadata
+                metadata = transaction.get('metadata', {})
+                order_id = metadata.get('order_id')
+                
+                if not order_id:
+                    raise PaymentProcessingError(
+                        "Order ID not found in webhook metadata",
+                        details={'reference': reference}
+                    )
+                
+                # Get order
+                order = Order.objects.get(id=order_id)
+                
+                # Process successful payment
+                amount = Decimal(str(transaction['amount'])) / 100  # Convert from kobo
+                result = PaymentService.process_successful_payment(
+                    order=order,
+                    payment_amount=amount,
+                    payment_ref=reference,
+                    provider=PaymentService.PROVIDER_PAYSTACK,
+                    payment_metadata={
+                        'transaction_id': transaction.get('id'),
+                        'customer_email': transaction.get('customer', {}).get('email'),
+                        'channel': transaction.get('channel'),
+                        'paid_at': transaction.get('paid_at'),
+                        'ip_address': transaction.get('ip_address'),
+                    }
+                )
+                
+                return {
+                    'success': True,
+                    'order_id': str(order_id),
+                    'transaction_id': str(result['payment_transaction'].id) if result['payment_transaction'] else None,
+                    'message': 'Payment processed successfully'
+                }
+            
+            # Handle charge.failed event
+            elif event_type in ['charge.failed', 'charge.declined']:
+                reference = data.get('reference')
+                metadata = data.get('metadata', {})
+                order_id = metadata.get('order_id')
+                
+                if order_id:
+                    order = Order.objects.get(id=order_id)
+                    PaymentService.process_failed_payment(
+                        order=order,
+                        reason=data.get('gateway_response', 'Payment failed'),
+                        provider=PaymentService.PROVIDER_PAYSTACK
+                    )
+                
+                return {
+                    'success': False,
+                    'order_id': str(order_id) if order_id else None,
+                    'message': 'Payment failed'
+                }
+            
+            # Handle transfer events (for payouts)
+            elif event_type == 'transfer.success':
+                reference = data.get('reference')
+                logger.info(
+                    f"Paystack transfer successful",
+                    extra={
+                        'reference': reference,
+                        'amount': data.get('amount'),
+                        'recipient': data.get('recipient', {}).get('name')
+                    }
+                )
+                return {
+                    'success': True,
+                    'reference': reference,
+                    'message': 'Transfer completed'
+                }
+            
+            elif event_type == 'transfer.failed':
+                reference = data.get('reference')
+                logger.warning(
+                    f"Paystack transfer failed",
+                    extra={
+                        'reference': reference,
+                        'reason': data.get('reason')
+                    }
+                )
+                return {
+                    'success': False,
+                    'reference': reference,
+                    'message': 'Transfer failed'
+                }
+            
+            # Other events - log and acknowledge
+            else:
+                logger.info(f"Received Paystack webhook event: {event_type}")
+                return {
+                    'success': True,
+                    'message': f"Event {event_type} received"
+                }
+            
+        except Order.DoesNotExist:
+            raise PaymentProcessingError(
+                "Order not found",
+                details={'order_id': order_id if 'order_id' in locals() else 'unknown'}
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to process Paystack webhook: {str(e)}",
+                exc_info=True,
+                extra={'event_type': payload.get('event', 'unknown')}
+            )
+            raise PaymentProcessingError(
+                f"Webhook processing failed: {str(e)}",
+                details={'error': str(e)}
+            )
     
     @staticmethod
     def _process_pesapal_webhook(payload: Dict, signature: str) -> Dict:
-        """Process Pesapal webhook event."""
-        # TODO: Implement Pesapal webhook processing
-        logger.warning("Pesapal webhook processing not yet implemented")
-        return {'success': False, 'message': 'Not implemented'}
+        """Process Pesapal webhook event (IPN)."""
+        try:
+            from apps.integrations.services.pesapal_service import PesapalService
+            
+            # Pesapal IPN sends OrderTrackingId and OrderMerchantReference
+            order_tracking_id = payload.get('OrderTrackingId')
+            merchant_reference = payload.get('OrderMerchantReference')
+            
+            if not order_tracking_id:
+                raise PaymentProcessingError(
+                    "OrderTrackingId not found in Pesapal IPN",
+                    details=payload
+                )
+            
+            # Get transaction status from Pesapal
+            transaction = PesapalService.get_transaction_status(order_tracking_id)
+            
+            payment_status = transaction.get('payment_status_description', '').lower()
+            
+            # Extract order_id from merchant_reference (format: order_{uuid})
+            if merchant_reference and merchant_reference.startswith('order_'):
+                order_id = merchant_reference.replace('order_', '')
+            else:
+                # Fallback: find by payment_ref
+                order = Order.objects.filter(payment_ref=order_tracking_id).first()
+                if not order:
+                    raise PaymentProcessingError(
+                        "Order not found",
+                        details={'order_tracking_id': order_tracking_id}
+                    )
+                order_id = order.id
+            
+            # Get order
+            order = Order.objects.get(id=order_id)
+            
+            # Check payment status
+            if payment_status == 'completed':
+                # Payment successful
+                amount = Decimal(str(transaction.get('amount')))
+                confirmation_code = transaction.get('confirmation_code')
+                
+                result = PaymentService.process_successful_payment(
+                    order=order,
+                    payment_amount=amount,
+                    payment_ref=confirmation_code,
+                    provider=PaymentService.PROVIDER_PESAPAL,
+                    payment_metadata={
+                        'order_tracking_id': order_tracking_id,
+                        'payment_method': transaction.get('payment_method'),
+                        'currency': transaction.get('currency'),
+                    }
+                )
+                
+                return {
+                    'success': True,
+                    'order_id': str(order_id),
+                    'transaction_id': str(result['payment_transaction'].id) if result['payment_transaction'] else None,
+                    'message': 'Payment processed successfully'
+                }
+            elif payment_status in ['failed', 'cancelled']:
+                # Payment failed
+                PaymentService.process_failed_payment(
+                    order=order,
+                    reason=f"Payment {payment_status}",
+                    provider=PaymentService.PROVIDER_PESAPAL
+                )
+                
+                return {
+                    'success': False,
+                    'order_id': str(order_id),
+                    'message': f"Payment {payment_status}"
+                }
+            else:
+                # Payment pending or other status
+                logger.info(
+                    f"Pesapal payment status: {payment_status}",
+                    extra={'order_tracking_id': order_tracking_id}
+                )
+                return {
+                    'success': True,
+                    'message': f"Payment status: {payment_status}"
+                }
+            
+        except Order.DoesNotExist:
+            raise PaymentProcessingError(
+                "Order not found",
+                details={'order_id': order_id}
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to process Pesapal webhook: {str(e)}",
+                exc_info=True
+            )
+            raise PaymentProcessingError(
+                f"Webhook processing failed: {str(e)}",
+                details={'error': str(e)}
+            )
     
     @staticmethod
     def _process_mpesa_webhook(payload: Dict, signature: str) -> Dict:
-        """Process M-Pesa webhook event."""
-        # TODO: Implement M-Pesa webhook processing
-        logger.warning("M-Pesa webhook processing not yet implemented")
-        return {'success': False, 'message': 'Not implemented'}
+        """Process M-Pesa webhook event (STK Push callback)."""
+        try:
+            # M-Pesa STK Push callback structure
+            body = payload.get('Body', {})
+            stk_callback = body.get('stkCallback', {})
+            
+            result_code = stk_callback.get('ResultCode')
+            checkout_request_id = stk_callback.get('CheckoutRequestID')
+            
+            if not checkout_request_id:
+                raise PaymentProcessingError(
+                    "CheckoutRequestID not found in M-Pesa callback",
+                    details=payload
+                )
+            
+            # Find order by payment_ref
+            order = Order.objects.filter(payment_ref=checkout_request_id).first()
+            
+            if not order:
+                logger.warning(
+                    f"Order not found for M-Pesa CheckoutRequestID: {checkout_request_id}"
+                )
+                return {
+                    'success': False,
+                    'message': 'Order not found'
+                }
+            
+            # Check result code
+            if result_code == 0:
+                # Payment successful
+                callback_metadata = stk_callback.get('CallbackMetadata', {})
+                items = callback_metadata.get('Item', [])
+                
+                # Extract payment details
+                amount = None
+                mpesa_receipt = None
+                phone_number = None
+                
+                for item in items:
+                    name = item.get('Name')
+                    if name == 'Amount':
+                        amount = Decimal(str(item.get('Value')))
+                    elif name == 'MpesaReceiptNumber':
+                        mpesa_receipt = item.get('Value')
+                    elif name == 'PhoneNumber':
+                        phone_number = item.get('Value')
+                
+                # Process successful payment
+                result = PaymentService.process_successful_payment(
+                    order=order,
+                    payment_amount=amount,
+                    payment_ref=mpesa_receipt,
+                    provider=PaymentService.PROVIDER_MPESA,
+                    payment_metadata={
+                        'checkout_request_id': checkout_request_id,
+                        'phone_number': phone_number,
+                    }
+                )
+                
+                return {
+                    'success': True,
+                    'order_id': str(order.id),
+                    'transaction_id': str(result['payment_transaction'].id) if result['payment_transaction'] else None,
+                    'message': 'Payment processed successfully'
+                }
+            else:
+                # Payment failed
+                result_desc = stk_callback.get('ResultDesc', 'Payment failed')
+                
+                PaymentService.process_failed_payment(
+                    order=order,
+                    reason=result_desc,
+                    provider=PaymentService.PROVIDER_MPESA
+                )
+                
+                return {
+                    'success': False,
+                    'order_id': str(order.id),
+                    'message': result_desc
+                }
+            
+        except Order.DoesNotExist:
+            raise PaymentProcessingError(
+                "Order not found",
+                details={'checkout_request_id': checkout_request_id}
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to process M-Pesa webhook: {str(e)}",
+                exc_info=True
+            )
+            raise PaymentProcessingError(
+                f"Webhook processing failed: {str(e)}",
+                details={'error': str(e)}
+            )
     
     @staticmethod
     def process_successful_payment(order: Order, payment_amount: Decimal, 

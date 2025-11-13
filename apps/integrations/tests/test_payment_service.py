@@ -282,3 +282,183 @@ class TestPaymentService:
                 # If stripe module is not installed, that's expected in test environment
                 # Just verify the error is about missing stripe module
                 assert 'stripe' in str(e).lower() or 'module' in str(e).lower()
+
+    @patch('apps.integrations.services.payment_service.WalletService')
+    @patch('apps.integrations.services.paystack_service.PaystackService.verify_transaction')
+    def test_process_paystack_webhook_charge_success(self, mock_verify, mock_wallet_service, order):
+        """Test processing Paystack charge.success webhook."""
+        # Setup
+        order.payment_ref = 'ref_test_123'
+        order.save()
+        
+        # Mock Paystack verification response
+        mock_verify.return_value = {
+            'status': 'success',
+            'amount': 10000,  # 100.00 KES in kobo
+            'reference': 'ref_test_123',
+            'id': 123456,
+            'customer': {'email': 'test@example.com'},
+            'channel': 'card',
+            'paid_at': '2025-01-01T12:00:00Z',
+            'ip_address': '192.168.1.1',
+            'metadata': {
+                'order_id': str(order.id),
+                'tenant_id': str(order.tenant_id),
+                'customer_id': str(order.customer_id)
+            }
+        }
+        
+        mock_wallet_service.process_customer_payment.return_value = {
+            'payment_transaction': Mock(id='txn_123'),
+            'fee_transaction': Mock(id='fee_123'),
+            'wallet_audit': Mock(id='audit_123'),
+            'gross_amount': Decimal('100.00'),
+            'fee_amount': Decimal('2.50'),
+            'net_amount': Decimal('97.50')
+        }
+        
+        # Webhook payload
+        payload = {
+            'event': 'charge.success',
+            'data': {
+                'reference': 'ref_test_123',
+                'amount': 10000,
+                'metadata': {
+                    'order_id': str(order.id)
+                }
+            }
+        }
+        
+        # Process webhook
+        result = PaymentService.process_payment_webhook(
+            provider=PaymentService.PROVIDER_PAYSTACK,
+            payload=payload,
+            signature='test_signature'
+        )
+        
+        # Verify result
+        assert result['success'] is True
+        assert result['order_id'] == str(order.id)
+        assert 'transaction_id' in result
+        
+        # Verify Paystack verification was called
+        mock_verify.assert_called_once_with('ref_test_123')
+        
+        # Verify wallet service was called
+        mock_wallet_service.process_customer_payment.assert_called_once()
+        
+        # Verify order was marked as paid
+        order.refresh_from_db()
+        assert order.status == 'paid'
+    
+    @patch('apps.integrations.services.paystack_service.PaystackService.verify_transaction')
+    def test_process_paystack_webhook_charge_failed(self, mock_verify, order):
+        """Test processing Paystack charge.failed webhook."""
+        # Setup
+        order.payment_ref = 'ref_test_456'
+        order.save()
+        
+        # Webhook payload
+        payload = {
+            'event': 'charge.failed',
+            'data': {
+                'reference': 'ref_test_456',
+                'gateway_response': 'Insufficient funds',
+                'metadata': {
+                    'order_id': str(order.id)
+                }
+            }
+        }
+        
+        # Process webhook
+        result = PaymentService.process_payment_webhook(
+            provider=PaymentService.PROVIDER_PAYSTACK,
+            payload=payload,
+            signature='test_signature'
+        )
+        
+        # Verify result
+        assert result['success'] is False
+        assert result['order_id'] == str(order.id)
+        assert result['message'] == 'Payment failed'
+        
+        # Verify order metadata was updated
+        order.refresh_from_db()
+        assert 'payment_failure' in order.metadata
+        assert order.metadata['payment_failure']['reason'] == 'Insufficient funds'
+    
+    def test_process_paystack_webhook_transfer_success(self):
+        """Test processing Paystack transfer.success webhook."""
+        # Webhook payload
+        payload = {
+            'event': 'transfer.success',
+            'data': {
+                'reference': 'transfer_ref_123',
+                'amount': 50000,
+                'recipient': {
+                    'name': 'John Doe'
+                }
+            }
+        }
+        
+        # Process webhook
+        result = PaymentService.process_payment_webhook(
+            provider=PaymentService.PROVIDER_PAYSTACK,
+            payload=payload,
+            signature='test_signature'
+        )
+        
+        # Verify result
+        assert result['success'] is True
+        assert result['reference'] == 'transfer_ref_123'
+        assert result['message'] == 'Transfer completed'
+    
+    def test_process_paystack_webhook_transfer_failed(self):
+        """Test processing Paystack transfer.failed webhook."""
+        # Webhook payload
+        payload = {
+            'event': 'transfer.failed',
+            'data': {
+                'reference': 'transfer_ref_456',
+                'reason': 'Invalid account number'
+            }
+        }
+        
+        # Process webhook
+        result = PaymentService.process_payment_webhook(
+            provider=PaymentService.PROVIDER_PAYSTACK,
+            payload=payload,
+            signature='test_signature'
+        )
+        
+        # Verify result
+        assert result['success'] is False
+        assert result['reference'] == 'transfer_ref_456'
+        assert result['message'] == 'Transfer failed'
+    
+    @patch('apps.integrations.services.paystack_service.PaystackService.verify_webhook_signature')
+    def test_process_paystack_webhook_invalid_signature(self, mock_verify_sig, order):
+        """Test that invalid signature is rejected."""
+        # Mock signature verification to return False
+        mock_verify_sig.return_value = False
+        
+        # Webhook payload
+        payload = {
+            'event': 'charge.success',
+            'data': {
+                'reference': 'ref_test_789',
+                'metadata': {
+                    'order_id': str(order.id)
+                }
+            }
+        }
+        
+        # Process webhook should raise error
+        with pytest.raises(PaymentProcessingError) as exc_info:
+            PaymentService.process_payment_webhook(
+                provider=PaymentService.PROVIDER_PAYSTACK,
+                payload=payload,
+                signature='invalid_signature'
+            )
+        
+        assert 'Invalid Paystack webhook signature' in str(exc_info.value)

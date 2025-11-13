@@ -11,6 +11,7 @@ Complete documentation for the Tulia AI WhatsApp Commerce Platform.
 ## 🚀 Deployment
 
 - **[Deployment Guide](DEPLOYMENT.md)** - Comprehensive deployment guide
+- **[Tenant Onboarding Deployment](TENANT_ONBOARDING_DEPLOYMENT.md)** - Onboarding feature deployment guide
 - **[Deployment Checklist](DEPLOYMENT_CHECKLIST.md)** - Step-by-step deployment checklist
 - **[Environment Variables](ENVIRONMENT_VARIABLES.md)** - Complete environment variable reference
 - **[Database Migrations](DATABASE_MIGRATIONS.md)** - Migration procedures and best practices
@@ -26,6 +27,7 @@ Complete documentation for the Tulia AI WhatsApp Commerce Platform.
 ## 🔌 API Documentation
 
 - **[API Quick Reference](api/API_QUICK_REFERENCE.md)** - Quick API reference
+- **[Tenant Onboarding API Guide](api/TENANT_ONBOARDING_API_GUIDE.md)** - Complete onboarding API guide
 - **[OpenAPI RBAC Guide](api/OPENAPI_RBAC_GUIDE.md)** - RBAC in OpenAPI documentation
 - **[Postman Guide](api/POSTMAN_GUIDE.md)** - Using Postman collection
 - **[Postman README](api/POSTMAN_README.md)** - Postman collection overview
@@ -34,6 +36,7 @@ Complete documentation for the Tulia AI WhatsApp Commerce Platform.
 
 ## 📖 Guides
 
+- **[Tenant Onboarding Guide](guides/TENANT_ONBOARDING_GUIDE.md)** - Step-by-step onboarding for tenants
 - **[Demo Data Guide](guides/DEMO_DATA_GUIDE.md)** - Loading demo data
 - **[Quick Start](guides/QUICKSTART.md)** - Getting started guide
 

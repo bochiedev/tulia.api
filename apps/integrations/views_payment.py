@@ -130,101 +130,325 @@ class PaystackWebhookView(APIView):
     Handle Paystack payment webhooks.
     
     POST /v1/webhooks/paystack
+    
+    This endpoint is public (no authentication) as it receives webhooks
+    from Paystack. Signature verification is performed within the handler.
+    
+    Supported events:
+    - charge.success: Payment completed successfully
+    - charge.failed: Payment failed
+    - transfer.success: Payout completed
+    - transfer.failed: Payout failed
     """
     authentication_classes = []
     permission_classes = []
     
     @extend_schema(
         summary="Paystack webhook handler",
-        description="Receive and process Paystack payment webhooks",
+        description="Receive and process Paystack payment webhooks with signature verification",
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'event': {'type': 'string'},
+                    'data': {'type': 'object'}
+                }
+            }
+        },
         responses={
             200: {'description': 'Webhook processed successfully'},
-            501: {'description': 'Not implemented'}
+            400: {'description': 'Invalid webhook payload or signature'},
+            500: {'description': 'Webhook processing failed'}
         }
     )
     def post(self, request):
         """Process Paystack webhook."""
-        # TODO: Implement Paystack webhook processing
-        logger.warning("Paystack webhook received but not yet implemented")
+        from apps.integrations.services.paystack_service import PaystackService
         
-        WebhookLog.objects.create(
+        # Get Paystack signature header
+        signature = request.META.get('HTTP_X_PAYSTACK_SIGNATURE', '')
+        
+        # Get raw payload for signature verification
+        raw_payload = request.body
+        
+        # Parse JSON payload
+        try:
+            payload = json.loads(raw_payload.decode('utf-8'))
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON in Paystack webhook")
+            return Response(
+                {'error': 'Invalid JSON'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        event_type = payload.get('event', 'unknown')
+        
+        # Log webhook
+        webhook_log = WebhookLog.objects.create(
             provider='paystack',
-            event='unknown',
-            payload=request.data,
-            status='not_implemented'
+            event=event_type,
+            payload=payload,
+            status='received'
         )
         
-        return Response(
-            {'message': 'Paystack webhooks not yet implemented'},
-            status=status.HTTP_501_NOT_IMPLEMENTED
-        )
+        try:
+            # Verify webhook signature
+            if not PaystackService.verify_webhook_signature(raw_payload, signature):
+                logger.warning(
+                    "Invalid Paystack webhook signature",
+                    extra={'webhook_id': str(webhook_log.id)}
+                )
+                webhook_log.status = 'error'
+                webhook_log.error_message = 'Invalid signature'
+                webhook_log.save(update_fields=['status', 'error_message'])
+                
+                return Response(
+                    {'error': 'Invalid signature'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Process webhook
+            result = PaymentService.process_payment_webhook(
+                provider=PaymentService.PROVIDER_PAYSTACK,
+                payload=payload,
+                signature=signature
+            )
+            
+            # Update webhook log
+            webhook_log.status = 'success'
+            webhook_log.response = result
+            webhook_log.save(update_fields=['status', 'response'])
+            
+            logger.info(
+                f"Paystack webhook processed successfully",
+                extra={
+                    'event_type': event_type,
+                    'webhook_id': str(webhook_log.id)
+                }
+            )
+            
+            return Response(result, status=status.HTTP_200_OK)
+            
+        except PaymentProcessingError as e:
+            # Update webhook log
+            webhook_log.status = 'error'
+            webhook_log.error_message = str(e)
+            webhook_log.save(update_fields=['status', 'error_message'])
+            
+            logger.error(
+                f"Paystack webhook processing failed: {str(e)}",
+                exc_info=True,
+                extra={'webhook_id': str(webhook_log.id)}
+            )
+            
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        except Exception as e:
+            # Update webhook log
+            webhook_log.status = 'error'
+            webhook_log.error_message = str(e)
+            webhook_log.save(update_fields=['status', 'error_message'])
+            
+            logger.error(
+                f"Unexpected error processing Paystack webhook: {str(e)}",
+                exc_info=True,
+                extra={'webhook_id': str(webhook_log.id)}
+            )
+            
+            return Response(
+                {'error': 'Internal server error'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class PesapalWebhookView(APIView):
     """
-    Handle Pesapal payment webhooks.
+    Handle Pesapal payment webhooks (IPN).
     
-    POST /v1/webhooks/pesapal
+    GET/POST /v1/webhooks/pesapal
     """
     authentication_classes = []
     permission_classes = []
     
     @extend_schema(
-        summary="Pesapal webhook handler",
-        description="Receive and process Pesapal payment webhooks",
+        summary="Pesapal IPN handler",
+        description="Receive and process Pesapal Instant Payment Notifications",
         responses={
             200: {'description': 'Webhook processed successfully'},
-            501: {'description': 'Not implemented'}
+            400: {'description': 'Invalid webhook payload'},
+            500: {'description': 'Webhook processing failed'}
         }
     )
+    def get(self, request):
+        """Process Pesapal IPN (GET method)."""
+        return self._process_ipn(request.GET.dict())
+    
     def post(self, request):
-        """Process Pesapal webhook."""
-        # TODO: Implement Pesapal webhook processing
-        logger.warning("Pesapal webhook received but not yet implemented")
-        
-        WebhookLog.objects.create(
+        """Process Pesapal IPN (POST method)."""
+        return self._process_ipn(request.data)
+    
+    def _process_ipn(self, payload):
+        """Common IPN processing logic."""
+        # Log webhook
+        webhook_log = WebhookLog.objects.create(
             provider='pesapal',
-            event='unknown',
-            payload=request.data,
-            status='not_implemented'
+            event='ipn',
+            payload=payload,
+            status='received'
         )
         
-        return Response(
-            {'message': 'Pesapal webhooks not yet implemented'},
-            status=status.HTTP_501_NOT_IMPLEMENTED
-        )
+        try:
+            # Process webhook
+            result = PaymentService.process_payment_webhook(
+                provider=PaymentService.PROVIDER_PESAPAL,
+                payload=payload,
+                signature=None  # Pesapal doesn't use signature verification
+            )
+            
+            # Update webhook log
+            webhook_log.status = 'success'
+            webhook_log.response = result
+            webhook_log.save(update_fields=['status', 'response'])
+            
+            logger.info(
+                f"Pesapal IPN processed successfully",
+                extra={'webhook_id': str(webhook_log.id)}
+            )
+            
+            return Response(result, status=status.HTTP_200_OK)
+            
+        except PaymentProcessingError as e:
+            # Update webhook log
+            webhook_log.status = 'error'
+            webhook_log.error_message = str(e)
+            webhook_log.save(update_fields=['status', 'error_message'])
+            
+            logger.error(
+                f"Pesapal IPN processing failed: {str(e)}",
+                exc_info=True,
+                extra={'webhook_id': str(webhook_log.id)}
+            )
+            
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        except Exception as e:
+            # Update webhook log
+            webhook_log.status = 'error'
+            webhook_log.error_message = str(e)
+            webhook_log.save(update_fields=['status', 'error_message'])
+            
+            logger.error(
+                f"Unexpected error processing Pesapal IPN: {str(e)}",
+                exc_info=True,
+                extra={'webhook_id': str(webhook_log.id)}
+            )
+            
+            return Response(
+                {'error': 'Internal server error'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class MpesaWebhookView(APIView):
     """
-    Handle M-Pesa payment webhooks.
+    Handle M-Pesa payment webhooks (STK Push callback).
     
-    POST /v1/webhooks/mpesa
+    POST /v1/webhooks/mpesa/callback
     """
     authentication_classes = []
     permission_classes = []
     
     @extend_schema(
-        summary="M-Pesa webhook handler",
-        description="Receive and process M-Pesa payment webhooks",
+        summary="M-Pesa STK Push callback handler",
+        description="Receive and process M-Pesa STK Push payment callbacks",
         responses={
             200: {'description': 'Webhook processed successfully'},
-            501: {'description': 'Not implemented'}
+            400: {'description': 'Invalid webhook payload'},
+            500: {'description': 'Webhook processing failed'}
         }
     )
     def post(self, request):
-        """Process M-Pesa webhook."""
-        # TODO: Implement M-Pesa webhook processing
-        logger.warning("M-Pesa webhook received but not yet implemented")
+        """Process M-Pesa STK Push callback."""
+        # Get raw payload
+        try:
+            payload = json.loads(request.body.decode('utf-8'))
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON in M-Pesa webhook")
+            return Response(
+                {'error': 'Invalid JSON'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        WebhookLog.objects.create(
+        # Log webhook
+        webhook_log = WebhookLog.objects.create(
             provider='mpesa',
-            event='unknown',
-            payload=request.data,
-            status='not_implemented'
+            event='stk_callback',
+            payload=payload,
+            status='received'
         )
         
-        return Response(
-            {'message': 'M-Pesa webhooks not yet implemented'},
-            status=status.HTTP_501_NOT_IMPLEMENTED
-        )
+        try:
+            # Process webhook
+            result = PaymentService.process_payment_webhook(
+                provider=PaymentService.PROVIDER_MPESA,
+                payload=payload,
+                signature=None  # M-Pesa doesn't use signature verification
+            )
+            
+            # Update webhook log
+            webhook_log.status = 'success'
+            webhook_log.response = result
+            webhook_log.save(update_fields=['status', 'response'])
+            
+            logger.info(
+                f"M-Pesa webhook processed successfully",
+                extra={'webhook_id': str(webhook_log.id)}
+            )
+            
+            # M-Pesa expects specific response format
+            return Response({
+                'ResultCode': 0,
+                'ResultDesc': 'Success'
+            }, status=status.HTTP_200_OK)
+            
+        except PaymentProcessingError as e:
+            # Update webhook log
+            webhook_log.status = 'error'
+            webhook_log.error_message = str(e)
+            webhook_log.save(update_fields=['status', 'error_message'])
+            
+            logger.error(
+                f"M-Pesa webhook processing failed: {str(e)}",
+                exc_info=True,
+                extra={'webhook_id': str(webhook_log.id)}
+            )
+            
+            # Still return success to M-Pesa to avoid retries
+            return Response({
+                'ResultCode': 1,
+                'ResultDesc': str(e)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            # Update webhook log
+            webhook_log.status = 'error'
+            webhook_log.error_message = str(e)
+            webhook_log.save(update_fields=['status', 'error_message'])
+            
+            logger.error(
+                f"Unexpected error processing M-Pesa webhook: {str(e)}",
+                exc_info=True,
+                extra={'webhook_id': str(webhook_log.id)}
+            )
+            
+            # Still return success to M-Pesa to avoid retries
+            return Response({
+                'ResultCode': 1,
+                'ResultDesc': 'Internal error'
+            }, status=status.HTTP_200_OK)

@@ -2,30 +2,41 @@
 Django admin configuration for RBAC app.
 """
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import (
+    User,
     Permission,
     Role,
     RolePermission,
     TenantUser,
     UserPermission,
     PasswordResetToken,
-    User,
 )
 
 
 @admin.register(User)
-class UserAdmin(admin.ModelAdmin):
-    """Admin interface for User model."""
-    list_display = ['email', 'first_name', 'last_name', 'is_active', 'email_verified', 'last_login_at', 'created_at']
-    list_filter = ['is_active', 'email_verified', 'is_superuser', 'created_at']
+class CustomUserAdmin(BaseUserAdmin):
+    """
+    Custom admin for our User model.
+    
+    Adapted to work with email-based authentication (no username field).
+    """
+    # Fields to display in the user list
+    list_display = ['email', 'first_name', 'last_name', 'is_active', 'is_superuser', 'email_verified', 'created_at']
+    list_filter = ['is_active', 'is_superuser', 'email_verified', 'created_at']
     search_fields = ['email', 'first_name', 'last_name']
-    readonly_fields = ['created_at', 'updated_at', 'last_login_at', 'email_verification_sent_at']
+    ordering = ['-created_at']
+    
+    # Fieldsets for the user detail/edit page
     fieldsets = (
-        ('Basic Information', {
-            'fields': ('email', 'first_name', 'last_name', 'phone')
+        (None, {
+            'fields': ('email', 'password_hash')
         }),
-        ('Authentication', {
-            'fields': ('password_hash', 'is_active', 'is_superuser')
+        ('Personal Info', {
+            'fields': ('first_name', 'last_name', 'phone')
+        }),
+        ('Permissions', {
+            'fields': ('is_active', 'is_superuser')
         }),
         ('Email Verification', {
             'fields': ('email_verified', 'email_verification_token', 'email_verification_sent_at')
@@ -37,6 +48,20 @@ class UserAdmin(admin.ModelAdmin):
             'fields': ('last_login_at', 'created_at', 'updated_at')
         }),
     )
+    
+    # Fieldsets for adding a new user
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('email', 'password_hash', 'is_active', 'is_superuser'),
+        }),
+    )
+    
+    # Read-only fields
+    readonly_fields = ['created_at', 'updated_at', 'last_login_at']
+    
+    # Use email as the unique identifier
+    filter_horizontal = ()
 
 
 @admin.register(PasswordResetToken)

@@ -126,6 +126,14 @@ app.conf.beat_schedule = {
         # Note: For production, use crontab schedule to run at specific time:
         # 'schedule': crontab(hour=10, minute=0),
     },
+    
+    # Send onboarding reminders daily
+    'send-onboarding-reminders': {
+        'task': 'apps.tenants.tasks.send_onboarding_reminders',
+        'schedule': 86400.0,  # Every 24 hours (daily)
+        # Note: For production, use crontab schedule to run at specific time:
+        # 'schedule': crontab(hour=9, minute=0),  # Run at 9 AM UTC daily
+    },
 }
 
 app.conf.timezone = 'UTC'

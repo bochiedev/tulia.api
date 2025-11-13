@@ -46,7 +46,7 @@ class OnboardingStatusView(APIView):
             200: OnboardingStatusSerializer,
             403: OpenApiResponse(description="Missing required scope"),
         },
-        tags=['Onboarding']
+        tags=['Settings - Onboarding']
     )
     def get(self, request):
         """Get onboarding status for current tenant."""
@@ -85,7 +85,7 @@ class OnboardingCompleteView(APIView):
             400: OpenApiResponse(description="Invalid step name"),
             403: OpenApiResponse(description="Missing required scope"),
         },
-        tags=['Onboarding']
+        tags=['Settings - Onboarding']
     )
     def post(self, request):
         """Mark onboarding step as complete."""

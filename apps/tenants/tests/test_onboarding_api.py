@@ -143,15 +143,21 @@ class TestOnboardingAPI(TestCase):
     def test_get_onboarding_status_without_scope(self):
         """Test GET /v1/settings/onboarding requires proper scope."""
         # Create membership without required scopes
-        TenantUser.objects.create(
+        membership = TenantUser.objects.create(
             tenant=self.tenant,
             user=self.user,
-            is_active=True
+            is_active=True,
+            invite_status='accepted'
         )
+        
+        # Authenticate user
+        from apps.rbac.services import AuthService
+        jwt_token = AuthService.generate_jwt(self.user)
         
         # Make request
         response = self.client.get(
             '/v1/settings/onboarding',
+            HTTP_AUTHORIZATION=f'Bearer {jwt_token}',
             HTTP_X_TENANT_ID=str(self.tenant.id)
         )
         
@@ -163,11 +169,17 @@ class TestOnboardingAPI(TestCase):
         # Create membership with integrations:manage
         self._create_membership_with_scopes(['integrations:manage'])
         
+        # Authenticate user
+        from apps.rbac.services import AuthService
+        jwt_token = AuthService.generate_jwt(self.user)
+        
         # Mark step complete
         response = self.client.post(
             '/v1/settings/onboarding/complete',
             {'step': 'twilio_configured'},
             format='json',
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {jwt_token}',
             HTTP_X_TENANT_ID=str(self.tenant.id)
         )
         
@@ -185,12 +197,18 @@ class TestOnboardingAPI(TestCase):
         # Create membership with integrations:manage
         self._create_membership_with_scopes(['integrations:manage'])
         
+        # Authenticate user
+        from apps.rbac.services import AuthService
+        jwt_token = AuthService.generate_jwt(self.user)
+        
         # Mark all required steps complete
         for step in OnboardingService.REQUIRED_STEPS:
             response = self.client.post(
                 '/v1/settings/onboarding/complete',
                 {'step': step},
                 format='json',
+                content_type='application/json',
+                HTTP_AUTHORIZATION=f'Bearer {jwt_token}',
                 HTTP_X_TENANT_ID=str(self.tenant.id)
             )
             self.assertEqual(response.status_code, http_status.HTTP_200_OK)
@@ -205,11 +223,17 @@ class TestOnboardingAPI(TestCase):
         # Create membership with integrations:manage
         self._create_membership_with_scopes(['integrations:manage'])
         
+        # Authenticate user
+        from apps.rbac.services import AuthService
+        jwt_token = AuthService.generate_jwt(self.user)
+        
         # Mark optional step complete
         response = self.client.post(
             '/v1/settings/onboarding/complete',
             {'step': 'woocommerce_configured'},
             format='json',
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {jwt_token}',
             HTTP_X_TENANT_ID=str(self.tenant.id)
         )
         
@@ -225,11 +249,17 @@ class TestOnboardingAPI(TestCase):
         # Create membership with integrations:manage
         self._create_membership_with_scopes(['integrations:manage'])
         
+        # Authenticate user
+        from apps.rbac.services import AuthService
+        jwt_token = AuthService.generate_jwt(self.user)
+        
         # Try to mark invalid step
         response = self.client.post(
             '/v1/settings/onboarding/complete',
             {'step': 'invalid_step'},
             format='json',
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {jwt_token}',
             HTTP_X_TENANT_ID=str(self.tenant.id)
         )
         
@@ -243,14 +273,21 @@ class TestOnboardingAPI(TestCase):
         TenantUser.objects.create(
             tenant=self.tenant,
             user=self.user,
-            is_active=True
+            is_active=True,
+            invite_status='accepted'
         )
+        
+        # Authenticate user
+        from apps.rbac.services import AuthService
+        jwt_token = AuthService.generate_jwt(self.user)
         
         # Try to mark step complete
         response = self.client.post(
             '/v1/settings/onboarding/complete',
             {'step': 'twilio_configured'},
             format='json',
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {jwt_token}',
             HTTP_X_TENANT_ID=str(self.tenant.id)
         )
         
@@ -272,40 +309,53 @@ class TestOnboardingAPI(TestCase):
         settings2 = TenantSettings.objects.get(tenant=tenant2)
         settings2.initialize_onboarding_status()
         
-        # Create membership for tenant1
-        self._create_membership_with_scopes(['integrations:manage'])
+        # Delete any existing membership for this user in tenant1
+        TenantUser.objects.filter(tenant=self.tenant, user=self.user).delete()
+        
+        # Create membership for tenant1 with both view and manage scopes
+        self._create_membership_with_scopes(['integrations:view', 'integrations:manage'])
+        
+        # Authenticate user
+        from apps.rbac.services import AuthService
+        jwt_token = AuthService.generate_jwt(self.user)
         
         # Mark step complete for tenant1
         self.client.post(
             '/v1/settings/onboarding/complete',
             {'step': 'twilio_configured'},
             format='json',
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Bearer {jwt_token}',
             HTTP_X_TENANT_ID=str(self.tenant.id)
         )
         
         # Check tenant1 status
         response1 = self.client.get(
             '/v1/settings/onboarding',
+            HTTP_AUTHORIZATION=f'Bearer {jwt_token}',
             HTTP_X_TENANT_ID=str(self.tenant.id)
         )
+        self.assertEqual(response1.status_code, http_status.HTTP_200_OK)
         self.assertEqual(response1.data['completion_percentage'], 33)
         
         # Create membership for tenant2
-        TenantUser.objects.create(
+        membership2 = TenantUser.objects.create(
             tenant=tenant2,
             user=self.user,
-            is_active=True
+            is_active=True,
+            invite_status='accepted'
         )
-        membership2 = TenantUser.objects.get(tenant=tenant2, user=self.user)
         
         # Create role for tenant2
         role2 = Role.objects.create(tenant=tenant2, name='Viewer')
         RolePermission.objects.create(role=role2, permission=self.perm_integrations_view)
-        membership2.user_roles.create(role=role2)
+        TenantUserRole.objects.create(tenant_user=membership2, role=role2)
         
         # Check tenant2 status (should be 0%)
         response2 = self.client.get(
             '/v1/settings/onboarding',
+            HTTP_AUTHORIZATION=f'Bearer {jwt_token}',
             HTTP_X_TENANT_ID=str(tenant2.id)
         )
+        self.assertEqual(response2.status_code, http_status.HTTP_200_OK)
         self.assertEqual(response2.data['completion_percentage'], 0)

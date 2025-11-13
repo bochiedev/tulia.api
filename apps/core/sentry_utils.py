@@ -69,7 +69,8 @@ def set_user_context(user, tenant_user=None):
     
     if tenant_user:
         user_data["tenant_id"] = str(tenant_user.tenant_id)
-        user_data["roles"] = [role.name for role in tenant_user.roles.all()]
+        # Access roles through the user_roles relationship (TenantUserRole through model)
+        user_data["roles"] = [ur.role.name for ur in tenant_user.user_roles.all()]
         user_data["invite_status"] = tenant_user.invite_status
     
     sentry_sdk.set_user(user_data)

@@ -18,7 +18,11 @@ from apps.core.fields import EncryptedCharField
 
 
 class UserManager(models.Manager):
-    """Manager for User queries."""
+    """
+    Manager for User queries.
+    
+    Compatible with Django's authentication system and admin interface.
+    """
     
     def active(self):
         """Return only active users."""
@@ -28,18 +32,60 @@ class UserManager(models.Manager):
         """Find user by email."""
         return self.filter(email=email).first()
     
-    def create_user(self, email, password, **extra_fields):
-        """Create a new user with hashed password."""
+    def create_user(self, email, password=None, **extra_fields):
+        """
+        Create a new user with hashed password.
+        
+        This method is compatible with Django's authentication system.
+        """
+        if not email:
+            raise ValueError('Email address is required')
+        
+        email = self.normalize_email(email)
         extra_fields.setdefault('is_active', True)
         extra_fields.setdefault('is_superuser', False)
         
-        user = self.model(
-            email=email,
-            password_hash=make_password(password),
-            **extra_fields
-        )
+        user = self.model(email=email, **extra_fields)
+        if password:
+            user.set_password(password)
         user.save(using=self._db)
         return user
+    
+    def create_superuser(self, email, password=None, **extra_fields):
+        """
+        Create a superuser with admin access.
+        
+        This method is required for Django's createsuperuser command.
+        """
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+        extra_fields.setdefault('email_verified', True)
+        
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser must have is_superuser=True')
+        
+        return self.create_user(email, password, **extra_fields)
+    
+    def normalize_email(cls, email):
+        """
+        Normalize the email address by lowercasing the domain part.
+        """
+        email = email or ''
+        try:
+            email_name, domain_part = email.strip().rsplit('@', 1)
+        except ValueError:
+            pass
+        else:
+            email = email_name + '@' + domain_part.lower()
+        return email
+    
+    def get_by_natural_key(self, email):
+        """
+        Get user by natural key (email).
+        
+        This method is required for Django's authentication system.
+        """
+        return self.get(**{self.model.USERNAME_FIELD: email})
 
 
 class User(BaseModel):
@@ -48,6 +94,8 @@ class User(BaseModel):
     
     A single person can work across multiple tenants with different roles.
     Authentication happens at the User level, authorization at the TenantUser level.
+    
+    This is the AUTH_USER_MODEL for the entire application, including Django admin.
     """
     
     email = models.EmailField(
@@ -63,7 +111,8 @@ class User(BaseModel):
     )
     password_hash = models.CharField(
         max_length=255,
-        help_text="Hashed password"
+        help_text="Hashed password",
+        db_column='password_hash'
     )
     
     # Status
@@ -76,6 +125,10 @@ class User(BaseModel):
         default=False,
         help_text="Platform administrator (use sparingly in production)"
     )
+    
+    # Django admin compatibility
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = []  # Email is already the USERNAME_FIELD
     
     # Two-Factor Authentication
     two_factor_enabled = models.BooleanField(
@@ -143,6 +196,22 @@ class User(BaseModel):
     def __str__(self):
         return self.email
     
+    @property
+    def password(self):
+        """
+        Alias for password_hash to maintain Django admin compatibility.
+        Django admin expects a 'password' field.
+        """
+        return self.password_hash
+    
+    @password.setter
+    def password(self, value):
+        """
+        Set password_hash when password is assigned.
+        Allows Django admin to work with password field.
+        """
+        self.password_hash = value
+    
     def check_password(self, raw_password):
         """Check if provided password matches stored hash."""
         return check_password(raw_password, self.password_hash)
@@ -178,6 +247,63 @@ class User(BaseModel):
         This is required for Django authentication compatibility.
         """
         return False
+    
+    @property
+    def is_staff(self):
+        """
+        Return True if user is a superuser.
+        This is required for Django admin access.
+        """
+        return self.is_superuser
+    
+    def has_perm(self, perm, obj=None):
+        """
+        Check if user has a specific permission.
+        Superusers have all permissions (required for Django admin).
+        """
+        return self.is_superuser
+    
+    def has_perms(self, perm_list, obj=None):
+        """
+        Check if user has all permissions in the list.
+        Superusers have all permissions (required for Django admin).
+        """
+        return self.is_superuser
+    
+    def has_module_perms(self, app_label):
+        """
+        Check if user has permissions to view the app in admin.
+        Superusers have access to all modules (required for Django admin).
+        """
+        return self.is_superuser
+    
+    def get_user_permissions(self, obj=None):
+        """
+        Return empty set - permissions are handled via RBAC for tenants.
+        Django admin uses is_superuser check instead.
+        """
+        return set()
+    
+    def get_group_permissions(self, obj=None):
+        """
+        Return empty set - we don't use Django's group permissions.
+        """
+        return set()
+    
+    def get_all_permissions(self, obj=None):
+        """
+        Return empty set - permissions are handled via RBAC for tenants.
+        Django admin uses is_superuser check instead.
+        """
+        return set()
+    
+    def natural_key(self):
+        """
+        Return the natural key for this user (email).
+        
+        This method is required for Django's serialization system.
+        """
+        return (self.email,)
 
 
 class TenantUserManager(models.Manager):
@@ -479,6 +605,10 @@ class RolePermissionManager(models.Manager):
         """Get all roles that have a permission."""
         return self.filter(permission=permission)
     
+    def for_tenant(self, tenant):
+        """Get all role permissions for a specific tenant."""
+        return self.filter(role__tenant=tenant)
+    
     def grant_permission(self, role, permission):
         """Grant permission to role (idempotent)."""
         role_permission, created = self.get_or_create(
@@ -577,6 +707,21 @@ class TenantUserRole(BaseModel):
     
     def __str__(self):
         return f"{self.tenant_user.user.email} -> {self.role.name}"
+    
+    def clean(self):
+        """Validate that tenant_user and role belong to same tenant."""
+        super().clean()
+        if self.tenant_user_id and self.role_id:
+            if self.tenant_user.tenant_id != self.role.tenant_id:
+                from django.core.exceptions import ValidationError
+                raise ValidationError(
+                    "TenantUser and Role must belong to the same tenant"
+                )
+    
+    def save(self, *args, **kwargs):
+        """Validate before saving."""
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class UserPermissionManager(models.Manager):
@@ -585,6 +730,10 @@ class UserPermissionManager(models.Manager):
     def for_tenant_user(self, tenant_user):
         """Get all permission overrides for a tenant user."""
         return self.filter(tenant_user=tenant_user)
+    
+    def for_tenant(self, tenant):
+        """Get all user permission overrides for a specific tenant."""
+        return self.filter(tenant_user__tenant=tenant)
     
     def grants(self, tenant_user):
         """Get granted permissions for a tenant user."""

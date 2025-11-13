@@ -18,10 +18,10 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 from django.conf import settings as django_settings
+from django.core.exceptions import ValidationError
 
 from apps.tenants.models import Tenant, TenantSettings
 from apps.rbac.models import User, AuditLog
-from apps.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -1218,3 +1218,357 @@ class SettingsService:
                 return True
         
         return False
+
+    
+    # ========== PAYMENT PROVIDER MANAGEMENT ==========
+    
+    @classmethod
+    @transaction.atomic
+    def configure_mpesa(
+        cls,
+        tenant: Tenant,
+        shortcode: str,
+        consumer_key: str,
+        consumer_secret: str,
+        passkey: str,
+        initiator_name: str = None,
+        initiator_password: str = None,
+        b2c_shortcode: str = None,
+        user: Optional[User] = None
+    ) -> TenantSettings:
+        """
+        Configure M-Pesa credentials for tenant.
+        
+        Args:
+            tenant: Tenant instance
+            shortcode: M-Pesa business shortcode
+            consumer_key: M-Pesa consumer key
+            consumer_secret: M-Pesa consumer secret
+            passkey: M-Pesa passkey for STK Push
+            initiator_name: Initiator name for B2C/B2B
+            initiator_password: Initiator password
+            b2c_shortcode: B2C shortcode (if different from main)
+            user: User performing the update
+            
+        Returns:
+            TenantSettings instance
+        """
+        settings = cls.get_or_create_settings(tenant)
+        
+        # Store in metadata (encrypted via EncryptedTextField if needed)
+        if not settings.metadata:
+            settings.metadata = {}
+        
+        settings.metadata['mpesa_shortcode'] = shortcode
+        settings.metadata['mpesa_consumer_key'] = consumer_key
+        settings.metadata['mpesa_consumer_secret'] = consumer_secret
+        settings.metadata['mpesa_passkey'] = passkey
+        
+        if initiator_name:
+            settings.metadata['mpesa_initiator_name'] = initiator_name
+        if initiator_password:
+            settings.metadata['mpesa_initiator_password'] = initiator_password
+        if b2c_shortcode:
+            settings.metadata['mpesa_b2c_shortcode'] = b2c_shortcode
+        
+        settings.save(update_fields=['metadata', 'updated_at'])
+        
+        # Update integration status
+        settings.update_integration_status('mpesa', {
+            'configured': True,
+            'last_validated_at': timezone.now().isoformat(),
+            'shortcode': shortcode
+        })
+        
+        # Log to audit trail
+        if user:
+            AuditLog.log_action(
+                action='mpesa_credentials_configured',
+                user=user,
+                tenant=tenant,
+                target_type='TenantSettings',
+                target_id=settings.id,
+                metadata={'shortcode': shortcode}
+            )
+        
+        logger.info(
+            f"M-Pesa credentials configured",
+            extra={'tenant_id': str(tenant.id), 'shortcode': shortcode}
+        )
+        
+        return settings
+    
+    @classmethod
+    @transaction.atomic
+    def configure_paystack(
+        cls,
+        tenant: Tenant,
+        public_key: str,
+        secret_key: str,
+        user: Optional[User] = None
+    ) -> TenantSettings:
+        """
+        Configure Paystack credentials for tenant.
+        
+        Args:
+            tenant: Tenant instance
+            public_key: Paystack public key
+            secret_key: Paystack secret key
+            user: User performing the update
+            
+        Returns:
+            TenantSettings instance
+        """
+        # Validate credentials by making a test API call
+        try:
+            import requests
+            
+            response = requests.get(
+                'https://api.paystack.co/bank',
+                headers={
+                    'Authorization': f'Bearer {secret_key}',
+                    'Content-Type': 'application/json'
+                },
+                params={'country': 'kenya'},
+                timeout=10
+            )
+            response.raise_for_status()
+            
+            logger.info(
+                f"Paystack credentials validated",
+                extra={'tenant_id': str(tenant.id)}
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Paystack credential validation failed",
+                extra={'tenant_id': str(tenant.id)},
+                exc_info=True
+            )
+            raise CredentialValidationError(
+                f"Paystack credentials are invalid: {str(e)}"
+            ) from e
+        
+        settings = cls.get_or_create_settings(tenant)
+        
+        # Store in metadata
+        if not settings.metadata:
+            settings.metadata = {}
+        
+        settings.metadata['paystack_public_key'] = public_key
+        settings.metadata['paystack_secret_key'] = secret_key
+        
+        settings.save(update_fields=['metadata', 'updated_at'])
+        
+        # Update integration status
+        settings.update_integration_status('paystack', {
+            'configured': True,
+            'last_validated_at': timezone.now().isoformat()
+        })
+        
+        # Log to audit trail
+        if user:
+            AuditLog.log_action(
+                action='paystack_credentials_configured',
+                user=user,
+                tenant=tenant,
+                target_type='TenantSettings',
+                target_id=settings.id,
+                metadata={}
+            )
+        
+        logger.info(
+            f"Paystack credentials configured",
+            extra={'tenant_id': str(tenant.id)}
+        )
+        
+        return settings
+    
+    @classmethod
+    @transaction.atomic
+    def configure_pesapal(
+        cls,
+        tenant: Tenant,
+        consumer_key: str,
+        consumer_secret: str,
+        ipn_id: str = None,
+        user: Optional[User] = None
+    ) -> TenantSettings:
+        """
+        Configure Pesapal credentials for tenant.
+        
+        Args:
+            tenant: Tenant instance
+            consumer_key: Pesapal consumer key
+            consumer_secret: Pesapal consumer secret
+            ipn_id: IPN ID (optional, will be registered if not provided)
+            user: User performing the update
+            
+        Returns:
+            TenantSettings instance
+        """
+        settings = cls.get_or_create_settings(tenant)
+        
+        # Store in metadata
+        if not settings.metadata:
+            settings.metadata = {}
+        
+        settings.metadata['pesapal_consumer_key'] = consumer_key
+        settings.metadata['pesapal_consumer_secret'] = consumer_secret
+        
+        if ipn_id:
+            settings.metadata['pesapal_ipn_id'] = ipn_id
+        
+        settings.save(update_fields=['metadata', 'updated_at'])
+        
+        # Update integration status
+        settings.update_integration_status('pesapal', {
+            'configured': True,
+            'last_validated_at': timezone.now().isoformat()
+        })
+        
+        # Log to audit trail
+        if user:
+            AuditLog.log_action(
+                action='pesapal_credentials_configured',
+                user=user,
+                tenant=tenant,
+                target_type='TenantSettings',
+                target_id=settings.id,
+                metadata={}
+            )
+        
+        logger.info(
+            f"Pesapal credentials configured",
+            extra={'tenant_id': str(tenant.id)}
+        )
+        
+        return settings
+    
+    @classmethod
+    @transaction.atomic
+    def configure_payout_method(
+        cls,
+        tenant: Tenant,
+        method_type: str,
+        method_details: Dict,
+        user: Optional[User] = None
+    ) -> TenantSettings:
+        """
+        Configure tenant payout method for withdrawals.
+        
+        Args:
+            tenant: Tenant instance
+            method_type: 'mpesa', 'bank_transfer', 'paystack', 'till'
+            method_details: Method-specific details
+                For M-Pesa: {'phone_number': '254712345678'}
+                For Bank: {'account_number': '...', 'bank_code': '...', 'account_name': '...'}
+                For Till: {'till_number': '...'}
+            user: User performing the update
+            
+        Returns:
+            TenantSettings instance
+        """
+        settings = cls.get_or_create_settings(tenant)
+        
+        # Validate method type
+        valid_types = ['mpesa', 'bank_transfer', 'paystack', 'till']
+        if method_type not in valid_types:
+            raise SettingsServiceError(
+                f"Invalid payout method type: {method_type}. Must be one of {valid_types}"
+            )
+        
+        # Store payout method (encrypted)
+        settings.payout_method = method_type
+        
+        # Encrypt and store details
+        import json
+        settings.payout_details = json.dumps(method_details)
+        
+        settings.save(update_fields=['payout_method', 'payout_details', 'updated_at'])
+        
+        # Log to audit trail
+        if user:
+            # Don't log sensitive details
+            safe_metadata = {'method_type': method_type}
+            if method_type == 'mpesa' and 'phone_number' in method_details:
+                safe_metadata['phone_last4'] = method_details['phone_number'][-4:]
+            elif method_type == 'bank_transfer' and 'account_number' in method_details:
+                safe_metadata['account_last4'] = method_details['account_number'][-4:]
+            
+            AuditLog.log_action(
+                action='payout_method_configured',
+                user=user,
+                tenant=tenant,
+                target_type='TenantSettings',
+                target_id=settings.id,
+                metadata=safe_metadata
+            )
+        
+        logger.info(
+            f"Payout method configured",
+            extra={'tenant_id': str(tenant.id), 'method_type': method_type}
+        )
+        
+        return settings
+    
+    @staticmethod
+    def get_payout_method(tenant: Tenant) -> Optional[Dict]:
+        """
+        Get tenant's configured payout method.
+        
+        Args:
+            tenant: Tenant instance
+            
+        Returns:
+            dict: {'method_type': str, 'details': dict} or None
+        """
+        settings = getattr(tenant, 'settings', None)
+        if not settings or not settings.payout_method:
+            return None
+        
+        import json
+        try:
+            details = json.loads(settings.payout_details) if settings.payout_details else {}
+        except json.JSONDecodeError:
+            details = {}
+        
+        return {
+            'method_type': settings.payout_method,
+            'details': details
+        }
+    
+    @staticmethod
+    def get_configured_payment_providers(tenant: Tenant) -> List[str]:
+        """
+        Get list of configured payment providers for tenant.
+        
+        Args:
+            tenant: Tenant instance
+            
+        Returns:
+            list: Provider names (mpesa, paystack, pesapal, stripe)
+        """
+        settings = getattr(tenant, 'settings', None)
+        if not settings:
+            return []
+        
+        providers = []
+        
+        # Check M-Pesa
+        if settings.metadata.get('mpesa_shortcode'):
+            providers.append('mpesa')
+        
+        # Check Paystack
+        if settings.metadata.get('paystack_public_key'):
+            providers.append('paystack')
+        
+        # Check Pesapal
+        if settings.metadata.get('pesapal_consumer_key'):
+            providers.append('pesapal')
+        
+        # Check Stripe
+        if settings.stripe_customer_id:
+            providers.append('stripe')
+        
+        return providers

@@ -103,7 +103,20 @@ class ConsentEventSerializer(serializers.ModelSerializer):
             'changed_by_email',
             'created_at',
         ]
-        read_only_fields = '__all__'
+        read_only_fields = [
+            'id',
+            'customer',
+            'consent_type',
+            'consent_type_display',
+            'previous_value',
+            'new_value',
+            'source',
+            'source_display',
+            'reason',
+            'changed_by',
+            'changed_by_email',
+            'created_at',
+        ]
 
 
 class CustomerPreferencesWithHistorySerializer(CustomerPreferencesSerializer):

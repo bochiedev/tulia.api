@@ -294,20 +294,56 @@ Queue configuration:
 ## Application Settings
 
 ### FRONTEND_URL
-- **Required**: No
+- **Required**: Yes (for tenant onboarding)
 - **Type**: String
 - **Default**: `http://localhost:3000`
-- **Description**: Frontend application URL for CORS and email links
+- **Description**: Frontend application URL for CORS and email links (verification, password reset)
 - **Example**: `https://app.yourdomain.com`
 - **Production**: Must be HTTPS URL
+- **Note**: Used to generate links in verification and password reset emails
 
 ### DEFAULT_TRIAL_DAYS
 - **Required**: No
 - **Type**: Integer
 - **Default**: `14`
-- **Description**: Default free trial duration in days
+- **Description**: Default free trial duration in days for new tenant registrations
 - **Example**: `14`, `30`, `7`
 - **Range**: `1` to `365`
+
+### JWT_SECRET_KEY
+- **Required**: No
+- **Type**: String
+- **Default**: Uses `SECRET_KEY` if not set
+- **Description**: Secret key for JWT token signing (tenant onboarding authentication)
+- **Example**: Leave empty to use Django's SECRET_KEY
+- **Production**: Recommended to use same as SECRET_KEY for simplicity
+- **Note**: If set, must be kept secret and never changed (invalidates all tokens)
+
+### JWT_ALGORITHM
+- **Required**: No
+- **Type**: String
+- **Default**: `HS256`
+- **Description**: Algorithm for JWT token signing
+- **Values**: `HS256`, `HS384`, `HS512`
+- **Recommended**: `HS256` (HMAC with SHA-256)
+
+### JWT_EXPIRATION_HOURS
+- **Required**: No
+- **Type**: Integer
+- **Default**: `24`
+- **Description**: JWT access token expiration time in hours
+- **Example**: `24` (1 day), `1` (1 hour), `168` (7 days)
+- **Range**: `1` to `720` (30 days)
+- **Recommended**: `24` for good balance of security and UX
+
+### JWT_REFRESH_EXPIRATION_DAYS
+- **Required**: No
+- **Type**: Integer
+- **Default**: `7`
+- **Description**: JWT refresh token expiration time in days
+- **Example**: `7`, `14`, `30`
+- **Range**: `1` to `90`
+- **Recommended**: `7` for good balance of security and UX
 
 ### CORS_ALLOWED_ORIGINS
 - **Required**: No (if CORS_ALLOW_ALL_ORIGINS is False)
@@ -387,6 +423,16 @@ EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 FRONTEND_URL=http://localhost:3000
 
 DEFAULT_TRIAL_DAYS=14
+
+# JWT Authentication (Tenant Onboarding)
+JWT_SECRET_KEY=
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_HOURS=24
+JWT_REFRESH_EXPIRATION_DAYS=7
+
+# Stripe (Optional - for payment methods)
+STRIPE_SECRET_KEY=sk_test_your_key_here
+STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
 ```
 
 ### Staging (.env)
@@ -427,6 +473,16 @@ DEFAULT_FROM_EMAIL=noreply-staging@yourdomain.com
 FRONTEND_URL=https://staging-app.yourdomain.com
 
 DEFAULT_TRIAL_DAYS=14
+
+# JWT Authentication
+JWT_SECRET_KEY=
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_HOURS=24
+JWT_REFRESH_EXPIRATION_DAYS=7
+
+# Stripe
+STRIPE_SECRET_KEY=sk_test_your_key_here
+STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
 
 CORS_ALLOWED_ORIGINS=https://staging-app.yourdomain.com
 ```
@@ -469,6 +525,16 @@ DEFAULT_FROM_EMAIL=noreply@yourdomain.com
 FRONTEND_URL=https://app.yourdomain.com
 
 DEFAULT_TRIAL_DAYS=14
+
+# JWT Authentication
+JWT_SECRET_KEY=
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_HOURS=24
+JWT_REFRESH_EXPIRATION_DAYS=7
+
+# Stripe
+STRIPE_SECRET_KEY=sk_live_your_key_here
+STRIPE_PUBLISHABLE_KEY=pk_live_your_key_here
 
 CORS_ALLOWED_ORIGINS=https://app.yourdomain.com,https://admin.yourdomain.com
 ```

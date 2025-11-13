@@ -143,6 +143,17 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Custom User Model
+# Use our custom User model from apps.rbac for authentication
+# This model supports multi-tenant access and is compatible with Django admin
+AUTH_USER_MODEL = 'rbac.User'
+
+# Authentication Backends
+# Use our custom email-based authentication backend
+AUTHENTICATION_BACKENDS = [
+    'apps.rbac.backends.EmailAuthBackend',
+]
+
 # REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
@@ -318,6 +329,9 @@ curl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve
     'SECURITY': [
         {
             'TenantAuth': []
+        },
+        {
+            'JWTAuth': []
         }
     ],
     'APPEND_COMPONENTS': {
@@ -327,23 +341,50 @@ curl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve
                 'in': 'header',
                 'name': 'X-TENANT-ID',
                 'description': 'Tenant UUID for multi-tenant context. Must be accompanied by X-TENANT-API-KEY header.',
+            },
+            'JWTAuth': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+                'description': 'JWT token obtained from /v1/auth/login or /v1/auth/register. Include as: Authorization: Bearer <token>',
             }
         }
     },
+    'SERVERS': [
+        {
+            'url': 'http://localhost:8000',
+            'description': 'Development server'
+        },
+        {
+            'url': 'https://api-staging.tulia.ai',
+            'description': 'Staging server'
+        },
+        {
+            'url': 'https://api.tulia.ai',
+            'description': 'Production server'
+        }
+    ],
     'TAGS': [
+        {'name': 'Authentication', 'description': 'User registration, login, and profile management'},
+        {'name': 'Tenant Management', 'description': 'Tenant creation, listing, and member management'},
+        {'name': 'Settings', 'description': 'General tenant settings and business configuration'},
+        {'name': 'Settings - API Keys', 'description': 'API key generation and management'},
+        {'name': 'Settings - Onboarding', 'description': 'Onboarding status tracking and completion'},
+        {'name': 'Integrations', 'description': 'External service integrations (Twilio, WooCommerce, Shopify, OpenAI)'},
+        {'name': 'Finance - Payment Methods', 'description': 'Payment method management for subscription billing'},
+        {'name': 'Finance - Payout Methods', 'description': 'Payout method configuration for receiving earnings'},
+        {'name': 'Finance - Wallet', 'description': 'Wallet balance and transaction management'},
+        {'name': 'Finance - Withdrawals', 'description': 'Withdrawal requests with four-eyes approval'},
         {'name': 'RBAC - Memberships', 'description': 'User membership and invitation management'},
         {'name': 'RBAC - Roles', 'description': 'Role management and permission assignments'},
         {'name': 'RBAC - Permissions', 'description': 'Permission listing and user-specific overrides'},
         {'name': 'RBAC - Audit', 'description': 'Audit log viewing for compliance'},
-        {'name': 'Finance - Wallet', 'description': 'Wallet balance and transaction management'},
-        {'name': 'Finance - Withdrawals', 'description': 'Withdrawal requests with four-eyes approval'},
         {'name': 'Catalog', 'description': 'Product catalog management'},
         {'name': 'Services', 'description': 'Bookable services and availability'},
         {'name': 'Orders', 'description': 'Order management'},
         {'name': 'Appointments', 'description': 'Appointment booking and management'},
         {'name': 'Messaging', 'description': 'WhatsApp messaging and conversations'},
         {'name': 'Analytics', 'description': 'Business analytics and reporting'},
-        {'name': 'Integrations', 'description': 'External service integrations'},
         {'name': 'Test Utilities', 'description': 'Testing and development utilities (disable in production)'},
     ],
 }
@@ -519,3 +560,40 @@ FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:3000')
 JWT_SECRET_KEY = env('JWT_SECRET_KEY', default=SECRET_KEY)
 JWT_ALGORITHM = env('JWT_ALGORITHM', default='HS256')
 JWT_EXPIRATION_HOURS = env.int('JWT_EXPIRATION_HOURS', default=24)
+
+# Payment Gateway Configuration
+
+# Stripe (International - Cards)
+STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY', default=None)
+STRIPE_PUBLISHABLE_KEY = env('STRIPE_PUBLISHABLE_KEY', default=None)
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default=None)
+
+# Paystack (Africa - Card Payments)
+PAYSTACK_SECRET_KEY = env('PAYSTACK_SECRET_KEY', default=None)
+PAYSTACK_PUBLIC_KEY = env('PAYSTACK_PUBLIC_KEY', default=None)
+
+# Pesapal (East Africa - Cards & Mobile Money)
+PESAPAL_CONSUMER_KEY = env('PESAPAL_CONSUMER_KEY', default=None)
+PESAPAL_CONSUMER_SECRET = env('PESAPAL_CONSUMER_SECRET', default=None)
+PESAPAL_IPN_ID = env('PESAPAL_IPN_ID', default=None)
+PESAPAL_API_URL = env('PESAPAL_API_URL', default='https://cybqa.pesapal.com/pesapalv3')
+
+# M-Pesa (Kenya - Mobile Money)
+MPESA_CONSUMER_KEY = env('MPESA_CONSUMER_KEY', default=None)
+MPESA_CONSUMER_SECRET = env('MPESA_CONSUMER_SECRET', default=None)
+MPESA_SHORTCODE = env('MPESA_SHORTCODE', default=None)
+MPESA_PASSKEY = env('MPESA_PASSKEY', default=None)
+MPESA_INITIATOR_NAME = env('MPESA_INITIATOR_NAME', default=None)
+MPESA_INITIATOR_PASSWORD = env('MPESA_INITIATOR_PASSWORD', default=None)
+MPESA_ENVIRONMENT = env('MPESA_ENVIRONMENT', default='sandbox')
+MPESA_API_URL = env('MPESA_API_URL', default='https://sandbox.safaricom.co.ke')
+
+# M-Pesa B2C (For Tenant Withdrawals)
+MPESA_B2C_SHORTCODE = env('MPESA_B2C_SHORTCODE', default=None)
+MPESA_B2C_SECURITY_CREDENTIAL = env('MPESA_B2C_SECURITY_CREDENTIAL', default=None)
+
+# PesaLink (Bank-to-Bank Transfers)
+PESALINK_API_KEY = env('PESALINK_API_KEY', default=None)
+PESALINK_API_SECRET = env('PESALINK_API_SECRET', default=None)
+PESALINK_INSTITUTION_CODE = env('PESALINK_INSTITUTION_CODE', default=None)
+PESALINK_API_URL = env('PESALINK_API_URL', default='https://api.pesalink.co.ke')

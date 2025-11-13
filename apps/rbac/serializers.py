@@ -32,7 +32,16 @@ class RegistrationSerializer(serializers.Serializer):
     business_name = serializers.CharField(required=True, max_length=255)
     
     def validate_email(self, value):
-        """Validate email is unique."""
+        """Validate email format and uniqueness."""
+        from apps.core.validators import InputValidator
+        
+        # Validate email format
+        if not InputValidator.validate_email(value):
+            raise serializers.ValidationError(
+                "Please enter a valid email address."
+            )
+        
+        # Check uniqueness
         if User.objects.filter(email=value.lower()).exists():
             raise serializers.ValidationError(
                 "A user with this email already exists."
@@ -41,7 +50,18 @@ class RegistrationSerializer(serializers.Serializer):
     
     def validate_password(self, value):
         """Validate password strength."""
+        from apps.core.validators import InputValidator
+        
+        # Use Django's built-in password validation
         validate_password(value)
+        
+        # Additional custom validation
+        strength_check = InputValidator.validate_password_strength(value)
+        if not strength_check['valid']:
+            raise serializers.ValidationError(
+                strength_check['errors'][0] if strength_check['errors'] else "Password does not meet requirements."
+            )
+        
         return value
     
     def validate_business_name(self, value):

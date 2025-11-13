@@ -741,6 +741,13 @@ class Customer(BaseModel):
         help_text="Additional customer metadata"
     )
     
+    # Payment Preferences
+    payment_preferences = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Customer payment preferences: {preferred_provider, saved_methods: [{provider, details}]}"
+    )
+    
     # Activity Tracking
     last_seen_at = models.DateTimeField(
         null=True,
@@ -1343,6 +1350,14 @@ class TenantSettings(BaseModel):
         null=True,
         blank=True,
         help_text="When onboarding was completed"
+    )
+    
+    # === ADDITIONAL METADATA ===
+    
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional settings metadata (payment provider credentials, etc.)"
     )
     
     class Meta:

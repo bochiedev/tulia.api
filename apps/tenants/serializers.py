@@ -462,15 +462,23 @@ class TenantCreateSerializer(serializers.Serializer):
     
     def validate_whatsapp_number(self, value):
         """Validate WhatsApp number format if provided."""
-        if value:
-            # Basic E.164 validation
-            if not value.startswith('+'):
-                raise serializers.ValidationError("WhatsApp number must be in E.164 format (start with +)")
-            if not value[1:].isdigit():
-                raise serializers.ValidationError("WhatsApp number must contain only digits after +")
-            if len(value) < 8 or len(value) > 16:
-                raise serializers.ValidationError("WhatsApp number must be between 8 and 16 characters")
-        return value
+        from apps.core.validators import InputValidator
+        
+        if not value:
+            return value
+        
+        value = value.strip()
+        
+        # Normalize to E.164 format
+        normalized = InputValidator.normalize_phone_e164(value)
+        
+        # Validate E.164 format
+        if not InputValidator.validate_phone_e164(normalized):
+            raise serializers.ValidationError(
+                "WhatsApp number must be in E.164 format (e.g., +1234567890)"
+            )
+        
+        return normalized
 
 
 class TenantUpdateSerializer(serializers.Serializer):
@@ -538,7 +546,17 @@ class TenantMemberInviteSerializer(serializers.Serializer):
     
     def validate_email(self, value):
         """Validate email format."""
-        return value.lower().strip()
+        from apps.core.validators import InputValidator
+        
+        value = value.strip().lower()
+        
+        # Validate email format
+        if not InputValidator.validate_email(value):
+            raise serializers.ValidationError(
+                "Please enter a valid email address."
+            )
+        
+        return value
     
     def validate_roles(self, value):
         """Validate roles list is not empty."""

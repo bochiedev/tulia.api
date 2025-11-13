@@ -13,6 +13,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.conf import settings
 from django.core.mail import send_mail
+from django_ratelimit.decorators import ratelimit
+from django.utils.decorators import method_decorator
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 
@@ -48,6 +50,7 @@ Returns JWT token for immediate login and tenant information.
     responses={
         201: OpenApiTypes.OBJECT,
         400: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
     },
     examples=[
         OpenApiExample(
@@ -93,9 +96,18 @@ Returns JWT token for immediate login and tenant information.
             },
             response_only=True,
             status_codes=['400']
+        ),
+        OpenApiExample(
+            'Rate Limit Exceeded',
+            value={
+                'error': 'Rate limit exceeded. Please try again later.'
+            },
+            response_only=True,
+            status_codes=['429']
         )
     ]
 )
+@method_decorator(ratelimit(key='ip', rate='10/m', method='POST', block=True), name='dispatch')
 class RegistrationView(APIView):
     """
     POST /v1/auth/register
@@ -103,6 +115,7 @@ class RegistrationView(APIView):
     Register new user with first tenant.
     
     No authentication required.
+    Rate limited to 10 requests per minute per IP.
     """
     authentication_classes = []
     permission_classes = []
@@ -223,6 +236,7 @@ Returns JWT token for API authentication and user information.
     responses={
         200: OpenApiTypes.OBJECT,
         401: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
     },
     examples=[
         OpenApiExample(
@@ -256,9 +270,18 @@ Returns JWT token for API authentication and user information.
             },
             response_only=True,
             status_codes=['401']
+        ),
+        OpenApiExample(
+            'Rate Limit Exceeded',
+            value={
+                'error': 'Rate limit exceeded. Please try again later.'
+            },
+            response_only=True,
+            status_codes=['429']
         )
     ]
 )
+@method_decorator(ratelimit(key='ip', rate='10/m', method='POST', block=True), name='dispatch')
 class LoginView(APIView):
     """
     POST /v1/auth/login
@@ -266,6 +289,7 @@ class LoginView(APIView):
     Authenticate user and return JWT token.
     
     No authentication required.
+    Rate limited to 10 requests per minute per IP.
     """
     authentication_classes = []
     permission_classes = []
@@ -417,6 +441,7 @@ Sends password reset email with token valid for 24 hours.
     request=PasswordResetRequestSerializer,
     responses={
         200: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
     },
     examples=[
         OpenApiExample(
@@ -432,9 +457,18 @@ Sends password reset email with token valid for 24 hours.
                 'message': 'If an account exists with this email, a password reset link has been sent.'
             },
             response_only=True
+        ),
+        OpenApiExample(
+            'Rate Limit Exceeded',
+            value={
+                'error': 'Rate limit exceeded. Please try again later.'
+            },
+            response_only=True,
+            status_codes=['429']
         )
     ]
 )
+@method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=True), name='dispatch')
 class ForgotPasswordView(APIView):
     """
     POST /v1/auth/forgot-password
@@ -442,6 +476,7 @@ class ForgotPasswordView(APIView):
     Request password reset.
     
     No authentication required.
+    Rate limited to 5 requests per minute per IP.
     """
     authentication_classes = []
     permission_classes = []
@@ -585,6 +620,124 @@ class ResetPasswordView(APIView):
         return Response(
             {
                 'message': 'Password reset successfully'
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+@extend_schema(
+    tags=['Authentication'],
+    summary='Logout user',
+    description='''
+Logout the authenticated user.
+
+Since JWT tokens are stateless, this endpoint primarily serves as a client-side signal
+to clear the token. The token will remain valid until expiration.
+
+For enhanced security, consider implementing a token blacklist if needed.
+
+Requires valid JWT token in Authorization header.
+    ''',
+    responses={
+        200: OpenApiTypes.OBJECT,
+        401: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Success Response',
+            value={
+                'message': 'Logout successful'
+            },
+            response_only=True
+        )
+    ]
+)
+class LogoutView(APIView):
+    """
+    POST /v1/auth/logout
+    
+    Logout user (client-side token clearing).
+    
+    Requires JWT authentication.
+    """
+    
+    def post(self, request):
+        """Logout user."""
+        # User is attached to request by authentication middleware
+        user = request.user
+        
+        if not user or not hasattr(user, 'id') or not user.is_authenticated:
+            return Response(
+                {
+                    'error': 'Authentication required'
+                },
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        # Since JWT is stateless, logout is handled client-side
+        # This endpoint serves as a confirmation
+        return Response(
+            {
+                'message': 'Logout successful'
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+@extend_schema(
+    tags=['Authentication'],
+    summary='Refresh JWT token',
+    description='''
+Refresh JWT token for authenticated user.
+
+Returns a new JWT token with extended expiration.
+
+Requires valid JWT token in Authorization header.
+    ''',
+    responses={
+        200: OpenApiTypes.OBJECT,
+        401: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Success Response',
+            value={
+                'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                'message': 'Token refreshed successfully'
+            },
+            response_only=True
+        )
+    ]
+)
+class RefreshTokenView(APIView):
+    """
+    POST /v1/auth/refresh-token
+    
+    Refresh JWT token.
+    
+    Requires JWT authentication.
+    """
+    
+    def post(self, request):
+        """Refresh token."""
+        # User is attached to request by authentication middleware
+        user = request.user
+        
+        if not user or not hasattr(user, 'id') or not user.is_authenticated:
+            return Response(
+                {
+                    'error': 'Authentication required'
+                },
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        # Generate new token
+        token = AuthService.generate_jwt(user)
+        
+        return Response(
+            {
+                'token': token,
+                'message': 'Token refreshed successfully'
             },
             status=status.HTTP_200_OK
         )
