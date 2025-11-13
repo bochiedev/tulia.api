@@ -1328,6 +1328,23 @@ class TenantSettings(BaseModel):
         help_text="GDPR, data retention, and legal compliance settings"
     )
     
+    # === ONBOARDING TRACKING ===
+    
+    onboarding_status = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Onboarding step completion status with timestamps"
+    )
+    onboarding_completed = models.BooleanField(
+        default=False,
+        help_text="Whether all required onboarding steps are complete"
+    )
+    onboarding_completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When onboarding was completed"
+    )
+    
     class Meta:
         db_table = 'tenant_settings'
         verbose_name = 'Tenant Settings'
@@ -1417,3 +1434,19 @@ class TenantSettings(BaseModel):
         
         self.integrations_status[integration].update(status_data)
         self.save(update_fields=['integrations_status', 'updated_at'])
+    
+    def initialize_onboarding_status(self):
+        """
+        Initialize onboarding status with all steps marked as incomplete.
+        
+        This should be called when a new tenant is created.
+        """
+        self.onboarding_status = {
+            'twilio_configured': {'completed': False, 'completed_at': None},
+            'payment_method_added': {'completed': False, 'completed_at': None},
+            'business_settings_configured': {'completed': False, 'completed_at': None},
+            'woocommerce_configured': {'completed': False, 'completed_at': None},
+            'shopify_configured': {'completed': False, 'completed_at': None},
+            'payout_method_configured': {'completed': False, 'completed_at': None},
+        }
+        self.save(update_fields=['onboarding_status', 'updated_at'])

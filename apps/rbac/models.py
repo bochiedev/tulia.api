@@ -96,6 +96,25 @@ class User(BaseModel):
         help_text="Last login timestamp"
     )
     
+    # Email Verification
+    email_verified = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Whether email has been verified"
+    )
+    email_verification_token = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Email verification token"
+    )
+    email_verification_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When verification email was sent"
+    )
+    
     # Profile
     first_name = models.CharField(
         max_length=100,
@@ -117,6 +136,8 @@ class User(BaseModel):
         indexes = [
             models.Index(fields=['email']),
             models.Index(fields=['is_active', 'created_at']),
+            models.Index(fields=['email_verified', 'is_active']),
+            models.Index(fields=['email_verification_token']),
         ]
     
     def __str__(self):
@@ -584,6 +605,11 @@ class UserPermissionManager(models.Manager):
                 'granted_by': granted_by,
             }
         )
+        # Invalidate scope cache
+        from django.core.cache import cache
+        cache_key = f"scopes:tenant_user:{tenant_user.id}"
+        cache.delete(cache_key)
+        
         return user_permission, created
     
     def deny_permission(self, tenant_user, permission, reason='', granted_by=None):
@@ -597,6 +623,11 @@ class UserPermissionManager(models.Manager):
                 'granted_by': granted_by,
             }
         )
+        # Invalidate scope cache
+        from django.core.cache import cache
+        cache_key = f"scopes:tenant_user:{tenant_user.id}"
+        cache.delete(cache_key)
+        
         return user_permission, created
 
 
@@ -655,6 +686,119 @@ class UserPermission(BaseModel):
     def __str__(self):
         action = "GRANT" if self.granted else "DENY"
         return f"{action} {self.permission.code} to {self.tenant_user.user.email}"
+
+
+class PasswordResetTokenManager(models.Manager):
+    """Manager for PasswordResetToken queries."""
+    
+    def for_user(self, user):
+        """Get all password reset tokens for a user."""
+        return self.filter(user=user)
+    
+    def valid_tokens(self):
+        """Get all valid (non-expired, unused) tokens."""
+        from django.utils import timezone
+        return self.filter(
+            expires_at__gt=timezone.now(),
+            used=False
+        )
+    
+    def get_valid_token(self, token):
+        """Get a valid token by token string."""
+        from django.utils import timezone
+        return self.filter(
+            token=token,
+            expires_at__gt=timezone.now(),
+            used=False
+        ).first()
+
+
+class PasswordResetToken(BaseModel):
+    """
+    Password reset tokens for forgot password flow.
+    
+    Tokens expire after 24 hours and can only be used once.
+    """
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='password_reset_tokens',
+        help_text="User this token belongs to"
+    )
+    token = models.CharField(
+        max_length=255,
+        unique=True,
+        db_index=True,
+        help_text="Unique reset token"
+    )
+    expires_at = models.DateTimeField(
+        db_index=True,
+        help_text="Token expiration time (24 hours from creation)"
+    )
+    used = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Whether token has been used"
+    )
+    used_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When token was used"
+    )
+    
+    # Custom manager
+    objects = PasswordResetTokenManager()
+    
+    class Meta:
+        db_table = 'password_reset_tokens'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['token', 'expires_at', 'used']),
+            models.Index(fields=['user', 'expires_at']),
+        ]
+    
+    def __str__(self):
+        return f"Password reset token for {self.user.email}"
+    
+    def is_valid(self):
+        """Check if token is still valid (not expired and not used)."""
+        from django.utils import timezone
+        return not self.used and timezone.now() < self.expires_at
+    
+    def mark_as_used(self):
+        """Mark token as used."""
+        from django.utils import timezone
+        self.used = True
+        self.used_at = timezone.now()
+        self.save(update_fields=['used', 'used_at'])
+    
+    @classmethod
+    def create_token(cls, user):
+        """
+        Create a new password reset token for a user.
+        
+        Args:
+            user: User instance
+            
+        Returns:
+            PasswordResetToken instance
+        """
+        import secrets
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Generate secure random token
+        token = secrets.token_urlsafe(32)
+        
+        # Set expiration to 24 hours from now
+        expires_at = timezone.now() + timedelta(hours=24)
+        
+        return cls.objects.create(
+            user=user,
+            token=token,
+            expires_at=expires_at
+        )
 
 
 class AuditLogManager(models.Manager):

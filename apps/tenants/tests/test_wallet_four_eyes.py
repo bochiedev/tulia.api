@@ -187,21 +187,21 @@ class TestWalletFourEyesApproval(TestCase):
     
     def test_validate_four_eyes_with_different_users(self):
         """Test that validate_four_eyes passes with different users."""
-        result = RBACService.validate_four_eyes(
-            initiator_user_id=self.user_initiator.id,
-            approver_user_id=self.user_approver.id
+        # Should not raise an exception
+        RBACService.validate_four_eyes(
+            self.user_initiator.id,
+            self.user_approver.id
         )
-        assert result is True
     
     def test_validate_four_eyes_with_same_user(self):
         """Test that validate_four_eyes fails with same user."""
         with pytest.raises(ValueError) as exc_info:
             RBACService.validate_four_eyes(
-                initiator_user_id=self.user_initiator.id,
-                approver_user_id=self.user_initiator.id
+                self.user_initiator.id,
+                self.user_initiator.id
             )
         
-        assert 'Four-eyes validation failed' in str(exc_info.value)
+        assert 'Four-eyes principle violation' in str(exc_info.value)
     
     def test_withdrawal_without_initiator_can_be_approved(self):
         """Test that withdrawals without initiator (legacy) can still be approved."""

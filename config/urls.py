@@ -14,6 +14,7 @@ urlpatterns = [
     
     # API v1
     path('v1/', include('apps.core.urls')),
+    path('v1/auth/', include('apps.rbac.urls_auth')),  # Authentication endpoints (register, login, etc.)
     path('v1/', include('apps.tenants.urls')),  # Includes wallet and admin endpoints
     path('v1/', include('apps.rbac.urls')),  # RBAC endpoints (memberships, roles, permissions, audit logs)
     path('v1/messages/', include('apps.messaging.urls')),

@@ -512,7 +512,10 @@ class RoleListView(APIView):
         )
         
         if page is not None:
-            return paginator.get_paginated_response(serializer.data)
+            # Return paginated response with 'roles' key instead of 'results'
+            response = paginator.get_paginated_response(serializer.data)
+            response.data['roles'] = response.data.pop('results')
+            return response
         
         return Response({
             'count': roles.count(),
@@ -1035,7 +1038,10 @@ class PermissionListView(APIView):
         serializer = PermissionSerializer(page if page is not None else permissions, many=True)
         
         if page is not None:
-            return paginator.get_paginated_response(serializer.data)
+            # Return paginated response with 'permissions' key instead of 'results'
+            response = paginator.get_paginated_response(serializer.data)
+            response.data['permissions'] = response.data.pop('results')
+            return response
         
         return Response({
             'count': permissions.count(),

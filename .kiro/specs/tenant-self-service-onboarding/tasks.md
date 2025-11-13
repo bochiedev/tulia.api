@@ -1,19 +1,19 @@
 # Implementation Plan
 
-- [ ] 1. Set up authentication infrastructure
+- [x] 1. Set up authentication infrastructure
   - Create User model enhancements for email verification
   - Create PasswordResetToken model for password reset flow
   - Add database migrations for new fields
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
-- [ ] 2. Implement JWT authentication service
-  - [ ] 2.1 Create AuthService class with JWT generation and validation methods
+- [x] 2. Implement JWT authentication service
+  - [x] 2.1 Create AuthService class with JWT generation and validation methods
     - Implement generate_jwt() using PyJWT library
     - Implement validate_jwt() with expiration checking
     - Add JWT configuration to settings (secret key, algorithm, expiration)
     - _Requirements: 1.5_
   
-  - [ ] 2.2 Create user registration logic
+  - [x] 2.2 Create user registration logic
     - Implement register_user() method in AuthService
     - Hash password using Django's make_password
     - Generate email verification token
@@ -21,59 +21,59 @@
     - Assign Owner role with all permissions
     - _Requirements: 1.1, 2.1, 2.2, 2.3, 2.4, 2.5_
   
-  - [ ] 2.3 Create email verification logic
+  - [x] 2.3 Create email verification logic
     - Implement verify_email() method in AuthService
     - Send verification email with token link
     - Handle token validation and expiration
     - _Requirements: 1.2, 1.3_
 
-- [ ] 3. Create authentication API endpoints
-  - [ ] 3.1 Implement registration endpoint (POST /v1/auth/register)
+- [x] 3. Create authentication API endpoints
+  - [x] 3.1 Implement registration endpoint (POST /v1/auth/register)
     - Create RegistrationSerializer with validation
     - Validate email uniqueness
     - Call AuthService.register_user()
     - Return JWT token and tenant info
     - _Requirements: 1.1, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5_
   
-  - [ ] 3.2 Implement login endpoint (POST /v1/auth/login)
+  - [x] 3.2 Implement login endpoint (POST /v1/auth/login)
     - Create LoginSerializer
     - Validate credentials using User.check_password()
     - Generate JWT token
     - Update last_login_at timestamp
     - _Requirements: 1.5_
   
-  - [ ] 3.3 Implement email verification endpoint (POST /v1/auth/verify-email)
+  - [x] 3.3 Implement email verification endpoint (POST /v1/auth/verify-email)
     - Accept verification token
     - Call AuthService.verify_email()
     - Return success response
     - _Requirements: 1.2, 1.3_
   
-  - [ ] 3.4 Implement password reset endpoints
+  - [x] 3.4 Implement password reset endpoints
     - POST /v1/auth/forgot-password - generate reset token
     - POST /v1/auth/reset-password - reset password with token
     - _Requirements: 1.1_
   
-  - [ ] 3.5 Implement user profile endpoints
+  - [x] 3.5 Implement user profile endpoints
     - GET /v1/auth/me - get current user
     - PUT /v1/auth/me - update user profile
     - _Requirements: 1.1_
 
-- [ ] 4. Enhance TenantContextMiddleware for JWT authentication
-  - [ ] 4.1 Add JWT token extraction from Authorization header
+- [x] 4. Enhance TenantContextMiddleware for JWT authentication
+  - [x] 4.1 Add JWT token extraction from Authorization header
     - Parse "Bearer <token>" format
     - Validate JWT and extract user
     - Handle token expiration errors
     - _Requirements: 1.5, 12.3, 12.4, 12.5_
   
-  - [ ] 4.2 Add tenant context resolution
+  - [x] 4.2 Add tenant context resolution
     - Extract tenant ID from X-TENANT-ID header
     - Validate user has TenantUser membership
     - Assemble scopes from user's roles in tenant
     - Attach user, tenant, membership, scopes to request
     - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
 
-- [ ] 5. Implement tenant management service
-  - [ ] 5.1 Create TenantService class
+- [x] 5. Implement tenant management service
+  - [x] 5.1 Create TenantService class
     - Implement create_tenant() method
     - Implement get_user_tenants() method
     - Implement validate_tenant_access() method
@@ -81,121 +81,124 @@
     - Implement soft_delete_tenant() method
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 12.1, 12.2, 15.1, 15.2, 15.3, 15.4, 15.5_
 
-- [ ] 6. Create tenant management API endpoints
-  - [ ] 6.1 Implement tenant list endpoint (GET /v1/tenants)
+- [x] 6. Create tenant management API endpoints
+  - [x] 6.1 Implement tenant list endpoint (GET /v1/tenants)
     - Return all tenants where user has membership
     - Include tenant name, slug, status, role, onboarding status
     - _Requirements: 12.1, 12.2_
   
-  - [ ] 6.2 Implement tenant creation endpoint (POST /v1/tenants)
+  - [x] 6.2 Implement tenant creation endpoint (POST /v1/tenants)
     - Create TenantSerializer with validation
     - Validate unique business name and slug
     - Call TenantService.create_tenant()
     - Return tenant details
     - _Requirements: 3.1, 3.2, 3.3_
   
-  - [ ] 6.3 Implement tenant detail endpoint (GET /v1/tenants/{id})
+  - [x] 6.3 Implement tenant detail endpoint (GET /v1/tenants/{id})
     - Validate user has membership
     - Return full tenant details with onboarding status
     - _Requirements: 12.1, 12.2_
   
-  - [ ] 6.4 Implement tenant update endpoint (PUT /v1/tenants/{id})
+  - [x] 6.4 Implement tenant update endpoint (PUT /v1/tenants/{id})
     - Require users:manage scope
     - Update tenant basic info
     - _Requirements: 11.3_
   
-  - [ ] 6.5 Implement tenant deletion endpoint (DELETE /v1/tenants/{id})
+  - [x] 6.5 Implement tenant deletion endpoint (DELETE /v1/tenants/{id})
     - Require users:manage scope and Owner role
     - Call TenantService.soft_delete_tenant()
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
   
-  - [ ] 6.6 Implement tenant member management endpoints
+  - [x] 6.6 Implement tenant member management endpoints
     - GET /v1/tenants/{id}/members - list members
     - POST /v1/tenants/{id}/members - invite user
     - DELETE /v1/tenants/{id}/members/{user_id} - remove member
     - _Requirements: 3.5_
 
-- [ ] 7. Add onboarding tracking to TenantSettings model
-  - [ ] 7.1 Add onboarding fields to TenantSettings
+- [x] 7. Add onboarding tracking to TenantSettings model
+  - [x] 7.1 Add onboarding fields to TenantSettings ✓
     - Add onboarding_status JSONField
     - Add onboarding_completed BooleanField
     - Add onboarding_completed_at DateTimeField
     - Create migration
+    - Migration applied: 0006_add_onboarding_tracking
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
   
-  - [ ] 7.2 Create OnboardingService class
+  - [x] 7.2 Create OnboardingService class
     - Implement get_onboarding_status() method
     - Implement mark_step_complete() method
     - Implement check_completion() method
     - Implement send_reminder() method
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 10.1, 10.2, 10.3, 10.4, 10.5_
 
-- [ ] 8. Create onboarding API endpoints
-  - [ ] 8.1 Implement onboarding status endpoint (GET /v1/settings/onboarding)
+- [x] 8. Create onboarding API endpoints
+  - [x] 8.1 Implement onboarding status endpoint (GET /v1/settings/onboarding)
     - Call OnboardingService.get_onboarding_status()
     - Return completion percentage and pending steps
+    - URL routing wired to /v1/settings/onboarding
     - _Requirements: 4.3, 10.1, 10.2_
   
-  - [ ] 8.2 Implement onboarding completion endpoint (POST /v1/settings/onboarding/complete)
+  - [x] 8.2 Implement onboarding completion endpoint (POST /v1/settings/onboarding/complete)
     - Accept step name
     - Call OnboardingService.mark_step_complete()
     - Check if all required steps complete
+    - URL routing wired to /v1/settings/onboarding/complete
     - _Requirements: 4.2, 4.4_
 
-- [ ] 9. Implement settings management service
-  - [ ] 9.1 Create SettingsService class with credential management
+- [x] 9. Implement settings management service
+  - [x] 9.1 Create SettingsService class with credential management
     - Implement get_or_create_settings() method
     - Implement update_twilio_credentials() with Twilio API validation
     - Implement update_woocommerce_credentials() with WooCommerce API validation
     - Implement update_shopify_credentials() with Shopify API validation
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3, 6.4, 6.5_
   
-  - [ ] 9.2 Add payment method management to SettingsService
+  - [x] 9.2 Add payment method management to SettingsService
     - Implement add_payment_method() with Stripe tokenization
     - Implement set_default_payment_method()
     - Implement remove_payment_method()
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
   
-  - [ ] 9.3 Add payout method management to SettingsService
+  - [x] 9.3 Add payout method management to SettingsService
     - Implement update_payout_method() with encryption
     - Validate required fields based on method type
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
   
-  - [ ] 9.4 Add API key management to SettingsService
+  - [x] 9.4 Add API key management to SettingsService
     - Implement generate_api_key() with secure random generation
     - Implement revoke_api_key()
     - Store only key hashes (SHA-256)
     - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5_
 
-- [ ] 10. Create integration credentials API endpoints
-  - [ ] 10.1 Implement Twilio settings endpoints
+- [x] 10. Create integration credentials API endpoints
+  - [x] 10.1 Implement Twilio settings endpoints
     - GET /v1/settings/integrations/twilio - return masked credentials
     - PUT /v1/settings/integrations/twilio - update credentials
     - DELETE /v1/settings/integrations/twilio - remove credentials
     - Require integrations:manage scope
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 11.1, 11.5_
   
-  - [ ] 10.2 Implement WooCommerce settings endpoints
+  - [x] 10.2 Implement WooCommerce settings endpoints
     - GET /v1/settings/integrations/woocommerce
     - PUT /v1/settings/integrations/woocommerce
     - DELETE /v1/settings/integrations/woocommerce
     - Require integrations:manage scope
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 11.1, 11.5_
   
-  - [ ] 10.3 Implement Shopify settings endpoints
+  - [x] 10.3 Implement Shopify settings endpoints
     - GET /v1/settings/integrations/shopify
     - PUT /v1/settings/integrations/shopify
     - DELETE /v1/settings/integrations/shopify
     - Require integrations:manage scope
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 11.1, 11.5_
   
-  - [ ] 10.4 Implement integrations list endpoint
+  - [x] 10.4 Implement integrations list endpoint
     - GET /v1/settings/integrations - list all integrations with status
     - Return masked credentials and last sync status
     - _Requirements: 6.5, 11.1_
 
 - [ ] 11. Create payment and payout API endpoints
-  - [ ] 11.1 Implement payment methods endpoints
+  - [x] 11.1 Implement payment methods endpoints
     - GET /v1/settings/payment-methods - list payment methods
     - POST /v1/settings/payment-methods - add payment method
     - PUT /v1/settings/payment-methods/{id}/default - set default
@@ -203,7 +206,7 @@
     - Require finance:manage scope
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 11.2, 11.5_
   
-  - [ ] 11.2 Implement payout method endpoints
+  - [x] 11.2 Implement payout method endpoints
     - GET /v1/settings/payout-method - get payout method
     - PUT /v1/settings/payout-method - update payout method
     - DELETE /v1/settings/payout-method - remove payout method
@@ -211,12 +214,12 @@
     - Check payment facilitation enabled
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 11.2, 11.5_
 
-- [ ] 12. Create business settings API endpoints
-  - [ ] 12.1 Implement business settings endpoint (GET /v1/settings/business)
+- [x] 12. Create business settings API endpoints
+  - [x] 12.1 Implement business settings endpoint (GET /v1/settings/business)
     - Return timezone, business hours, quiet hours, notification preferences
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
   
-  - [ ] 12.2 Implement business settings update endpoint (PUT /v1/settings/business)
+  - [x] 12.2 Implement business settings update endpoint (PUT /v1/settings/business)
     - Validate timezone against IANA database
     - Validate business hours format
     - Validate quiet hours ranges

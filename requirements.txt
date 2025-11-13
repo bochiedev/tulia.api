@@ -17,6 +17,7 @@ drf-spectacular==0.27.1
 
 # Security & Encryption
 cryptography==42.0.5
+PyJWT==2.8.0
 
 # Monitoring
 sentry-sdk==1.40.6

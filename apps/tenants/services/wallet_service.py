@@ -406,8 +406,8 @@ class WalletService:
         # Validate four-eyes: approver must be different from initiator
         if txn.initiated_by:
             RBACService.validate_four_eyes(
-                initiator_user_id=txn.initiated_by.id,
-                approver_user_id=approved_by.id
+                txn.initiated_by.id,
+                approved_by.id
             )
         
         # Update transaction status

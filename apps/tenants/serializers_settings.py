@@ -193,11 +193,18 @@ class TwilioCredentialsSerializer(serializers.Serializer):
     sid = serializers.CharField(required=True, min_length=34, max_length=34)
     token = serializers.CharField(required=True, min_length=32)
     webhook_secret = serializers.CharField(required=False, allow_blank=True)
+    whatsapp_number = serializers.CharField(required=False, allow_blank=True)
     
     def validate_sid(self, value):
         """Validate Twilio SID format."""
         if not value.startswith('AC'):
             raise serializers.ValidationError('Twilio SID must start with "AC"')
+        return value
+    
+    def validate_whatsapp_number(self, value):
+        """Validate WhatsApp number format (E.164)."""
+        if value and not value.startswith('+'):
+            raise serializers.ValidationError('WhatsApp number must be in E.164 format (e.g., +1234567890)')
         return value
 
 
@@ -267,3 +274,264 @@ class PaymentMethodSerializer(serializers.Serializer):
     exp_month = serializers.IntegerField()
     exp_year = serializers.IntegerField()
     is_default = serializers.BooleanField()
+
+
+class AddPaymentMethodSerializer(serializers.Serializer):
+    """Serializer for adding a payment method."""
+    
+    stripe_token = serializers.CharField(required=True, min_length=10)
+
+
+class PayoutMethodSerializer(serializers.Serializer):
+    """Serializer for updating payout method."""
+    
+    method = serializers.ChoiceField(
+        choices=['bank_transfer', 'mobile_money', 'paypal'],
+        required=True
+    )
+    details = serializers.DictField(required=True)
+    
+    def validate(self, data):
+        """Validate required fields based on method type."""
+        method = data['method']
+        details = data['details']
+        
+        if method == 'bank_transfer':
+            required_fields = ['account_number', 'routing_number', 'account_holder_name']
+            for field in required_fields:
+                if not details.get(field):
+                    raise serializers.ValidationError({
+                        'details': f"Missing required field for bank transfer: {field}"
+                    })
+        
+        elif method == 'mobile_money':
+            required_fields = ['phone_number', 'provider']
+            for field in required_fields:
+                if not details.get(field):
+                    raise serializers.ValidationError({
+                        'details': f"Missing required field for mobile money: {field}"
+                    })
+            
+            # Validate phone number format
+            phone_number = details['phone_number']
+            if not phone_number.startswith('+'):
+                raise serializers.ValidationError({
+                    'details': 'Phone number must be in E.164 format (e.g., +1234567890)'
+                })
+        
+        elif method == 'paypal':
+            if not details.get('email'):
+                raise serializers.ValidationError({
+                    'details': 'Missing required field for PayPal: email'
+                })
+        
+        return data
+
+
+class BusinessSettingsSerializer(serializers.Serializer):
+    """
+    Serializer for business settings.
+    
+    Includes timezone, business hours, quiet hours, and notification preferences.
+    """
+    
+    timezone = serializers.CharField(required=False, max_length=50)
+    business_hours = serializers.DictField(required=False)
+    quiet_hours = serializers.DictField(required=False)
+    notification_preferences = serializers.DictField(required=False)
+    
+    def validate_timezone(self, value):
+        """Validate timezone against IANA timezone database."""
+        if not value:
+            return value
+        
+        try:
+            import zoneinfo
+            # Try to load the timezone to validate it exists
+            zoneinfo.ZoneInfo(value)
+            return value
+        except (ImportError, zoneinfo.ZoneInfoNotFoundError):
+            # Fallback to pytz if zoneinfo not available (Python < 3.9)
+            try:
+                import pytz
+                if value not in pytz.all_timezones:
+                    raise serializers.ValidationError(
+                        f"Invalid timezone: {value}. Must be a valid IANA timezone (e.g., 'America/New_York')"
+                    )
+                return value
+            except ImportError:
+                raise serializers.ValidationError(
+                    "Timezone validation not available. Please ensure pytz or zoneinfo is installed."
+                )
+    
+    def validate_business_hours(self, value):
+        """
+        Validate business hours format.
+        
+        Expected format:
+        {
+            "monday": {"open": "09:00", "close": "17:00", "closed": false},
+            "tuesday": {"open": "09:00", "close": "17:00", "closed": false},
+            ...
+        }
+        """
+        if not value:
+            return value
+        
+        valid_days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        
+        for day, hours in value.items():
+            if day not in valid_days:
+                raise serializers.ValidationError(
+                    f"Invalid day: {day}. Must be one of: {', '.join(valid_days)}"
+                )
+            
+            if not isinstance(hours, dict):
+                raise serializers.ValidationError(
+                    f"Hours for {day} must be a dictionary with 'open', 'close', and 'closed' keys"
+                )
+            
+            # If day is marked as closed, skip time validation
+            if hours.get('closed', False):
+                continue
+            
+            # Validate time format (HH:MM)
+            for time_key in ['open', 'close']:
+                if time_key not in hours:
+                    raise serializers.ValidationError(
+                        f"Missing '{time_key}' time for {day}"
+                    )
+                
+                time_str = hours[time_key]
+                if not isinstance(time_str, str):
+                    raise serializers.ValidationError(
+                        f"Time for {day}.{time_key} must be a string in HH:MM format"
+                    )
+                
+                # Validate HH:MM format
+                try:
+                    parts = time_str.split(':')
+                    if len(parts) != 2:
+                        raise ValueError()
+                    
+                    hour = int(parts[0])
+                    minute = int(parts[1])
+                    
+                    if not (0 <= hour <= 23):
+                        raise ValueError("Hour must be between 0 and 23")
+                    if not (0 <= minute <= 59):
+                        raise ValueError("Minute must be between 0 and 59")
+                    
+                except (ValueError, AttributeError) as e:
+                    raise serializers.ValidationError(
+                        f"Invalid time format for {day}.{time_key}: {time_str}. Must be HH:MM (e.g., '09:00')"
+                    )
+        
+        return value
+    
+    def validate_quiet_hours(self, value):
+        """
+        Validate quiet hours format.
+        
+        Expected format:
+        {
+            "enabled": true,
+            "start": "22:00",
+            "end": "08:00"
+        }
+        """
+        if not value:
+            return value
+        
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Quiet hours must be a dictionary")
+        
+        # If quiet hours are disabled, no need to validate times
+        if not value.get('enabled', False):
+            return value
+        
+        # Validate start and end times
+        for time_key in ['start', 'end']:
+            if time_key not in value:
+                raise serializers.ValidationError(
+                    f"Missing '{time_key}' time for quiet hours"
+                )
+            
+            time_str = value[time_key]
+            if not isinstance(time_str, str):
+                raise serializers.ValidationError(
+                    f"Quiet hours {time_key} must be a string in HH:MM format"
+                )
+            
+            # Validate HH:MM format
+            try:
+                parts = time_str.split(':')
+                if len(parts) != 2:
+                    raise ValueError()
+                
+                hour = int(parts[0])
+                minute = int(parts[1])
+                
+                if not (0 <= hour <= 23):
+                    raise ValueError("Hour must be between 0 and 23")
+                if not (0 <= minute <= 59):
+                    raise ValueError("Minute must be between 0 and 59")
+                
+            except (ValueError, AttributeError):
+                raise serializers.ValidationError(
+                    f"Invalid time format for quiet hours {time_key}: {time_str}. Must be HH:MM (e.g., '22:00')"
+                )
+        
+        # Note: We allow overnight ranges (e.g., 22:00 to 08:00)
+        # The application logic should handle this correctly
+        
+        return value
+    
+    def validate_notification_preferences(self, value):
+        """
+        Validate notification preferences format.
+        
+        Expected format:
+        {
+            "email": {
+                "order_received": true,
+                "low_stock": true,
+                "appointment_booked": true
+            },
+            "sms": {
+                "order_received": false,
+                "low_stock": true
+            },
+            "in_app": {
+                "order_received": true,
+                "appointment_booked": true
+            }
+        }
+        """
+        if not value:
+            return value
+        
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Notification preferences must be a dictionary")
+        
+        valid_channels = ['email', 'sms', 'in_app']
+        
+        for channel, preferences in value.items():
+            if channel not in valid_channels:
+                raise serializers.ValidationError(
+                    f"Invalid notification channel: {channel}. Must be one of: {', '.join(valid_channels)}"
+                )
+            
+            if not isinstance(preferences, dict):
+                raise serializers.ValidationError(
+                    f"Preferences for {channel} must be a dictionary"
+                )
+            
+            # Validate that all values are booleans
+            for event, enabled in preferences.items():
+                if not isinstance(enabled, bool):
+                    raise serializers.ValidationError(
+                        f"Notification preference for {channel}.{event} must be a boolean"
+                    )
+        
+        return value

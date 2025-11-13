@@ -11,6 +11,7 @@ from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 from django.utils import timezone
 from .models import Tenant
+from apps.rbac.services import AuthService
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +33,24 @@ class TenantContextMiddleware(MiddlewareMixin):
     PUBLIC_PATHS = [
         '/v1/webhooks/',  # External webhook callbacks (verified by signature)
         '/v1/health',     # Health check endpoint for monitoring
+        '/v1/auth/',      # Authentication endpoints (register, login, etc.)
         '/schema',        # OpenAPI schema endpoints for documentation
         '/admin/',        # Django admin interface (uses session authentication)
+    ]
+    
+    # Paths that require JWT authentication but not tenant context
+    # These are endpoints for managing tenants themselves (list, create)
+    JWT_ONLY_PATHS = [
+        '/v1/tenants',  # Tenant list and create endpoints
     ]
     
     def process_request(self, request):
         """
         Extract and validate tenant context from headers.
+        
+        Supports two authentication methods:
+        1. JWT token (Authorization: Bearer <token>) - for user-based authentication
+        2. API key (X-TENANT-API-KEY) - for service-to-service authentication
         
         For RBAC-enabled endpoints, this middleware also:
         - Validates TenantUser membership exists
@@ -60,9 +72,14 @@ class TenantContextMiddleware(MiddlewareMixin):
             request.tenant = None
             request.membership = None
             request.scopes = set()
+            request.user = None
             return None
         
-        # Extract headers
+        # Check if this is a JWT-only path (tenant management endpoints)
+        is_jwt_only_path = self._is_jwt_only_path(request.path)
+        
+        # Extract authentication headers
+        auth_header = request.headers.get('Authorization', '')
         tenant_id = request.headers.get('X-TENANT-ID')
         api_key = request.headers.get('X-TENANT-API-KEY')
         
@@ -72,11 +89,60 @@ class TenantContextMiddleware(MiddlewareMixin):
         if api_key and ',' in api_key:
             api_key = api_key.split(',')[0].strip()
         
-        # Check if headers are present
-        if not tenant_id or not api_key:
+        # Determine authentication method
+        user = None
+        auth_method = None
+        
+        # Try JWT authentication first (if Authorization header present)
+        if auth_header.startswith('Bearer '):
+            jwt_token = auth_header[7:].strip()  # Remove 'Bearer ' prefix
+            user = self._authenticate_jwt(jwt_token, request_id)
+            
+            if user:
+                auth_method = 'jwt'
+                request.user = user
+                logger.debug(
+                    f"JWT authentication successful for user: {user.email}",
+                    extra={'request_id': request_id}
+                )
+            else:
+                # JWT token present but invalid
+                return self._error_response(
+                    'INVALID_TOKEN',
+                    'Invalid or expired JWT token',
+                    status=401
+                )
+        
+        # Fall back to API key authentication if no JWT
+        elif api_key:
+            auth_method = 'api_key'
+            # API key authentication doesn't set request.user
+            request.user = None
+        else:
+            # No authentication credentials provided
             return self._error_response(
                 'MISSING_CREDENTIALS',
-                'X-TENANT-ID and X-TENANT-API-KEY headers are required',
+                'Authorization header (Bearer token) or X-TENANT-API-KEY required',
+                status=401
+            )
+        
+        # For JWT-only paths, skip tenant validation
+        if is_jwt_only_path and auth_method == 'jwt':
+            # These endpoints don't require tenant context
+            request.tenant = None
+            request.membership = None
+            request.scopes = set()
+            logger.debug(
+                f"JWT-only path authenticated: {request.path} for user {user.email}",
+                extra={'request_id': request_id}
+            )
+            return None
+        
+        # Validate tenant ID is present
+        if not tenant_id:
+            return self._error_response(
+                'MISSING_TENANT_ID',
+                'X-TENANT-ID header is required',
                 status=401
             )
         
@@ -94,17 +160,18 @@ class TenantContextMiddleware(MiddlewareMixin):
                 status=401
             )
         
-        # Validate API key
-        if not self._validate_api_key(tenant, api_key):
-            logger.warning(
-                f"Invalid API key for tenant: {tenant_id}",
-                extra={'request_id': request_id}
-            )
-            return self._error_response(
-                'INVALID_API_KEY',
-                'Invalid API key',
-                status=401
-            )
+        # Validate API key if using API key authentication
+        if auth_method == 'api_key':
+            if not self._validate_api_key(tenant, api_key):
+                logger.warning(
+                    f"Invalid API key for tenant: {tenant_id}",
+                    extra={'request_id': request_id}
+                )
+                return self._error_response(
+                    'INVALID_API_KEY',
+                    'Invalid API key',
+                    status=401
+                )
         
         # Check if tenant is active
         if not tenant.is_active():
@@ -134,19 +201,19 @@ class TenantContextMiddleware(MiddlewareMixin):
         set_tenant_context(tenant)
         
         # RBAC: Validate TenantUser membership and resolve scopes
-        # Check if request has authenticated user (from Django auth or JWT)
-        if hasattr(request, 'user') and request.user and request.user.is_authenticated:
+        # Only for JWT-authenticated requests (user-based authentication)
+        if auth_method == 'jwt' and user and user.is_authenticated:
             # Import here to avoid circular dependency
             from apps.rbac.models import TenantUser
             from apps.rbac.services import RBACService
             
             # Get TenantUser membership
             try:
-                membership = TenantUser.objects.get_membership(tenant, request.user)
+                membership = TenantUser.objects.get_membership(tenant, user)
                 
                 if not membership:
                     logger.warning(
-                        f"User {request.user.email} attempted access to tenant {tenant.slug} without membership",
+                        f"User {user.email} attempted access to tenant {tenant.slug} without membership",
                         extra={'request_id': request_id, 'tenant_id': str(tenant.id)}
                     )
                     return self._error_response(
@@ -158,7 +225,7 @@ class TenantContextMiddleware(MiddlewareMixin):
                 # Check if membership is accepted
                 if membership.invite_status != 'accepted':
                     logger.warning(
-                        f"User {request.user.email} attempted access with non-accepted membership: {membership.invite_status}",
+                        f"User {user.email} attempted access with non-accepted membership: {membership.invite_status}",
                         extra={'request_id': request_id, 'tenant_id': str(tenant.id)}
                     )
                     return self._error_response(
@@ -167,7 +234,7 @@ class TenantContextMiddleware(MiddlewareMixin):
                         status=403
                     )
                 
-                # Resolve user scopes
+                # Resolve user scopes from roles and permission overrides
                 scopes = RBACService.resolve_scopes(membership)
                 
                 # Attach to request
@@ -176,7 +243,7 @@ class TenantContextMiddleware(MiddlewareMixin):
                 
                 # Set Sentry user context for error tracking
                 from apps.core.sentry_utils import set_user_context
-                set_user_context(request.user, membership)
+                set_user_context(user, membership)
                 
                 # Update last_seen_at timestamp (async to avoid blocking)
                 try:
@@ -190,7 +257,7 @@ class TenantContextMiddleware(MiddlewareMixin):
                     )
                 
                 logger.debug(
-                    f"RBAC context set: {request.user.email} @ {tenant.slug} with {len(scopes)} scopes",
+                    f"RBAC context set: {user.email} @ {tenant.slug} with {len(scopes)} scopes",
                     extra={'request_id': request_id, 'tenant_id': str(tenant.id)}
                 )
                 
@@ -204,7 +271,8 @@ class TenantContextMiddleware(MiddlewareMixin):
                 request.membership = None
                 request.scopes = set()
         else:
-            # No authenticated user - set empty membership and scopes
+            # API key authentication or no user - set empty membership and scopes
+            # API key authentication is service-to-service and doesn't have user context
             request.membership = None
             request.scopes = set()
         
@@ -217,6 +285,48 @@ class TenantContextMiddleware(MiddlewareMixin):
     def _is_public_path(self, path):
         """Check if path is public and doesn't require authentication."""
         return any(path.startswith(public_path) for public_path in self.PUBLIC_PATHS)
+    
+    def _is_jwt_only_path(self, path):
+        """Check if path requires JWT authentication but not tenant context."""
+        return any(path.startswith(jwt_only_path) for jwt_only_path in self.JWT_ONLY_PATHS)
+    
+    def _authenticate_jwt(self, token, request_id):
+        """
+        Authenticate user from JWT token.
+        
+        Args:
+            token: JWT token string
+            request_id: Request ID for logging
+            
+        Returns:
+            User instance if valid, None otherwise
+        """
+        try:
+            user = AuthService.get_user_from_jwt(token)
+            
+            if not user:
+                logger.warning(
+                    "Invalid or expired JWT token",
+                    extra={'request_id': request_id}
+                )
+                return None
+            
+            if not user.is_active:
+                logger.warning(
+                    f"JWT token for inactive user: {user.email}",
+                    extra={'request_id': request_id}
+                )
+                return None
+            
+            return user
+            
+        except Exception as e:
+            logger.error(
+                f"Error validating JWT token: {e}",
+                extra={'request_id': request_id},
+                exc_info=True
+            )
+            return None
     
     def _validate_api_key(self, tenant, api_key):
         """

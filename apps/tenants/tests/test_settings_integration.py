@@ -67,7 +67,7 @@ class TestTwilioIntegration:
         # Should use NEW credentials from TenantSettings
         assert service.account_sid == 'AC_new_sid'
         assert service.auth_token == 'new_token'
-        assert service.from_number == '+14155551234'
+        assert service.from_number == 'whatsapp:+14155551234'  # Service adds whatsapp: prefix
     
     def test_twilio_service_fallback_to_tenant(self, subscription_tier):
         """Test fallback to Tenant model when TenantSettings not configured."""
@@ -253,3 +253,517 @@ class TestNotificationSettings:
         assert not settings.is_notification_enabled('email', 'low_stock')
         assert settings.is_notification_enabled('sms', 'critical_alerts')
         assert not settings.is_notification_enabled('sms', 'non_existent')
+
+
+
+@pytest.mark.django_db
+class TestBusinessSettingsAPI:
+    """Test business settings API endpoints."""
+    
+    @pytest.fixture
+    def client(self):
+        """Create API client."""
+        from rest_framework.test import APIClient
+        return APIClient()
+    
+    def _get_jwt_token(self, user):
+        """Helper to generate JWT token for user."""
+        from apps.rbac.services import AuthService
+        return AuthService.generate_jwt(user)
+    
+    def test_get_business_settings(self, tenant_with_settings, client):
+        """Test GET /v1/settings/business returns current settings."""
+        from apps.rbac.models import User, TenantUser, Role
+        
+        # Create user with access
+        user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123',
+            first_name='Test',
+            last_name='User',
+            email_verified=True
+        )
+        
+        # Get or create Owner role (may already exist from signal)
+        owner_role, _ = Role.objects.get_or_create(
+            tenant=tenant_with_settings,
+            name='Owner',
+            defaults={'is_system': True}
+        )
+        
+        # Create tenant user
+        tenant_user = TenantUser.objects.create(
+            tenant=tenant_with_settings,
+            user=user,
+            is_active=True
+        )
+        tenant_user.user_roles.create(role=owner_role)
+        
+        # Set up business settings
+        tenant_with_settings.timezone = 'America/New_York'
+        tenant_with_settings.quiet_hours_start = '22:00'
+        tenant_with_settings.quiet_hours_end = '08:00'
+        tenant_with_settings.save()
+        
+        settings = tenant_with_settings.settings
+        settings.business_hours = {
+            'monday': {'open': '09:00', 'close': '17:00', 'closed': False},
+            'tuesday': {'open': '09:00', 'close': '17:00', 'closed': False}
+        }
+        settings.notification_settings = {
+            'email': {'order_received': True}
+        }
+        settings.save()
+        
+        # Make request with JWT token
+        token = self._get_jwt_token(user)
+        response = client.get(
+            '/v1/settings/business',
+            HTTP_AUTHORIZATION=f'Bearer {token}',
+            HTTP_X_TENANT_ID=str(tenant_with_settings.id)
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert data['timezone'] == 'America/New_York'
+        assert data['quiet_hours']['enabled'] is True
+        assert data['quiet_hours']['start'] == '22:00:00'
+        assert data['quiet_hours']['end'] == '08:00:00'
+        assert 'monday' in data['business_hours']
+        assert data['business_hours']['monday']['open'] == '09:00'
+        assert 'email' in data['notification_preferences']
+    
+    def test_update_business_settings_with_users_manage_scope(self, tenant_with_settings, client):
+        """Test PUT /v1/settings/business with users:manage scope."""
+        from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission
+        
+        # Create user with users:manage scope
+        user = User.objects.create(
+            email='admin@example.com',
+            first_name='Admin',
+            last_name='User'
+        )
+        
+        # Create role with users:manage permission
+        role = Role.objects.create(
+            tenant=tenant_with_settings,
+            name='Admin',
+            is_system=True
+        )
+        
+        permission = Permission.objects.get_or_create(
+            code='users:manage',
+            defaults={'name': 'Manage Users', 'description': 'Manage users and settings'}
+        )[0]
+        
+        RolePermission.objects.create(role=role, permission=permission, allow=True)
+        
+        tenant_user = TenantUser.objects.create(
+            tenant=tenant_with_settings,
+            user=user,
+            is_active=True
+        )
+        tenant_user.user_roles.create(role=role)
+        
+        # Update business settings
+        api_client.force_authenticate(user=user)
+        response = api_client.put(
+            '/v1/settings/business',
+            {
+                'timezone': 'Europe/London',
+                'business_hours': {
+                    'monday': {'open': '08:00', 'close': '18:00', 'closed': False},
+                    'sunday': {'closed': True}
+                },
+                'quiet_hours': {
+                    'enabled': True,
+                    'start': '23:00',
+                    'end': '07:00'
+                },
+                'notification_preferences': {
+                    'email': {
+                        'order_received': True,
+                        'low_stock': True
+                    },
+                    'sms': {
+                        'critical_alerts': True
+                    }
+                }
+            },
+            format='json',
+            HTTP_X_TENANT_ID=str(tenant_with_settings.id)
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert data['message'] == 'Business settings updated successfully'
+        assert data['settings']['timezone'] == 'Europe/London'
+        assert data['settings']['business_hours']['monday']['open'] == '08:00'
+        assert data['settings']['quiet_hours']['start'] == '23:00:00'
+        
+        # Verify database was updated
+        tenant_with_settings.refresh_from_db()
+        assert tenant_with_settings.timezone == 'Europe/London'
+        assert str(tenant_with_settings.quiet_hours_start) == '23:00:00'
+        assert str(tenant_with_settings.quiet_hours_end) == '07:00:00'
+        
+        settings = tenant_with_settings.settings
+        settings.refresh_from_db()
+        assert settings.business_hours['monday']['open'] == '08:00'
+        assert settings.notification_settings['email']['low_stock'] is True
+    
+    def test_update_business_settings_with_integrations_manage_scope(self, tenant_with_settings, api_client):
+        """Test PUT /v1/settings/business with integrations:manage scope."""
+        from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission
+        
+        # Create user with integrations:manage scope
+        user = User.objects.create(
+            email='integration@example.com',
+            first_name='Integration',
+            last_name='Manager'
+        )
+        
+        role = Role.objects.create(
+            tenant=tenant_with_settings,
+            name='Integration Manager',
+            is_system=False
+        )
+        
+        permission = Permission.objects.get_or_create(
+            code='integrations:manage',
+            defaults={'name': 'Manage Integrations', 'description': 'Manage integration settings'}
+        )[0]
+        
+        RolePermission.objects.create(role=role, permission=permission, allow=True)
+        
+        tenant_user = TenantUser.objects.create(
+            tenant=tenant_with_settings,
+            user=user,
+            is_active=True
+        )
+        tenant_user.user_roles.create(role=role)
+        
+        # Update business settings
+        api_client.force_authenticate(user=user)
+        response = api_client.put(
+            '/v1/settings/business',
+            {
+                'timezone': 'Asia/Tokyo',
+                'business_hours': {
+                    'monday': {'open': '10:00', 'close': '19:00', 'closed': False}
+                }
+            },
+            format='json',
+            HTTP_X_TENANT_ID=str(tenant_with_settings.id)
+        )
+        
+        assert response.status_code == 200
+        
+        # Verify update
+        tenant_with_settings.refresh_from_db()
+        assert tenant_with_settings.timezone == 'Asia/Tokyo'
+    
+    def test_update_business_settings_without_required_scope(self, tenant_with_settings, api_client):
+        """Test PUT /v1/settings/business without required scope returns 403."""
+        from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission
+        
+        # Create user without required scopes
+        user = User.objects.create(
+            email='viewer@example.com',
+            first_name='Viewer',
+            last_name='User'
+        )
+        
+        role = Role.objects.create(
+            tenant=tenant_with_settings,
+            name='Viewer',
+            is_system=False
+        )
+        
+        # Give only catalog:view permission
+        permission = Permission.objects.get_or_create(
+            code='catalog:view',
+            defaults={'name': 'View Catalog', 'description': 'View catalog items'}
+        )[0]
+        
+        RolePermission.objects.create(role=role, permission=permission, allow=True)
+        
+        tenant_user = TenantUser.objects.create(
+            tenant=tenant_with_settings,
+            user=user,
+            is_active=True
+        )
+        tenant_user.user_roles.create(role=role)
+        
+        # Attempt to update business settings
+        api_client.force_authenticate(user=user)
+        response = api_client.put(
+            '/v1/settings/business',
+            {
+                'timezone': 'America/Los_Angeles'
+            },
+            format='json',
+            HTTP_X_TENANT_ID=str(tenant_with_settings.id)
+        )
+        
+        assert response.status_code == 403
+        assert 'users:manage OR integrations:manage' in response.json()['detail']
+    
+    def test_update_business_settings_invalid_timezone(self, tenant_with_settings, api_client):
+        """Test PUT /v1/settings/business with invalid timezone returns 400."""
+        from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission
+        
+        # Create user with required scope
+        user = User.objects.create(
+            email='admin@example.com',
+            first_name='Admin',
+            last_name='User'
+        )
+        
+        role = Role.objects.create(
+            tenant=tenant_with_settings,
+            name='Admin',
+            is_system=True
+        )
+        
+        permission = Permission.objects.get_or_create(
+            code='users:manage',
+            defaults={'name': 'Manage Users', 'description': 'Manage users'}
+        )[0]
+        
+        RolePermission.objects.create(role=role, permission=permission, allow=True)
+        
+        tenant_user = TenantUser.objects.create(
+            tenant=tenant_with_settings,
+            user=user,
+            is_active=True
+        )
+        tenant_user.user_roles.create(role=role)
+        
+        # Attempt to update with invalid timezone
+        api_client.force_authenticate(user=user)
+        response = api_client.put(
+            '/v1/settings/business',
+            {
+                'timezone': 'Invalid/Timezone'
+            },
+            format='json',
+            HTTP_X_TENANT_ID=str(tenant_with_settings.id)
+        )
+        
+        assert response.status_code == 400
+        assert 'timezone' in response.json()
+    
+    def test_update_business_settings_invalid_business_hours(self, tenant_with_settings, api_client):
+        """Test PUT /v1/settings/business with invalid business hours format."""
+        from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission
+        
+        # Create user with required scope
+        user = User.objects.create(
+            email='admin@example.com',
+            first_name='Admin',
+            last_name='User'
+        )
+        
+        role = Role.objects.create(
+            tenant=tenant_with_settings,
+            name='Admin',
+            is_system=True
+        )
+        
+        permission = Permission.objects.get_or_create(
+            code='users:manage',
+            defaults={'name': 'Manage Users', 'description': 'Manage users'}
+        )[0]
+        
+        RolePermission.objects.create(role=role, permission=permission, allow=True)
+        
+        tenant_user = TenantUser.objects.create(
+            tenant=tenant_with_settings,
+            user=user,
+            is_active=True
+        )
+        tenant_user.user_roles.create(role=role)
+        
+        # Attempt to update with invalid time format
+        api_client.force_authenticate(user=user)
+        response = api_client.put(
+            '/v1/settings/business',
+            {
+                'business_hours': {
+                    'monday': {'open': '25:00', 'close': '17:00', 'closed': False}
+                }
+            },
+            format='json',
+            HTTP_X_TENANT_ID=str(tenant_with_settings.id)
+        )
+        
+        assert response.status_code == 400
+        assert 'business_hours' in response.json()
+    
+    def test_update_business_settings_invalid_quiet_hours(self, tenant_with_settings, api_client):
+        """Test PUT /v1/settings/business with invalid quiet hours format."""
+        from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission
+        
+        # Create user with required scope
+        user = User.objects.create(
+            email='admin@example.com',
+            first_name='Admin',
+            last_name='User'
+        )
+        
+        role = Role.objects.create(
+            tenant=tenant_with_settings,
+            name='Admin',
+            is_system=True
+        )
+        
+        permission = Permission.objects.get_or_create(
+            code='users:manage',
+            defaults={'name': 'Manage Users', 'description': 'Manage users'}
+        )[0]
+        
+        RolePermission.objects.create(role=role, permission=permission, allow=True)
+        
+        tenant_user = TenantUser.objects.create(
+            tenant=tenant_with_settings,
+            user=user,
+            is_active=True
+        )
+        tenant_user.user_roles.create(role=role)
+        
+        # Attempt to update with invalid quiet hours
+        api_client.force_authenticate(user=user)
+        response = api_client.put(
+            '/v1/settings/business',
+            {
+                'quiet_hours': {
+                    'enabled': True,
+                    'start': 'invalid',
+                    'end': '08:00'
+                }
+            },
+            format='json',
+            HTTP_X_TENANT_ID=str(tenant_with_settings.id)
+        )
+        
+        assert response.status_code == 400
+        assert 'quiet_hours' in response.json()
+    
+    def test_disable_quiet_hours(self, tenant_with_settings, api_client):
+        """Test disabling quiet hours."""
+        from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission
+        
+        # Set up initial quiet hours
+        tenant_with_settings.quiet_hours_start = '22:00'
+        tenant_with_settings.quiet_hours_end = '08:00'
+        tenant_with_settings.save()
+        
+        # Create user with required scope
+        user = User.objects.create(
+            email='admin@example.com',
+            first_name='Admin',
+            last_name='User'
+        )
+        
+        role = Role.objects.create(
+            tenant=tenant_with_settings,
+            name='Admin',
+            is_system=True
+        )
+        
+        permission = Permission.objects.get_or_create(
+            code='users:manage',
+            defaults={'name': 'Manage Users', 'description': 'Manage users'}
+        )[0]
+        
+        RolePermission.objects.create(role=role, permission=permission, allow=True)
+        
+        tenant_user = TenantUser.objects.create(
+            tenant=tenant_with_settings,
+            user=user,
+            is_active=True
+        )
+        tenant_user.user_roles.create(role=role)
+        
+        # Disable quiet hours
+        api_client.force_authenticate(user=user)
+        response = api_client.put(
+            '/v1/settings/business',
+            {
+                'quiet_hours': {
+                    'enabled': False
+                }
+            },
+            format='json',
+            HTTP_X_TENANT_ID=str(tenant_with_settings.id)
+        )
+        
+        assert response.status_code == 200
+        
+        # Verify quiet hours are disabled
+        tenant_with_settings.refresh_from_db()
+        assert tenant_with_settings.quiet_hours_start is None
+        assert tenant_with_settings.quiet_hours_end is None
+        
+        # Verify response shows disabled
+        data = response.json()
+        assert data['settings']['quiet_hours']['enabled'] is False
+    
+    def test_onboarding_status_updated_on_business_settings_save(self, tenant_with_settings, api_client):
+        """Test that onboarding status is updated when business settings are saved."""
+        from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission
+        
+        # Initialize onboarding status
+        settings = tenant_with_settings.settings
+        settings.initialize_onboarding_status()
+        
+        # Create user with required scope
+        user = User.objects.create(
+            email='admin@example.com',
+            first_name='Admin',
+            last_name='User'
+        )
+        
+        role = Role.objects.create(
+            tenant=tenant_with_settings,
+            name='Admin',
+            is_system=True
+        )
+        
+        permission = Permission.objects.get_or_create(
+            code='users:manage',
+            defaults={'name': 'Manage Users', 'description': 'Manage users'}
+        )[0]
+        
+        RolePermission.objects.create(role=role, permission=permission, allow=True)
+        
+        tenant_user = TenantUser.objects.create(
+            tenant=tenant_with_settings,
+            user=user,
+            is_active=True
+        )
+        tenant_user.user_roles.create(role=role)
+        
+        # Update business settings
+        api_client.force_authenticate(user=user)
+        response = api_client.put(
+            '/v1/settings/business',
+            {
+                'timezone': 'America/New_York',
+                'business_hours': {
+                    'monday': {'open': '09:00', 'close': '17:00', 'closed': False}
+                }
+            },
+            format='json',
+            HTTP_X_TENANT_ID=str(tenant_with_settings.id)
+        )
+        
+        assert response.status_code == 200
+        
+        # Verify onboarding status was updated
+        settings.refresh_from_db()
+        assert settings.onboarding_status['business_settings_configured']['completed'] is True
+        assert settings.onboarding_status['business_settings_configured']['completed_at'] is not None

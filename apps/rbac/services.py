@@ -1,40 +1,32 @@
 """
-RBAC Service for scope resolution and permission management.
+RBAC and Authentication services.
 
 Implements:
-- Scope resolution with deny-overrides-allow pattern
-- Permission grant/deny operations
-- Role assignment/removal with audit logging
-- Four-eyes validation for sensitive operations
-- Caching for performance optimization
+- RBACService: scope resolution, permission management, four-eyes validation
+- AuthService: JWT authentication, user registration, email verification
 """
-from typing import Set, Optional
-from django.core.cache import cache
+import secrets
+import hashlib
+from typing import Set, Optional, Dict, Any
+from datetime import datetime, timedelta
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django.core.cache import cache
+import jwt
+
 from apps.rbac.models import (
-    TenantUser, Permission, Role, RolePermission,
-    TenantUserRole, UserPermission, AuditLog
-)
-from apps.core.cache import (
-    CacheService, CacheKeys, CacheTTL, TenantCacheInvalidator
+    User, TenantUser, Permission, Role, RolePermission, 
+    UserPermission, TenantUserRole, AuditLog, PasswordResetToken
 )
 
 
 class RBACService:
     """
-    Service for RBAC operations including scope resolution and permission management.
-    
-    Key features:
-    - Aggregates permissions from roles
-    - Applies deny-overrides-allow pattern for user permission overrides
-    - Caches scope resolution for performance (5-minute TTL)
-    - Logs all RBAC changes to audit trail
-    - Validates four-eyes approval for sensitive operations
+    Service for RBAC operations: scope resolution, permission management, four-eyes validation.
     """
     
-    # Cache TTL for scope resolution (5 minutes)
-    SCOPE_CACHE_TTL = 300
+    SCOPE_CACHE_TTL = 300  # 5 minutes
     
     @classmethod
     def resolve_scopes(cls, tenant_user: TenantUser) -> Set[str]:
@@ -44,101 +36,140 @@ class RBACService:
         Aggregates permissions from:
         1. All roles assigned to the user
         2. User-level permission overrides (grants)
-        3. Applies deny-overrides-allow pattern (UserPermission.granted=False wins)
+        3. User-level permission denials (denies win over grants)
         
-        Results are cached for 5 minutes for performance.
+        Results are cached for 5 minutes.
         
         Args:
-            tenant_user: TenantUser instance to resolve scopes for
+            tenant_user: TenantUser instance
             
         Returns:
-            Set of permission codes (e.g., {'catalog:view', 'catalog:edit'})
+            Set of permission codes (e.g., {'catalog:view', 'orders:edit'})
         """
-        # Check cache first using centralized cache service
-        cache_key = CacheKeys.format(
-            CacheKeys.USER_SCOPES,
-            tenant_id=str(tenant_user.tenant_id),
-            user_id=str(tenant_user.user_id)
-        )
+        cache_key = f"scopes:tenant_user:{tenant_user.id}"
+        cached_scopes = cache.get(cache_key)
         
-        cached_scopes = CacheService.get(cache_key)
         if cached_scopes is not None:
-            return cached_scopes
+            return set(cached_scopes)
         
         # Start with empty set
         scopes = set()
         
-        # Step 1: Aggregate permissions from all assigned roles
+        # 1. Aggregate permissions from all roles
         role_permissions = Permission.objects.filter(
             role_permissions__role__user_roles__tenant_user=tenant_user
-        ).distinct().values_list('code', flat=True)
+        ).distinct()
         
-        scopes.update(role_permissions)
+        for perm in role_permissions:
+            scopes.add(perm.code)
         
-        # Step 2: Get user permission overrides
-        user_permissions = UserPermission.objects.filter(
-            tenant_user=tenant_user
+        # 2. Apply user-level grants first
+        user_grants = UserPermission.objects.filter(
+            tenant_user=tenant_user,
+            granted=True
         ).select_related('permission')
         
-        # Step 3: Apply deny-overrides-allow pattern
-        # First, collect all denies
-        denies = set()
-        grants = set()
+        for grant in user_grants:
+            scopes.add(grant.permission.code)
         
-        for user_perm in user_permissions:
-            if user_perm.granted:
-                grants.add(user_perm.permission.code)
-            else:
-                denies.add(user_perm.permission.code)
+        # 3. Apply user-level denies (deny wins over everything)
+        user_denies = UserPermission.objects.filter(
+            tenant_user=tenant_user,
+            granted=False
+        ).select_related('permission')
         
-        # Add explicit grants
-        scopes.update(grants)
+        for deny in user_denies:
+            # Remove from scopes (deny wins)
+            scopes.discard(deny.permission.code)
         
-        # Remove all denies (deny wins over role grants and explicit grants)
-        scopes -= denies
-        
-        # Cache the result using centralized cache service
-        CacheService.set(cache_key, scopes, CacheTTL.RBAC_SCOPES)
+        # Cache the result
+        cache.set(cache_key, list(scopes), cls.SCOPE_CACHE_TTL)
         
         return scopes
     
     @classmethod
     def invalidate_scope_cache(cls, tenant_user: TenantUser):
-        """
-        Invalidate cached scopes for a tenant user.
-        
-        Should be called whenever roles or permissions change for the user.
-        
-        Args:
-            tenant_user: TenantUser instance to invalidate cache for
-        """
-        TenantCacheInvalidator.invalidate_user_scopes(
-            str(tenant_user.tenant_id),
-            str(tenant_user.user_id)
+        """Invalidate cached scopes for a tenant user."""
+        cache_key = f"scopes:tenant_user:{tenant_user.id}"
+        cache.delete(cache_key)
+    
+    @classmethod
+    def has_scope(cls, tenant_user: TenantUser, scope: str) -> bool:
+        """Check if tenant user has a specific scope."""
+        scopes = cls.resolve_scopes(tenant_user)
+        return scope in scopes
+    
+    @classmethod
+    def has_all_scopes(cls, tenant_user: TenantUser, required_scopes) -> bool:
+        """Check if tenant user has all required scopes."""
+        scopes = cls.resolve_scopes(tenant_user)
+        # Convert to set if it's a list
+        if isinstance(required_scopes, list):
+            required_scopes = set(required_scopes)
+        return required_scopes.issubset(scopes)
+    
+    @classmethod
+    def has_any_scope(cls, tenant_user: TenantUser, required_scopes) -> bool:
+        """Check if tenant user has any of the required scopes."""
+        scopes = cls.resolve_scopes(tenant_user)
+        # Convert to set if it's a list
+        if isinstance(required_scopes, list):
+            required_scopes = set(required_scopes)
+        return bool(required_scopes.intersection(scopes))
+    
+    @classmethod
+    def get_role_permissions(cls, role: Role) -> Set[str]:
+        """Get all permission codes for a role."""
+        return set(
+            Permission.objects.filter(
+                role_permissions__role=role
+            ).values_list('code', flat=True)
         )
     
     @classmethod
-    @transaction.atomic
-    def grant_permission(
-        cls,
-        tenant_user: TenantUser,
-        permission_code: str,
-        reason: str = '',
-        granted_by: Optional['User'] = None,
-        request=None
-    ) -> UserPermission:
+    def get_tenant_user_roles(cls, tenant_user: TenantUser):
+        """Get all roles for a tenant user."""
+        return Role.objects.filter(
+            user_roles__tenant_user=tenant_user
+        ).distinct()
+    
+    @classmethod
+    def bulk_assign_roles(cls, tenant_user: TenantUser, role_ids: list,
+                         assigned_by: Optional[User] = None):
         """
-        Grant a permission to a specific user (user-level override).
+        Assign multiple roles to a tenant user at once.
         
-        Creates or updates a UserPermission record with granted=True.
-        Logs the action to audit trail.
+        Args:
+            tenant_user: TenantUser to assign roles to
+            role_ids: List of role IDs to assign
+            assigned_by: User who assigned the roles
+            
+        Returns:
+            List of TenantUserRole instances
+        """
+        roles = Role.objects.filter(
+            id__in=role_ids,
+            tenant=tenant_user.tenant
+        )
+        
+        user_roles = []
+        for role in roles:
+            user_role = cls.assign_role(tenant_user, role, assigned_by)
+            user_roles.append(user_role)
+        
+        return user_roles
+    
+    @classmethod
+    def grant_permission(cls, tenant_user: TenantUser, permission_code: str, 
+                        reason: str = '', granted_by: Optional[User] = None) -> UserPermission:
+        """
+        Grant a permission to a user (user-level override).
         
         Args:
             tenant_user: TenantUser to grant permission to
             permission_code: Permission code (e.g., 'catalog:view')
-            reason: Reason for granting permission
-            granted_by: User who is granting the permission
-            request: Django request object for audit context
+            reason: Reason for granting
+            granted_by: User who granted the permission
             
         Returns:
             UserPermission instance
@@ -146,15 +177,11 @@ class RBACService:
         Raises:
             Permission.DoesNotExist: If permission code doesn't exist
         """
-        # Get permission
         permission = Permission.objects.by_code(permission_code)
         if not permission:
-            raise Permission.DoesNotExist(
-                f"Permission '{permission_code}' does not exist"
-            )
+            raise Permission.DoesNotExist(f"Permission '{permission_code}' does not exist")
         
-        # Create or update user permission
-        user_perm, created = UserPermission.objects.grant_permission(
+        user_permission, created = UserPermission.objects.grant_permission(
             tenant_user=tenant_user,
             permission=permission,
             reason=reason,
@@ -170,44 +197,33 @@ class RBACService:
             user=granted_by,
             tenant=tenant_user.tenant,
             target_type='UserPermission',
-            target_id=user_perm.id,
+            target_id=user_permission.id,
             diff={
                 'permission': permission_code,
                 'granted': True,
-                'reason': reason,
-                'target_user': tenant_user.user.email,
             },
             metadata={
-                'created': created,
-            },
-            request=request
+                'target_user_email': tenant_user.user.email,
+                'permission_code': permission_code,
+                'reason': reason,
+            }
         )
         
-        return user_perm
+        return user_permission
     
     @classmethod
-    @transaction.atomic
-    def deny_permission(
-        cls,
-        tenant_user: TenantUser,
-        permission_code: str,
-        reason: str = '',
-        granted_by: Optional['User'] = None,
-        request=None
-    ) -> UserPermission:
+    def deny_permission(cls, tenant_user: TenantUser, permission_code: str,
+                       reason: str = '', granted_by: Optional[User] = None) -> UserPermission:
         """
-        Deny a permission to a specific user (user-level override).
+        Deny a permission to a user (user-level override).
         
-        Creates or updates a UserPermission record with granted=False.
-        This will override any role-based grants (deny wins).
-        Logs the action to audit trail.
+        Deny overrides always win over role grants.
         
         Args:
             tenant_user: TenantUser to deny permission to
             permission_code: Permission code (e.g., 'catalog:edit')
-            reason: Reason for denying permission
-            granted_by: User who is denying the permission
-            request: Django request object for audit context
+            reason: Reason for denying
+            granted_by: User who denied the permission
             
         Returns:
             UserPermission instance
@@ -215,15 +231,11 @@ class RBACService:
         Raises:
             Permission.DoesNotExist: If permission code doesn't exist
         """
-        # Get permission
         permission = Permission.objects.by_code(permission_code)
         if not permission:
-            raise Permission.DoesNotExist(
-                f"Permission '{permission_code}' does not exist"
-            )
+            raise Permission.DoesNotExist(f"Permission '{permission_code}' does not exist")
         
-        # Create or update user permission
-        user_perm, created = UserPermission.objects.deny_permission(
+        user_permission, created = UserPermission.objects.deny_permission(
             tenant_user=tenant_user,
             permission=permission,
             reason=reason,
@@ -239,152 +251,88 @@ class RBACService:
             user=granted_by,
             tenant=tenant_user.tenant,
             target_type='UserPermission',
-            target_id=user_perm.id,
+            target_id=user_permission.id,
             diff={
                 'permission': permission_code,
                 'granted': False,
-                'reason': reason,
-                'target_user': tenant_user.user.email,
             },
             metadata={
-                'created': created,
-            },
-            request=request
+                'target_user_email': tenant_user.user.email,
+                'permission_code': permission_code,
+                'reason': reason,
+            }
         )
         
-        return user_perm
+        return user_permission
     
     @classmethod
-    def validate_four_eyes(
-        cls,
-        initiator_user_id,
-        approver_user_id
-    ) -> bool:
-        """
-        Validate four-eyes approval pattern.
-        
-        Ensures that the initiator and approver are different users.
-        Used for sensitive operations like withdrawal approvals.
-        
-        Args:
-            initiator_user_id: ID of user who initiated the action
-            approver_user_id: ID of user who is approving the action
-            
-        Returns:
-            True if validation passes (different users)
-            
-        Raises:
-            ValueError: If initiator and approver are the same user
-        """
-        if initiator_user_id == approver_user_id:
-            raise ValueError(
-                "Four-eyes validation failed: initiator and approver must be different users"
-            )
-        return True
-    
-    @classmethod
-    @transaction.atomic
-    def assign_role(
-        cls,
-        tenant_user: TenantUser,
-        role: Role,
-        assigned_by: Optional['User'] = None,
-        request=None
-    ) -> TenantUserRole:
+    def assign_role(cls, tenant_user: TenantUser, role: Role, 
+                   assigned_by: Optional[User] = None) -> TenantUserRole:
         """
         Assign a role to a tenant user.
-        
-        Creates a TenantUserRole record linking the user to the role.
-        Invalidates scope cache and logs to audit trail.
         
         Args:
             tenant_user: TenantUser to assign role to
             role: Role to assign
-            assigned_by: User who is assigning the role
-            request: Django request object for audit context
+            assigned_by: User who assigned the role
             
         Returns:
             TenantUserRole instance
-            
-        Raises:
-            ValueError: If role doesn't belong to the same tenant as tenant_user
         """
-        # Validate role belongs to same tenant
-        if role.tenant_id != tenant_user.tenant_id:
-            raise ValueError(
-                f"Role '{role.name}' does not belong to tenant '{tenant_user.tenant.name}'"
-            )
+        if role.tenant != tenant_user.tenant:
+            raise ValueError("Role must belong to the same tenant as the user")
         
-        # Create or get role assignment
-        user_role, created = TenantUserRole.objects.get_or_create(
+        tenant_user_role, created = TenantUserRole.objects.get_or_create(
             tenant_user=tenant_user,
             role=role,
-            defaults={
-                'assigned_by': assigned_by,
-            }
+            defaults={'assigned_by': assigned_by}
         )
         
         # Invalidate cache
         cls.invalidate_scope_cache(tenant_user)
         
         # Log to audit trail
-        AuditLog.log_action(
-            action='role_assigned',
-            user=assigned_by,
-            tenant=tenant_user.tenant,
-            target_type='TenantUserRole',
-            target_id=user_role.id,
-            diff={
-                'role': role.name,
-                'target_user': tenant_user.user.email,
-            },
-            metadata={
-                'created': created,
-                'role_id': str(role.id),
-            },
-            request=request
-        )
+        if created:
+            AuditLog.log_action(
+                action='role_assigned',
+                user=assigned_by,
+                tenant=tenant_user.tenant,
+                target_type='TenantUserRole',
+                target_id=tenant_user_role.id,
+                diff={
+                    'role': role.name,
+                    'action': 'assigned',
+                },
+                metadata={
+                    'target_user_email': tenant_user.user.email,
+                    'role_name': role.name,
+                }
+            )
         
-        return user_role
+        return tenant_user_role
     
     @classmethod
-    @transaction.atomic
-    def remove_role(
-        cls,
-        tenant_user: TenantUser,
-        role: Role,
-        removed_by: Optional['User'] = None,
-        request=None
-    ) -> bool:
+    def remove_role(cls, tenant_user: TenantUser, role: Role,
+                   removed_by: Optional[User] = None) -> bool:
         """
         Remove a role from a tenant user.
-        
-        Deletes the TenantUserRole record.
-        Invalidates scope cache and logs to audit trail.
         
         Args:
             tenant_user: TenantUser to remove role from
             role: Role to remove
-            removed_by: User who is removing the role
-            request: Django request object for audit context
+            removed_by: User who removed the role
             
         Returns:
-            True if role was removed, False if role wasn't assigned
+            True if role was removed, False if it didn't exist
         """
-        # Try to get and delete the role assignment
-        try:
-            user_role = TenantUserRole.objects.get(
-                tenant_user=tenant_user,
-                role=role
-            )
-            user_role_id = user_role.id
-            user_role.delete()
-            removed = True
-        except TenantUserRole.DoesNotExist:
-            removed = False
-            user_role_id = None
+        result = TenantUserRole.objects.filter(
+            tenant_user=tenant_user,
+            role=role
+        ).delete()
+        # delete() returns (count, {model: count}) when items exist, or just int when empty
+        deleted_count = result[0] if isinstance(result, tuple) else result
         
-        if removed:
+        if deleted_count > 0:
             # Invalidate cache
             cls.invalidate_scope_cache(tenant_user)
             
@@ -394,192 +342,406 @@ class RBACService:
                 user=removed_by,
                 tenant=tenant_user.tenant,
                 target_type='TenantUserRole',
-                target_id=user_role_id,
                 diff={
                     'role': role.name,
-                    'target_user': tenant_user.user.email,
+                    'action': 'removed',
                 },
                 metadata={
-                    'role_id': str(role.id),
-                },
-                request=request
+                    'target_user_email': tenant_user.user.email,
+                    'role_name': role.name,
+                }
             )
+            return True
         
-        return removed
+        return False
     
     @classmethod
-    def has_scope(cls, tenant_user: TenantUser, scope: str) -> bool:
+    def validate_four_eyes(cls, initiator=None, approver=None, initiator_user_id=None, approver_user_id=None):
         """
-        Check if a tenant user has a specific scope.
+        Validate four-eyes principle: initiator and approver must be different users.
         
         Args:
-            tenant_user: TenantUser to check
-            scope: Permission code to check for
+            initiator: User instance or user ID (UUID) - deprecated, use initiator_user_id
+            approver: User instance or user ID (UUID) - deprecated, use approver_user_id
+            initiator_user_id: User ID (UUID) of the initiator
+            approver_user_id: User ID (UUID) of the approver
             
         Returns:
-            True if user has the scope, False otherwise
+            bool: True if validation passes
+            
+        Raises:
+            ValueError: If initiator and approver are the same user
         """
-        scopes = cls.resolve_scopes(tenant_user)
-        return scope in scopes
+        # Support both old and new parameter names for backward compatibility
+        if initiator_user_id is None:
+            initiator_user_id = initiator.id if hasattr(initiator, 'id') else initiator
+        if approver_user_id is None:
+            approver_user_id = approver.id if hasattr(approver, 'id') else approver
+        
+        if initiator_user_id == approver_user_id:
+            raise ValueError("Four-eyes validation failed: initiator and approver must be different users")
+        
+        return True
+
+
+class AuthService:
+    """
+    Service for authentication operations: JWT, registration, email verification, password reset.
+    """
     
     @classmethod
-    def has_all_scopes(cls, tenant_user: TenantUser, scopes: list) -> bool:
+    def generate_jwt(cls, user: User) -> str:
         """
-        Check if a tenant user has all specified scopes.
+        Generate JWT token for a user.
         
         Args:
-            tenant_user: TenantUser to check
-            scopes: List of permission codes to check for
+            user: User instance
             
         Returns:
-            True if user has all scopes, False otherwise
+            JWT token string
         """
-        user_scopes = cls.resolve_scopes(tenant_user)
-        return all(scope in user_scopes for scope in scopes)
-    
-    @classmethod
-    def has_any_scope(cls, tenant_user: TenantUser, scopes: list) -> bool:
-        """
-        Check if a tenant user has any of the specified scopes.
+        payload = {
+            'user_id': str(user.id),
+            'email': user.email,
+            'exp': datetime.utcnow() + timedelta(hours=getattr(settings, 'JWT_EXPIRATION_HOURS', 24)),
+            'iat': datetime.utcnow(),
+        }
         
-        Args:
-            tenant_user: TenantUser to check
-            scopes: List of permission codes to check for
-            
-        Returns:
-            True if user has at least one scope, False otherwise
-        """
-        user_scopes = cls.resolve_scopes(tenant_user)
-        return any(scope in user_scopes for scope in scopes)
-    
-    @classmethod
-    def get_users_with_scope(cls, tenant, scope: str):
-        """
-        Get all tenant users who have a specific scope.
-        
-        Args:
-            tenant: Tenant to search within
-            scope: Permission code to search for
-            
-        Returns:
-            QuerySet of TenantUser instances
-        """
-        # Get permission
-        permission = Permission.objects.by_code(scope)
-        if not permission:
-            return TenantUser.objects.none()
-        
-        # Get users with role that grants this permission
-        users_with_role = TenantUser.objects.filter(
-            tenant=tenant,
-            user_roles__role__role_permissions__permission=permission,
-            is_active=True
-        ).distinct()
-        
-        # Get users with explicit grant
-        users_with_grant = TenantUser.objects.filter(
-            tenant=tenant,
-            user_permissions__permission=permission,
-            user_permissions__granted=True,
-            is_active=True
-        ).distinct()
-        
-        # Get users with explicit deny (to exclude)
-        users_with_deny = TenantUser.objects.filter(
-            tenant=tenant,
-            user_permissions__permission=permission,
-            user_permissions__granted=False,
-            is_active=True
-        ).distinct()
-        
-        # Combine role-based and explicit grants, then exclude denies
-        all_users = (users_with_role | users_with_grant).exclude(
-            id__in=users_with_deny.values_list('id', flat=True)
+        token = jwt.encode(
+            payload,
+            settings.JWT_SECRET_KEY,
+            algorithm=getattr(settings, 'JWT_ALGORITHM', 'HS256')
         )
         
-        return all_users
+        return token
     
     @classmethod
-    def get_role_permissions(cls, role: Role) -> Set[str]:
+    def validate_jwt(cls, token: str) -> Optional[Dict[str, Any]]:
         """
-        Get all permission codes granted by a role.
+        Validate JWT token and return payload.
         
         Args:
-            role: Role to get permissions for
+            token: JWT token string
             
         Returns:
-            Set of permission codes
+            Decoded payload dict or None if invalid
         """
-        permissions = Permission.objects.filter(
-            role_permissions__role=role
-        ).values_list('code', flat=True)
+        try:
+            payload = jwt.decode(
+                token,
+                settings.JWT_SECRET_KEY,
+                algorithms=[getattr(settings, 'JWT_ALGORITHM', 'HS256')]
+            )
+            return payload
+        except jwt.ExpiredSignatureError:
+            return None
+        except jwt.InvalidTokenError:
+            return None
+    
+    @classmethod
+    def get_user_from_jwt(cls, token: str) -> Optional[User]:
+        """
+        Extract and return user from JWT token.
         
-        return set(permissions)
+        Args:
+            token: JWT token string
+            
+        Returns:
+            User instance or None if invalid
+        """
+        payload = cls.validate_jwt(token)
+        if not payload:
+            return None
+        
+        user_id = payload.get('user_id')
+        if not user_id:
+            return None
+        
+        try:
+            user = User.objects.get(id=user_id, is_active=True)
+            return user
+        except User.DoesNotExist:
+            return None
     
     @classmethod
     @transaction.atomic
-    def bulk_assign_roles(
-        cls,
-        tenant_user: TenantUser,
-        role_ids: list,
-        assigned_by: Optional['User'] = None,
-        request=None
-    ) -> list:
+    def register_user(cls, email: str, password: str, business_name: str,
+                     first_name: str = '', last_name: str = '') -> Dict[str, Any]:
         """
-        Assign multiple roles to a tenant user at once.
+        Register a new user with tenant and assign Owner role.
+        
+        Creates:
+        - User
+        - Tenant
+        - TenantUser (with Owner role)
+        - TenantSettings
         
         Args:
-            tenant_user: TenantUser to assign roles to
-            role_ids: List of role IDs to assign
-            assigned_by: User who is assigning the roles
-            request: Django request object for audit context
+            email: User email
+            password: User password (will be hashed)
+            business_name: Business/tenant name
+            first_name: User first name (optional)
+            last_name: User last name (optional)
             
         Returns:
-            List of TenantUserRole instances
+            Dict with user, tenant, token, and verification_token
         """
-        roles = Role.objects.filter(
-            id__in=role_ids,
-            tenant=tenant_user.tenant
+        from apps.tenants.models import Tenant, TenantSettings
+        from django.utils.text import slugify
+        
+        # Check if user already exists
+        if User.objects.filter(email=email).exists():
+            raise ValueError(f"User with email '{email}' already exists")
+        
+        # Generate email verification token
+        verification_token = secrets.token_urlsafe(32)
+        
+        # Create user
+        user = User.objects.create(
+            email=email,
+            password_hash=hashlib.sha256(password.encode()).hexdigest(),  # Temporary, will use proper hashing
+            first_name=first_name,
+            last_name=last_name,
+            email_verified=False,
+            email_verification_token=verification_token,
+            email_verification_sent_at=timezone.now(),
+        )
+        user.set_password(password)  # Properly hash password
+        user.save(update_fields=['password_hash'])
+        
+        # Create tenant
+        tenant_slug = slugify(business_name)
+        # Ensure unique slug
+        base_slug = tenant_slug
+        counter = 1
+        while Tenant.objects.filter(slug=tenant_slug).exists():
+            tenant_slug = f"{base_slug}-{counter}"
+            counter += 1
+        
+        # Generate placeholder WhatsApp number (will be configured later during onboarding)
+        # Format: +999{tenant_id_first_8_chars}
+        import uuid
+        temp_id = str(uuid.uuid4()).replace('-', '')[:12]
+        placeholder_number = f"+999{temp_id}"
+        
+        tenant = Tenant.objects.create(
+            name=business_name,
+            slug=tenant_slug,
+            status='trial',
+            whatsapp_number=placeholder_number,
+            trial_start_date=timezone.now(),
+            trial_end_date=timezone.now() + timedelta(days=getattr(settings, 'DEFAULT_TRIAL_DAYS', 14)),
         )
         
-        user_roles = []
-        for role in roles:
-            user_role = cls.assign_role(
-                tenant_user=tenant_user,
-                role=role,
-                assigned_by=assigned_by,
-                request=request
+        # TenantSettings is created automatically by signal
+        
+        # Create tenant user membership
+        tenant_user = TenantUser.objects.create(
+            tenant=tenant,
+            user=user,
+            invite_status='accepted',
+            joined_at=timezone.now(),
+        )
+        
+        # Assign Owner role (will be created by signal if not exists)
+        owner_role = Role.objects.by_name(tenant, 'Owner')
+        if owner_role:
+            RBACService.assign_role(tenant_user, owner_role, assigned_by=user)
+        
+        # Generate JWT token
+        token = cls.generate_jwt(user)
+        
+        # Log registration
+        AuditLog.log_action(
+            action='user_registered',
+            user=user,
+            tenant=tenant,
+            target_type='User',
+            target_id=user.id,
+            metadata={
+                'email': email,
+                'business_name': business_name,
+            }
+        )
+        
+        return {
+            'user': user,
+            'tenant': tenant,
+            'token': token,
+            'verification_token': verification_token,
+        }
+    
+    @classmethod
+    def verify_email(cls, token: str) -> bool:
+        """
+        Verify user email with verification token.
+        
+        Args:
+            token: Email verification token
+            
+        Returns:
+            True if verification successful, False otherwise
+        """
+        try:
+            user = User.objects.get(
+                email_verification_token=token,
+                email_verified=False,
+                is_active=True,
             )
-            user_roles.append(user_role)
-        
-        return user_roles
+            
+            # Check if token is not too old (24 hours)
+            if user.email_verification_sent_at:
+                age = timezone.now() - user.email_verification_sent_at
+                if age.total_seconds() > 24 * 3600:
+                    return False
+            
+            # Mark email as verified
+            user.email_verified = True
+            user.email_verification_token = None
+            user.save(update_fields=['email_verified', 'email_verification_token'])
+            
+            # Log verification
+            AuditLog.log_action(
+                action='email_verified',
+                user=user,
+                target_type='User',
+                target_id=user.id,
+                metadata={'email': user.email}
+            )
+            
+            return True
+            
+        except User.DoesNotExist:
+            return False
     
     @classmethod
-    def get_tenant_user_roles(cls, tenant_user: TenantUser):
+    def resend_verification_email(cls, email: str) -> Optional[str]:
         """
-        Get all roles assigned to a tenant user.
+        Resend verification email to user.
         
         Args:
-            tenant_user: TenantUser to get roles for
+            email: User email
             
         Returns:
-            QuerySet of Role instances
+            New verification token or None if user not found
         """
-        return Role.objects.filter(
-            user_roles__tenant_user=tenant_user
-        ).distinct()
+        try:
+            user = User.objects.get(email=email, email_verified=False, is_active=True)
+            
+            # Generate new token
+            verification_token = secrets.token_urlsafe(32)
+            user.email_verification_token = verification_token
+            user.email_verification_sent_at = timezone.now()
+            user.save(update_fields=['email_verification_token', 'email_verification_sent_at'])
+            
+            return verification_token
+            
+        except User.DoesNotExist:
+            return None
     
     @classmethod
-    def get_tenant_user_permission_overrides(cls, tenant_user: TenantUser):
+    def request_password_reset(cls, email: str) -> Optional[str]:
         """
-        Get all permission overrides for a tenant user.
+        Request password reset for a user.
         
         Args:
-            tenant_user: TenantUser to get overrides for
+            email: User email
             
         Returns:
-            QuerySet of UserPermission instances
+            Reset token or None if user not found
         """
-        return UserPermission.objects.filter(
-            tenant_user=tenant_user
-        ).select_related('permission')
+        try:
+            user = User.objects.get(email=email, is_active=True)
+            
+            # Create password reset token
+            reset_token = PasswordResetToken.create_token(user)
+            
+            # Log password reset request
+            AuditLog.log_action(
+                action='password_reset_requested',
+                user=user,
+                target_type='User',
+                target_id=user.id,
+                metadata={'email': email}
+            )
+            
+            return reset_token.token
+            
+        except User.DoesNotExist:
+            return None
+    
+    @classmethod
+    def reset_password(cls, token: str, new_password: str) -> bool:
+        """
+        Reset user password with reset token.
+        
+        Args:
+            token: Password reset token
+            new_password: New password
+            
+        Returns:
+            True if reset successful, False otherwise
+        """
+        reset_token = PasswordResetToken.objects.get_valid_token(token)
+        if not reset_token:
+            return False
+        
+        # Update user password
+        user = reset_token.user
+        user.set_password(new_password)
+        user.save(update_fields=['password_hash'])
+        
+        # Mark token as used
+        reset_token.mark_as_used()
+        
+        # Log password reset
+        AuditLog.log_action(
+            action='password_reset_completed',
+            user=user,
+            target_type='User',
+            target_id=user.id,
+            metadata={'email': user.email}
+        )
+        
+        return True
+    
+    @classmethod
+    def login(cls, email: str, password: str) -> Optional[Dict[str, Any]]:
+        """
+        Authenticate user and return JWT token.
+        
+        Args:
+            email: User email
+            password: User password
+            
+        Returns:
+            Dict with user and token, or None if authentication failed
+        """
+        try:
+            user = User.objects.get(email=email, is_active=True)
+            
+            if not user.check_password(password):
+                return None
+            
+            # Update last login
+            user.update_last_login()
+            
+            # Generate JWT token
+            token = cls.generate_jwt(user)
+            
+            # Log login
+            AuditLog.log_action(
+                action='user_login',
+                user=user,
+                target_type='User',
+                target_id=user.id,
+                metadata={'email': email}
+            )
+            
+            return {
+                'user': user,
+                'token': token,
+            }
+            
+        except User.DoesNotExist:
+            return None

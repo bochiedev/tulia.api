@@ -2,17 +2,131 @@
 RBAC serializers for REST API endpoints.
 
 Provides serialization for:
+- Authentication (registration, login, email verification, password reset)
 - User and TenantUser (memberships)
 - Roles and role assignments
 - Permissions and permission overrides
 - Audit logs
 """
 from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
 from apps.rbac.models import (
     User, TenantUser, Permission, Role, RolePermission,
     TenantUserRole, UserPermission, AuditLog
 )
 
+
+# ===== AUTHENTICATION SERIALIZERS =====
+
+class RegistrationSerializer(serializers.Serializer):
+    """Serializer for user registration."""
+    
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(
+        required=True,
+        write_only=True,
+        style={'input_type': 'password'}
+    )
+    first_name = serializers.CharField(required=True, max_length=100)
+    last_name = serializers.CharField(required=True, max_length=100)
+    business_name = serializers.CharField(required=True, max_length=255)
+    
+    def validate_email(self, value):
+        """Validate email is unique."""
+        if User.objects.filter(email=value.lower()).exists():
+            raise serializers.ValidationError(
+                "A user with this email already exists."
+            )
+        return value.lower()
+    
+    def validate_password(self, value):
+        """Validate password strength."""
+        validate_password(value)
+        return value
+    
+    def validate_business_name(self, value):
+        """Validate business name is not empty."""
+        if not value.strip():
+            raise serializers.ValidationError(
+                "Business name cannot be empty."
+            )
+        return value.strip()
+
+
+class LoginSerializer(serializers.Serializer):
+    """Serializer for user login."""
+    
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(
+        required=True,
+        write_only=True,
+        style={'input_type': 'password'}
+    )
+    
+    def validate_email(self, value):
+        """Normalize email to lowercase."""
+        return value.lower()
+
+
+class EmailVerificationSerializer(serializers.Serializer):
+    """Serializer for email verification."""
+    
+    token = serializers.CharField(required=True)
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """Serializer for requesting password reset."""
+    
+    email = serializers.EmailField(required=True)
+    
+    def validate_email(self, value):
+        """Normalize email to lowercase."""
+        return value.lower()
+
+
+class PasswordResetSerializer(serializers.Serializer):
+    """Serializer for resetting password with token."""
+    
+    token = serializers.CharField(required=True)
+    new_password = serializers.CharField(
+        required=True,
+        write_only=True,
+        style={'input_type': 'password'}
+    )
+    
+    def validate_new_password(self, value):
+        """Validate password strength."""
+        validate_password(value)
+        return value
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """Serializer for user profile (GET /v1/auth/me)."""
+    
+    full_name = serializers.CharField(source='get_full_name', read_only=True)
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'first_name', 'last_name', 'full_name',
+            'phone', 'is_active', 'email_verified', 'two_factor_enabled',
+            'last_login_at', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'email', 'is_active', 'email_verified',
+            'two_factor_enabled', 'last_login_at', 'created_at', 'updated_at'
+        ]
+
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating user profile (PUT /v1/auth/me)."""
+    
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'phone']
+
+
+# ===== USER SERIALIZERS =====
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for User model."""

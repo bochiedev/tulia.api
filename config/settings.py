@@ -514,3 +514,8 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@tulia.ai')
 
 # Frontend Configuration
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:3000')
+
+# JWT Authentication Configuration
+JWT_SECRET_KEY = env('JWT_SECRET_KEY', default=SECRET_KEY)
+JWT_ALGORITHM = env('JWT_ALGORITHM', default='HS256')
+JWT_EXPIRATION_HOURS = env.int('JWT_EXPIRATION_HOURS', default=24)
