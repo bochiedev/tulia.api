@@ -40,4 +40,5 @@ urlpatterns = [
     path('v1/services/', include('apps.services.urls')),
     path('v1/analytics/', include('apps.analytics.urls')),
     path('v1/webhooks/', include('apps.integrations.urls')),
+    path('v1/bot/', include('apps.bot.urls')),
 ]

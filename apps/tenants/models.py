@@ -1257,6 +1257,23 @@ class TenantSettings(BaseModel):
         help_text="Encrypted OpenAI organization ID"
     )
     
+    # LLM Configuration
+    llm_provider = models.CharField(
+        max_length=50,
+        default='openai',
+        help_text="LLM provider to use (openai, together, etc.)"
+    )
+    llm_timeout = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Timeout in seconds for LLM API calls"
+    )
+    llm_max_retries = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum number of retries for LLM API calls"
+    )
+    
     # === PAYMENT METHODS (Tokenized - PCI-DSS Compliant) ===
     
     stripe_customer_id = models.CharField(
