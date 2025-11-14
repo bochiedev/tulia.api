@@ -21,6 +21,22 @@
       "item": [
         {
           "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('access_token', jsonData.token);",
+                  "    pm.environment.set('tenant_id', jsonData.tenant.id);",
+                  "    console.log('Token saved:', jsonData.token);",
+                  "    console.log('Tenant ID saved:', jsonData.tenant.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -31,7 +47,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\"\n}"
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"business_name\": \"My Business\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/v1/auth/register",
@@ -56,8 +72,8 @@
                 "exec": [
                   "if (pm.response.code === 200) {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.environment.set('access_token', jsonData.access_token);",
-                  "    pm.environment.set('refresh_token', jsonData.refresh_token);",
+                  "    pm.environment.set('access_token', jsonData.token);",
+                  "    console.log('Token saved:', jsonData.token);",
                   "}"
                 ]
               }

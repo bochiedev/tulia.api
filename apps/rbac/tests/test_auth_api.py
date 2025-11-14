@@ -264,6 +264,8 @@ class TestUserProfileEndpoints:
     
     def test_get_profile_authenticated(self):
         """Test getting user profile when authenticated."""
+        from apps.rbac.services import AuthService
+        
         # Create user
         user = User.objects.create_user(
             email='test@example.com',
@@ -272,15 +274,144 @@ class TestUserProfileEndpoints:
             last_name='User'
         )
         
-        client = APIClient()
-        client.force_authenticate(user=user)
+        # Generate JWT token
+        token = AuthService.generate_jwt(user)
         
-        response = client.get('/v1/auth/me')
+        client = APIClient()
+        response = client.get(
+            '/v1/auth/me',
+            HTTP_AUTHORIZATION=f'Bearer {token}'
+        )
         
         assert response.status_code == status.HTTP_200_OK
         assert response.data['email'] == 'test@example.com'
         assert response.data['first_name'] == 'Test'
         assert response.data['last_name'] == 'User'
+        assert response.data['full_name'] == 'Test User'
+        assert 'tenants' in response.data
+        assert 'total_tenants' in response.data
+        assert 'pending_invites' in response.data
+        assert isinstance(response.data['tenants'], list)
+        assert isinstance(response.data['pending_invites'], list)
+    
+    def test_get_profile_with_tenants(self):
+        """Test getting user profile with tenant memberships."""
+        from apps.tenants.models import Tenant
+        from apps.rbac.models import TenantUser, Role, TenantUserRole
+        from apps.rbac.services import AuthService
+        
+        # Create user
+        user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123',
+            first_name='Test',
+            last_name='User'
+        )
+        
+        # Create tenant
+        tenant = Tenant.objects.create(
+            name='Test Corp',
+            slug='test-corp',
+            status='active'
+        )
+        
+        # Create membership
+        membership = TenantUser.objects.create(
+            tenant=tenant,
+            user=user,
+            is_active=True,
+            invite_status='accepted'
+        )
+        
+        # Get existing Owner role (created by signal)
+        role = Role.objects.get(tenant=tenant, name='Owner')
+        
+        # Assign role
+        TenantUserRole.objects.create(
+            tenant_user=membership,
+            role=role,
+            assigned_by=user
+        )
+        
+        # Generate JWT token
+        token = AuthService.generate_jwt(user)
+        
+        client = APIClient()
+        response = client.get(
+            '/v1/auth/me',
+            HTTP_AUTHORIZATION=f'Bearer {token}'
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['total_tenants'] == 1
+        assert len(response.data['tenants']) == 1
+        
+        tenant_data = response.data['tenants'][0]
+        assert tenant_data['tenant']['id'] == str(tenant.id)
+        assert tenant_data['tenant']['name'] == 'Test Corp'
+        assert tenant_data['tenant']['slug'] == 'test-corp'
+        assert tenant_data['tenant']['status'] == 'active'
+        assert len(tenant_data['roles']) == 1
+        assert tenant_data['roles'][0]['name'] == 'Owner'
+        assert isinstance(tenant_data['scopes'], list)
+        assert 'membership_id' in tenant_data
+        assert 'joined_at' in tenant_data
+    
+    def test_get_profile_with_pending_invites(self):
+        """Test getting user profile with pending invitations."""
+        from apps.tenants.models import Tenant
+        from apps.rbac.models import TenantUser
+        from apps.rbac.services import AuthService
+        
+        # Create users
+        user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123',
+            first_name='Test',
+            last_name='User'
+        )
+        
+        inviter = User.objects.create_user(
+            email='inviter@example.com',
+            password='testpass123',
+            first_name='Inviter',
+            last_name='User'
+        )
+        
+        # Create tenant
+        tenant = Tenant.objects.create(
+            name='Test Corp',
+            slug='test-corp',
+            status='active'
+        )
+        
+        # Create pending invitation
+        TenantUser.objects.create(
+            tenant=tenant,
+            user=user,
+            is_active=True,
+            invite_status='pending',
+            invited_by=inviter
+        )
+        
+        # Generate JWT token
+        token = AuthService.generate_jwt(user)
+        
+        client = APIClient()
+        response = client.get(
+            '/v1/auth/me',
+            HTTP_AUTHORIZATION=f'Bearer {token}'
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['total_tenants'] == 0  # Pending invites don't count
+        assert len(response.data['pending_invites']) == 1
+        
+        invite_data = response.data['pending_invites'][0]
+        assert invite_data['tenant']['id'] == str(tenant.id)
+        assert invite_data['tenant']['name'] == 'Test Corp'
+        assert invite_data['invited_by']['email'] == 'inviter@example.com'
+        assert invite_data['invited_by']['name'] == 'Inviter User'
     
     def test_get_profile_unauthenticated(self):
         """Test getting user profile when not authenticated."""
@@ -292,6 +423,8 @@ class TestUserProfileEndpoints:
     
     def test_update_profile_success(self):
         """Test updating user profile."""
+        from apps.rbac.services import AuthService
+        
         # Create user
         user = User.objects.create_user(
             email='test@example.com',
@@ -300,16 +433,22 @@ class TestUserProfileEndpoints:
             last_name='Name'
         )
         
-        client = APIClient()
-        client.force_authenticate(user=user)
+        # Generate JWT token
+        token = AuthService.generate_jwt(user)
         
+        client = APIClient()
         data = {
             'first_name': 'New',
             'last_name': 'Name',
             'phone': '+1234567890'
         }
         
-        response = client.put('/v1/auth/me', data, format='json')
+        response = client.put(
+            '/v1/auth/me',
+            data,
+            format='json',
+            HTTP_AUTHORIZATION=f'Bearer {token}'
+        )
         
         assert response.status_code == status.HTTP_200_OK
         assert response.data['first_name'] == 'New'

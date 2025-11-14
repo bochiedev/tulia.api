@@ -46,7 +46,7 @@ class AdminTenantListView(APIView):
     
     Required: Platform operator (superuser) access
     """
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]  # Removed - auth handled by middleware
     
     @extend_schema(
         summary="List all tenants (admin)",
@@ -99,7 +99,7 @@ class AdminTenantListView(APIView):
     def get(self, request):
         """List all tenants with filtering."""
         # Check if user is superuser (platform operator)
-        if not request.user.is_superuser:
+        if not request.user or not hasattr(request.user, 'is_superuser') or not request.user.is_superuser:
             return Response(
                 {'error': 'This endpoint requires platform operator access'},
                 status=status.HTTP_403_FORBIDDEN
@@ -143,7 +143,7 @@ class AdminTenantDetailView(APIView):
     
     Required: Platform operator (superuser) access
     """
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]  # Removed - auth handled by middleware
     
     @extend_schema(
         summary="Get tenant details (admin)",
@@ -169,7 +169,7 @@ class AdminTenantDetailView(APIView):
     def get(self, request, tenant_id):
         """Get tenant details."""
         # Check if user is superuser (platform operator)
-        if not request.user.is_superuser:
+        if not request.user or not hasattr(request.user, 'is_superuser') or not request.user.is_superuser:
             return Response(
                 {'error': 'This endpoint requires platform operator access'},
                 status=status.HTTP_403_FORBIDDEN
@@ -195,7 +195,7 @@ class AdminSubscriptionChangeView(APIView):
     
     Required: Platform operator (superuser) access
     """
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]  # Removed - auth handled by middleware
     
     @extend_schema(
         summary="Change tenant subscription tier (admin)",
@@ -248,7 +248,7 @@ Requires platform operator (superuser) access.
     def post(self, request, tenant_id):
         """Change subscription tier."""
         # Check if user is superuser (platform operator)
-        if not request.user.is_superuser:
+        if not request.user or not hasattr(request.user, 'is_superuser') or not request.user.is_superuser:
             return Response(
                 {'error': 'This endpoint requires platform operator access'},
                 status=status.HTTP_403_FORBIDDEN
@@ -376,7 +376,7 @@ class AdminSubscriptionWaiverView(APIView):
     
     Required: Platform operator (superuser) access
     """
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]  # Removed - auth handled by middleware
     
     @extend_schema(
         summary="Waive subscription fees (admin)",
@@ -428,7 +428,7 @@ Requires platform operator (superuser) access.
     def post(self, request, tenant_id):
         """Waive or unwaive subscription fees."""
         # Check if user is superuser (platform operator)
-        if not request.user.is_superuser:
+        if not request.user or not hasattr(request.user, 'is_superuser') or not request.user.is_superuser:
             return Response(
                 {'error': 'This endpoint requires platform operator access'},
                 status=status.HTTP_403_FORBIDDEN
@@ -528,7 +528,7 @@ class AdminWithdrawalProcessView(APIView):
     Note: This is for admin processing. For four-eyes approval within a tenant,
     use /v1/wallet/withdrawals/{id}/approve instead.
     """
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]  # Removed - auth handled by middleware
     
     @extend_schema(
         summary="Process withdrawal (admin)",
@@ -582,7 +582,7 @@ Requires platform operator (superuser) access.
     def post(self, request, transaction_id):
         """Process withdrawal."""
         # Check if user is superuser (platform operator)
-        if not request.user.is_superuser:
+        if not request.user or not hasattr(request.user, 'is_superuser') or not request.user.is_superuser:
             return Response(
                 {'error': 'This endpoint requires platform operator access'},
                 status=status.HTTP_403_FORBIDDEN

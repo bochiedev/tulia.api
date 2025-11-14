@@ -7,6 +7,7 @@ import environ
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.celery import CeleryIntegration
+from kombu import Queue, Exchange
 
 # Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -170,7 +171,9 @@ REST_FRAMEWORK = {
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
     ],
-    'DEFAULT_AUTHENTICATION_CLASSES': [],  # Authentication handled by TenantContextMiddleware
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'apps.core.authentication.MiddlewareAuthentication',  # Use user from TenantContextMiddleware
+    ],
     'DEFAULT_PERMISSION_CLASSES': [],
     'EXCEPTION_HANDLER': 'apps.core.exceptions.custom_exception_handler',
 }
@@ -428,26 +431,87 @@ CACHES = {
 }
 
 # Celery Configuration
-CELERY_BROKER_URL = env('CELERY_BROKER_URL')
-CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')
+# CELERY_BROKER_URL = env('CELERY_BROKER_URL')
+# CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')
+# CELERY_ACCEPT_CONTENT = ['json']
+# CELERY_TASK_SERIALIZER = 'json'
+# CELERY_RESULT_SERIALIZER = 'json'
+# CELERY_TIMEZONE = TIME_ZONE
+# CELERY_TASK_TRACK_STARTED = True
+# CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+# CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutes
+# CELERY_TASK_DEFAULT_QUEUE = 'default'
+# CELERY_TASK_DEFAULT_PRIORITY = 5
+
+
+# CELERY_DEFAULT_QUEUE = "default"
+# CELERY_DEFAULT_EXCHANGE = "default"
+# CELERY_DEFAULT_ROUTING_KEY = "default"
+
+# CELERY_QUEUES = (
+#     Queue("default", Exchange("default"), routing_key="default"),
+#     Queue("integrations", Exchange("integrations"), routing_key="integrations"),
+#     Queue("analytics", Exchange("analytics"), routing_key="analytics"),
+#     Queue("messaging", Exchange("messaging"), routing_key="messaging"),
+#     Queue("bot", Exchange("bot"), routing_key="bot"),
+# )
+
+# # Celery Queue Configuration
+# CELERY_TASK_ROUTES = {
+#     'apps.integrations.tasks.*': {'queue': 'integrations'},
+#     'apps.analytics.tasks.*': {'queue': 'analytics'},
+#     'apps.messaging.tasks.*': {'queue': 'messaging'},
+#     'apps.bot.tasks.*': {'queue': 'bot'},
+# }
+
+
+# Broker / backend (ensure these env variables are set)
+CELERY_BROKER_URL = env('CELERY_BROKER_URL')            # e.g. redis://localhost:6379/1
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND')    # e.g. redis://localhost:6379/2
+
+# Serialization / content
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
+
+# Timezone & task limits
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
-CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutes
+CELERY_TASK_TIME_LIMIT = 30 * 60        # 30 minutes
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60   # 25 minutes
 
-# Celery Queue Configuration
+# Default queue/routing keys (explicit)
+# These keys line up with the Queue definitions below.
+CELERY_TASK_DEFAULT_QUEUE = 'default'
+CELERY_TASK_DEFAULT_EXCHANGE = 'default'
+CELERY_TASK_DEFAULT_ROUTING_KEY = 'default'
+
+# Optional: default priority for tasks (only used if you set/need priorities)
+# Remove or adjust if you do not use priorities.
+CELERY_TASK_DEFAULT_PRIORITY = 5
+
+# Explicit Queue definitions (use kombu.Queue objects)
+CELERY_QUEUES = (
+    Queue('default', Exchange('default'), routing_key='default'),
+    Queue('integrations', Exchange('integrations'), routing_key='integrations'),
+    Queue('analytics', Exchange('analytics'), routing_key='analytics'),
+    Queue('messaging', Exchange('messaging'), routing_key='messaging'),
+    Queue('bot', Exchange('bot'), routing_key='bot'),
+)
+
+# Routing: map tasks to logical queues
 CELERY_TASK_ROUTES = {
     'apps.integrations.tasks.*': {'queue': 'integrations'},
-    'apps.analytics.tasks.*': {'queue': 'analytics'},
-    'apps.messaging.tasks.*': {'queue': 'messaging'},
-    'apps.bot.tasks.*': {'queue': 'bot'},
+    'apps.analytics.tasks.*':     {'queue': 'analytics'},
+    'apps.messaging.tasks.*':     {'queue': 'messaging'},
+    'apps.bot.tasks.*':           {'queue': 'bot'},
 }
 
-CELERY_TASK_DEFAULT_QUEUE = 'default'
-CELERY_TASK_DEFAULT_PRIORITY = 5
+# Optional reliability / performance tuning (recommended for production)
+# These are sensible defaults but tweak as needed:
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1   # avoid one worker prefetching many long tasks
+CELERY_ACKS_LATE = True   
+
 
 # Encryption
 ENCRYPTION_KEY = env('ENCRYPTION_KEY', default=None)
@@ -554,6 +618,7 @@ if SENTRY_DSN:
 
 # OpenAI/Claude Configuration
 OPENAI_API_KEY = env('OPENAI_API_KEY', default=None)
+OPENAI_MODEL = env('OPENAI_MODEL', default='gpt-4o-mini')
 ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default=None)
 
 # Subscription Configuration

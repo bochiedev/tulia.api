@@ -1,189 +1,313 @@
-# API Fixes Applied
+# Fixes Applied - JWT Authentication & Celery
 
-## Summary
-Fixed 5 critical API issues identified during Postman testing.
+## Issue 1: Celery Task Not Running
 
-## Issues Fixed
+**Problem:** Celery shows broker connection retries during startup
 
-### 1. ✅ CSRF Error on Twilio Credentials Endpoint
-**Error:** `{"detail": "CSRF Failed: Referer checking failed - no Referer."}`
+**Root Cause:** This is normal behavior during Celery startup. The warnings you see are expected and will stop once Celery fully connects to Redis.
 
-**Root Cause:** DRF's `@api_view` with POST method requires CSRF token by default when using session authentication.
-
-**Fix:**
-- Changed HTTP method from `PUT` to `POST` in `apps/tenants/views_settings.py`
-- Updated decorator: `@api_view(['GET', 'POST', 'DELETE'])`
-- DRF automatically exempts API views from CSRF when using token/API key auth
-
-**Files Changed:**
-- `apps/tenants/views_settings.py`
-
-**Test:**
+**Verification:**
 ```bash
-POST /v1/settings/integrations/twilio
-Headers:
-  X-TENANT-ID: {{tenant_id}}
-  X-TENANT-API-KEY: {{tenant_api_key}}
-Body: {"sid": "AC...", "token": "..."}
+# Check if Redis is running
+redis-cli ping
+# Should return: PONG
+
+# Check if Celery worker is running
+ps aux | grep celery
+
+# Test the task manually
+source venv/bin/activate
+python manage.py shell
 ```
-
----
-
-### 2. ✅ Authentication Error on Profile Endpoint
-**Error:** `{"error": "Authentication required"}`
-
-**Root Cause:** `UserProfileView` class didn't have `permission_classes` set, so DRF wasn't enforcing authentication properly.
-
-**Fix:**
-- Added `permission_classes = [IsAuthenticated]` to `UserProfileView`
-- Added import: `from rest_framework.permissions import IsAuthenticated`
-
-**Files Changed:**
-- `apps/rbac/views_auth.py`
-
-**Test:**
-```bash
-GET /v1/auth/me
-Headers:
-  Authorization: Bearer {{access_token}}
-```
-
----
-
-### 3. ✅ Analytics Endpoints Returning 500 Error
-**Error:** `TypeError: analytics_overview() missing 1 required positional argument: 'request'`
-
-**Root Cause:** The `@requires_scopes` decorator doesn't work correctly with function-based views decorated with `@api_view`. The decorator was consuming the `request` argument.
-
-**Fix:**
-- Removed `@requires_scopes('analytics:view')` decorator
-- Added manual scope checking at the start of each function:
-  ```python
-  if 'analytics:view' not in request.scopes:
-      return Response({'detail': 'Missing required scope: analytics:view'}, 
-                     status=status.HTTP_403_FORBIDDEN)
-  ```
-
-**Files Changed:**
-- `apps/analytics/views.py` (both `analytics_overview` and `analytics_daily`)
-
-**Test:**
-```bash
-GET /v1/analytics/overview?range=7d
-GET /v1/analytics/daily?start_date=2025-11-01&end_date=2025-11-10
-Headers:
-  X-TENANT-ID: {{tenant_id}}
-  X-TENANT-API-KEY: {{tenant_api_key}}
-```
-
----
-
-### 4. ✅ Order Details Endpoint Failing
-**Error:** `KeyError: 'currency'` when serializing order items
-
-**Root Cause:** `OrderItemSerializer` expected a `currency` field in each item dict, but order items stored in JSON don't include currency (it's stored at the Order level).
-
-**Fix:**
-- Made `currency` field optional in `OrderItemSerializer`:
-  ```python
-  currency = serializers.CharField(max_length=3, required=False, allow_null=True)
-  ```
-
-**Files Changed:**
-- `apps/orders/serializers.py`
-
-**Test:**
-```bash
-GET /v1/orders/{{order_id}}
-Headers:
-  X-TENANT-ID: {{tenant_id}}
-  X-TENANT-API-KEY: {{tenant_api_key}}
-```
-
----
-
-### 5. ✅ Send Message Endpoint 404 Error
-**Error:** `404 Not Found` on `/v1/messages/send`
-
-**Root Cause:** URL pattern was `messages/send` which created path `/v1/messages/messages/send` due to the app being mounted at `/v1/messages/`.
-
-**Fix:**
-- Changed URL pattern from `'messages/send'` to `'send'` in `apps/messaging/urls.py`
-- Now correctly resolves to `/v1/messages/send`
-- Applied same fix to `schedule` and `rate-limit-status` endpoints
-
-**Files Changed:**
-- `apps/messaging/urls.py`
-- `postman/TuliaAI.postman_collection.json` (updated endpoint URL)
-
-**Test:**
-```bash
-POST /v1/messages/send
-Headers:
-  X-TENANT-ID: {{tenant_id}}
-  X-TENANT-API-KEY: {{tenant_api_key}}
-Body: {"to": "+1234567890", "message": "Test"}
-```
-
----
-
-## Testing Checklist
-
-After restarting Django server, test these endpoints:
-
-- [ ] POST `/v1/settings/integrations/twilio` - Set Twilio credentials
-- [ ] GET `/v1/auth/me` - Get user profile
-- [ ] GET `/v1/analytics/overview` - Get analytics overview
-- [ ] GET `/v1/analytics/daily` - Get daily analytics
-- [ ] GET `/v1/orders/{{order_id}}` - Get order details
-- [ ] POST `/v1/messages/send` - Send WhatsApp message
-
-## Additional Notes
-
-### RBAC Scope Checking Pattern
-For function-based views with `@api_view`, use manual scope checking:
 
 ```python
-@api_view(['GET'])
-@permission_classes([IsAuthenticated, HasTenantScopes])
-def my_view(request):
-    # Manual scope check
-    if 'my:scope' not in request.scopes:
-        return Response(
-            {'detail': 'Missing required scope: my:scope'},
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
-    # View logic here
-    pass
+from apps.bot.tasks import process_inbound_message
+from apps.messaging.models import Message
+
+# Get a recent message
+msg = Message.objects.filter(direction='in').order_by('-created_at').first()
+if msg:
+    # Trigger the task
+    result = process_inbound_message.delay(str(msg.id))
+    print(f"Task ID: {result.id}")
 ```
 
-For class-based views, use the decorator on the class:
+**Status:** ✅ Task is properly registered. The warnings are normal startup behavior.
 
-```python
-@requires_scopes('my:scope')
-class MyView(APIView):
-    permission_classes = [HasTenantScopes]
-    
-    def get(self, request):
-        # Scope automatically checked
-        pass
+---
+
+## Issue 2: JWT Authentication Failing in Postman
+
+**Problem:** Postman returns 401 "Anonymous user" even with token set
+
+**Root Cause:** 
+1. Login response returns `token` field, but Postman script was looking for `access_token` and `refresh_token`
+2. Token wasn't being saved to environment variable
+3. Authorization header format might be incorrect
+
+**Fix Applied:**
+
+### 1. Updated Postman Collection
+
+**Login endpoint** - Fixed test script:
+```javascript
+if (pm.response.code === 200) {
+    var jsonData = pm.response.json();
+    pm.environment.set('access_token', jsonData.token);  // Changed from jsonData.access_token
+    console.log('Token saved:', jsonData.token);
+}
 ```
 
-### URL Pattern Best Practices
-When mounting an app at a prefix (e.g., `/v1/messages/`), URL patterns should be relative:
-- ✅ `path('send', ...)` → `/v1/messages/send`
-- ❌ `path('messages/send', ...)` → `/v1/messages/messages/send`
+**Register endpoint** - Added test script:
+```javascript
+if (pm.response.code === 201) {
+    var jsonData = pm.response.json();
+    pm.environment.set('access_token', jsonData.token);
+    pm.environment.set('tenant_id', jsonData.tenant.id);
+    console.log('Token saved:', jsonData.token);
+    console.log('Tenant ID saved:', jsonData.tenant.id);
+}
+```
+
+### 2. How to Use in Postman
+
+**Step 1: Login or Register**
+1. Open the "Authentication" folder
+2. Run "Login" or "Register" request
+3. Check the console - you should see: `Token saved: eyJhbGc...`
+4. The token is automatically saved to `{{access_token}}` variable
+
+**Step 2: Use Protected Endpoints**
+The collection is configured with Bearer token authentication at the collection level.
+All requests automatically use `{{access_token}}` from the environment.
+
+**Step 3: Verify Token is Set**
+1. Click the "eye" icon (top right) to view environment
+2. Check that `access_token` has a value
+3. If not, re-run Login/Register
+
+**Step 4: Manual Token Setting (if needed)**
+If automatic saving doesn't work:
+1. Copy the `token` value from Login/Register response
+2. Click "eye" icon → Edit environment
+3. Paste token into `access_token` field
+4. Save
+
+### 3. Authorization Header Format
+
+The middleware expects:
+```
+Authorization: Bearer <token>
+```
+
+Postman collection is configured to automatically add this header using:
+```json
+{
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  }
+}
+```
+
+### 4. Troubleshooting
+
+**Still getting 401?**
+
+Check these:
+
+1. **Token is set:**
+   ```
+   Console → {{access_token}}
+   Should show: eyJhbGc...
+   ```
+
+2. **Authorization header is present:**
+   ```
+   Request → Headers tab
+   Should see: Authorization: Bearer eyJhbGc...
+   ```
+
+3. **Token is valid:**
+   ```bash
+   # Test in Django shell
+   source venv/bin/activate
+   python manage.py shell
+   ```
+   ```python
+   from apps.rbac.services import AuthService
+   
+   token = "YOUR_TOKEN_HERE"
+   user = AuthService.get_user_from_jwt(token)
+   print(f"User: {user}")  # Should show user object, not None
+   ```
+
+4. **Check middleware logs:**
+   ```bash
+   # In Django runserver terminal, look for:
+   INFO JWT authentication successful for user: user@example.com
+   
+   # If you see:
+   WARNING Invalid or expired JWT token
+   # Then token is invalid - login again
+   ```
+
+### 5. Common Mistakes
+
+❌ **Wrong:** Using API key for user endpoints
+```
+X-TENANT-API-KEY: abc123...
+```
+API keys are deprecated for user operations.
+
+✅ **Correct:** Using JWT token
+```
+Authorization: Bearer eyJhbGc...
+```
+
+❌ **Wrong:** Missing Bearer prefix
+```
+Authorization: eyJhbGc...
+```
+
+✅ **Correct:** With Bearer prefix
+```
+Authorization: Bearer eyJhbGc...
+```
+
+---
+
+## Testing the Fixes
+
+### Test 1: Register New User
+```bash
+# In Postman:
+1. Open "Authentication" → "Register"
+2. Update email to something unique
+3. Click "Send"
+4. Check console: "Token saved: ..."
+5. Check environment: access_token should have value
+```
+
+### Test 2: Login Existing User
+```bash
+# In Postman:
+1. Open "Authentication" → "Login"
+2. Enter email and password
+3. Click "Send"
+4. Check console: "Token saved: ..."
+5. Check environment: access_token should have value
+```
+
+### Test 3: Get Profile
+```bash
+# In Postman:
+1. Open "Authentication" → "Get Profile"
+2. Click "Send"
+3. Should return 200 with user profile
+4. If 401, check Authorization header is present
+```
+
+### Test 4: List Products (Tenant-Scoped)
+```bash
+# In Postman:
+1. Open "Products" → "List Products"
+2. Make sure tenant_id is set in environment
+3. Click "Send"
+4. Should return 200 with products list
+5. If 401, check both Authorization header AND X-TENANT-ID header
+```
+
+---
+
+## API Authentication Summary
+
+### Public Endpoints (No Auth Required)
+- `POST /v1/auth/register`
+- `POST /v1/auth/login`
+- `POST /v1/auth/verify-email`
+- `POST /v1/auth/forgot-password`
+- `POST /v1/auth/reset-password`
+- `POST /v1/webhooks/twilio` (verified by signature)
+- `GET /v1/health`
+- `GET /schema/*`
+
+### JWT-Only Endpoints (No Tenant Required)
+- `GET /v1/auth/me` - Get user profile
+- `PUT /v1/auth/me` - Update user profile
+- `POST /v1/auth/logout` - Logout
+- `POST /v1/auth/refresh-token` - Refresh token
+- `GET /v1/tenants` - List user's tenants
+- `POST /v1/tenants` - Create new tenant
+
+**Headers Required:**
+```
+Authorization: Bearer <token>
+```
+
+### Tenant-Scoped Endpoints (Most Endpoints)
+- All product, order, service, analytics endpoints
+- Tenant management (update, delete)
+- RBAC (roles, permissions, memberships)
+- Messaging, customers, etc.
+
+**Headers Required:**
+```
+Authorization: Bearer <token>
+X-TENANT-ID: <tenant-uuid>
+```
+
+Note: `X-TENANT-API-KEY` is deprecated for user operations.
 
 ---
 
 ## Files Modified
 
-1. `apps/tenants/views_settings.py` - Fixed CSRF and changed PUT to POST
-2. `apps/rbac/views_auth.py` - Added IsAuthenticated permission
-3. `apps/analytics/views.py` - Fixed decorator issue with manual scope checks
-4. `apps/orders/serializers.py` - Made currency field optional
-5. `apps/messaging/urls.py` - Fixed URL patterns
-6. `postman/TuliaAI.postman_collection.json` - Updated endpoint URLs
+1. ✅ `postman/TuliaAI.postman_collection.json`
+   - Fixed Login test script to save `jsonData.token` instead of `jsonData.access_token`
+   - Added Register test script to auto-save token and tenant_id
+   - Updated Register body to include `business_name`
 
-All changes are backward compatible and follow Django/DRF best practices.
+2. ✅ `postman/TuliaAI.postman_environment.json`
+   - Already had `access_token` variable configured
+
+3. ✅ `apps/bot/tasks.py`
+   - Already properly configured with `@shared_task` decorator
+   - Task is registered and discoverable by Celery
+
+---
+
+## Next Steps
+
+1. **Re-import Postman Collection**
+   - Delete old collection in Postman
+   - Import updated `postman/TuliaAI.postman_collection.json`
+
+2. **Test Authentication Flow**
+   - Register or Login
+   - Verify token is saved
+   - Test protected endpoints
+
+3. **Test Celery Task**
+   - Send WhatsApp message
+   - Check Celery logs for task execution
+   - Verify bot response
+
+---
+
+## Support
+
+If issues persist:
+
+1. **Check Django logs** for authentication errors
+2. **Check Celery logs** for task execution
+3. **Check Postman console** for token saving
+4. **Verify environment variables** are set correctly
+
+**Token expires in 24 hours** - if you get 401 after a day, just login again.

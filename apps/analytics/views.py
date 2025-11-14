@@ -33,7 +33,7 @@ from apps.tenants.models import Subscription, Transaction
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, HasTenantScopes])
+@permission_classes([HasTenantScopes])
 def analytics_overview(request):
     """
     Get overview metrics for dashboard with date range aggregation.
@@ -52,7 +52,7 @@ def analytics_overview(request):
     Required scope: analytics:view
     """
     # Check scope manually for function-based view
-    if 'analytics:view' not in request.scopes:
+    if not hasattr(request, 'scopes') or 'analytics:view' not in request.scopes:
         return Response(
             {'detail': 'Missing required scope: analytics:view'},
             status=status.HTTP_403_FORBIDDEN
@@ -79,7 +79,7 @@ def analytics_overview(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, HasTenantScopes])
+@permission_classes([HasTenantScopes])
 def analytics_daily(request):
     """
     Get daily analytics metrics with optional date filtering.
@@ -100,7 +100,7 @@ def analytics_daily(request):
     Required scope: analytics:view
     """
     # Check scope manually for function-based view
-    if 'analytics:view' not in request.scopes:
+    if not hasattr(request, 'scopes') or 'analytics:view' not in request.scopes:
         return Response(
             {'detail': 'Missing required scope: analytics:view'},
             status=status.HTTP_403_FORBIDDEN
@@ -159,7 +159,7 @@ def analytics_daily(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, HasTenantScopes])
+@permission_classes([HasTenantScopes])
 @requires_scopes('analytics:view')
 def analytics_messaging(request):
     """
@@ -197,7 +197,7 @@ def analytics_messaging(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, HasTenantScopes])
+@permission_classes([HasTenantScopes])
 @requires_scopes('analytics:view')
 def analytics_funnel(request):
     """
@@ -301,7 +301,6 @@ def analytics_funnel(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
 def admin_analytics_revenue(request):
     """
     Get platform revenue analytics (admin/platform operator only).
@@ -323,7 +322,7 @@ def admin_analytics_revenue(request):
     Required scope: Platform operator (superuser)
     """
     # Check if user is superuser (platform operator)
-    if not request.user.is_superuser:
+    if not request.user or not hasattr(request.user, 'is_superuser') or not request.user.is_superuser:
         return Response(
             {'error': 'This endpoint requires platform operator access'},
             status=status.HTTP_403_FORBIDDEN

@@ -13,12 +13,35 @@ from django.contrib.postgres.indexes import GinIndex
 from apps.core.models import BaseModel
 
 
-class ProductManager(models.Manager):
-    """Manager for product queries with tenant scoping."""
+class ProductQuerySet(models.QuerySet):
+    """Custom QuerySet for Product with chainable methods."""
     
     def for_tenant(self, tenant):
         """Get products for a specific tenant."""
         return self.filter(tenant=tenant)
+    
+    def active(self):
+        """Get only active products."""
+        return self.filter(is_active=True)
+    
+    def search(self, query):
+        """Search products by title or description."""
+        return self.filter(
+            models.Q(title__icontains=query) |
+            models.Q(description__icontains=query)
+        )
+
+
+class ProductManager(models.Manager):
+    """Manager for product queries with tenant scoping."""
+    
+    def get_queryset(self):
+        """Return custom QuerySet."""
+        return ProductQuerySet(self.model, using=self._db)
+    
+    def for_tenant(self, tenant):
+        """Get products for a specific tenant."""
+        return self.get_queryset().for_tenant(tenant)
     
     def active(self):
         """
@@ -27,11 +50,11 @@ class ProductManager(models.Manager):
         WARNING: This method does NOT filter by tenant. 
         Always chain with .for_tenant(tenant) or use in tenant-scoped context.
         """
-        return self.filter(is_active=True)
+        return self.get_queryset().active()
     
     def by_external_id(self, tenant, external_source, external_id):
         """Find product by external source and ID."""
-        return self.filter(
+        return self.get_queryset().filter(
             tenant=tenant,
             external_source=external_source,
             external_id=external_id
@@ -39,10 +62,7 @@ class ProductManager(models.Manager):
     
     def search(self, tenant, query):
         """Search products by title or description."""
-        return self.filter(tenant=tenant, is_active=True).filter(
-            models.Q(title__icontains=query) |
-            models.Q(description__icontains=query)
-        )
+        return self.get_queryset().for_tenant(tenant).active().search(query)
 
 
 class Product(BaseModel):
@@ -199,8 +219,8 @@ class Product(BaseModel):
         return self.variants.count()
 
 
-class ProductVariantManager(models.Manager):
-    """Manager for product variant queries."""
+class ProductVariantQuerySet(models.QuerySet):
+    """Custom QuerySet for ProductVariant with chainable methods."""
     
     def for_product(self, product):
         """Get variants for a specific product."""
@@ -210,9 +230,31 @@ class ProductVariantManager(models.Manager):
         """Get variants for a specific tenant."""
         return self.filter(product__tenant=tenant)
     
+    def in_stock(self):
+        """Get only variants with stock."""
+        return self.filter(
+            models.Q(stock__isnull=True) | models.Q(stock__gt=0)
+        )
+
+
+class ProductVariantManager(models.Manager):
+    """Manager for product variant queries."""
+    
+    def get_queryset(self):
+        """Return custom QuerySet."""
+        return ProductVariantQuerySet(self.model, using=self._db)
+    
+    def for_product(self, product):
+        """Get variants for a specific product."""
+        return self.get_queryset().for_product(product)
+    
+    def for_tenant(self, tenant):
+        """Get variants for a specific tenant."""
+        return self.get_queryset().for_tenant(tenant)
+    
     def by_sku(self, tenant, sku):
         """Find variant by SKU within tenant."""
-        return self.filter(product__tenant=tenant, sku=sku).first()
+        return self.get_queryset().for_tenant(tenant).filter(sku=sku).first()
     
     def in_stock(self):
         """
@@ -221,9 +263,7 @@ class ProductVariantManager(models.Manager):
         WARNING: This method does NOT filter by tenant.
         Always chain with .for_tenant(tenant) or use in tenant-scoped context.
         """
-        return self.filter(
-            models.Q(stock__isnull=True) | models.Q(stock__gt=0)
-        )
+        return self.get_queryset().in_stock()
 
 
 class ProductVariant(BaseModel):

@@ -40,31 +40,65 @@ Update these variables in the environment:
 - `access_token` - JWT access token (set automatically after login)
 - `refresh_token` - JWT refresh token (set automatically after login)
 
-### 4. Test the API
+### 4. Authenticate (REQUIRED)
 
-#### Option A: Using API Key Authentication (Recommended for Testing)
+**All user endpoints now require JWT authentication.**
 
-Most endpoints use API key authentication via headers:
-- `X-TENANT-ID`: Your tenant UUID
-- `X-TENANT-API-KEY`: Your tenant API key
+#### Option A: Register New User (First Time)
 
-These are already configured in the environment!
+1. Go to **Authentication → Register**
+2. Update email to something unique in the request body
+3. Click **Send**
+4. ✅ Token and Tenant ID automatically saved to environment
+5. Check console: "Token saved: ..."
 
-**Test it:**
-1. Go to **Utilities → Health Check**
-2. Click **Send** - should return 200 OK
-3. Go to **Tenant Settings → Integrations → List Integrations**
-4. Click **Send** - should return your integration status
-
-#### Option B: Using JWT Authentication
-
-For user-specific operations:
+#### Option B: Login Existing User
 
 1. Go to **Authentication → Login**
-2. Update the request body with your credentials
+2. Enter your email and password in the request body
 3. Click **Send**
-4. The `access_token` will be automatically saved to environment
-5. Now you can use other authenticated endpoints
+4. ✅ Token automatically saved to environment
+5. Check console: "Token saved: ..."
+
+### 5. Verify Authentication
+
+1. Go to **Authentication → Get Profile**
+2. Click **Send**
+3. Should return 200 with your user profile
+4. If 401, check environment (eye icon) - `access_token` should have a value
+
+### 6. Test Tenant-Scoped Endpoints
+
+Most endpoints require both JWT token AND tenant ID:
+
+1. Verify `tenant_id` is set in environment (eye icon)
+2. Go to **Products → List Products**
+3. Click **Send**
+4. Should return 200 with products list
+
+**Headers automatically included:**
+- `Authorization: Bearer {{access_token}}` (from collection auth)
+- `X-TENANT-ID: {{tenant_id}}` (from request headers)
+
+## Important Authentication Changes
+
+⚠️ **API Keys are deprecated for user operations**
+
+**Old way (deprecated):**
+```
+X-TENANT-API-KEY: abc123...
+```
+
+**New way (required):**
+```
+Authorization: Bearer eyJhbGc...
+X-TENANT-ID: tenant-uuid
+```
+
+**Exceptions (still use API keys):**
+- Webhooks (verified by signature, not API key)
+- Health check (no auth)
+- Public endpoints (register, login, etc.)
 
 ## Setting Twilio Credentials
 

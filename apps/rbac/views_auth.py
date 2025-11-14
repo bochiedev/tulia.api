@@ -667,7 +667,7 @@ class LogoutView(APIView):
         # User is attached to request by authentication middleware
         user = request.user
         
-        if not user or not hasattr(user, 'id') or not user.is_authenticated:
+        if not user or not hasattr(user, 'id'):
             return Response(
                 {
                     'error': 'Authentication required'
@@ -724,7 +724,7 @@ class RefreshTokenView(APIView):
         # User is attached to request by authentication middleware
         user = request.user
         
-        if not user or not hasattr(user, 'id') or not user.is_authenticated:
+        if not user or not hasattr(user, 'id'):
             return Response(
                 {
                     'error': 'Authentication required'
@@ -748,7 +748,20 @@ class RefreshTokenView(APIView):
     tags=['Authentication'],
     summary='Get current user profile',
     description='''
-Get profile information for the authenticated user.
+Get comprehensive profile information for the authenticated user.
+
+Returns complete user data including:
+- Basic profile information (name, email, phone)
+- Account status (active, verified, 2FA enabled)
+- All tenant memberships with roles and permissions
+- Pending tenant invitations
+- Activity timestamps
+
+This endpoint is useful for:
+- Displaying user profile in the UI
+- Building tenant switcher (workspace selector)
+- Checking user permissions across tenants
+- Managing pending invitations
 
 Requires valid JWT token in Authorization header.
     ''',
@@ -767,11 +780,96 @@ Requires valid JWT token in Authorization header.
                 'full_name': 'John Doe',
                 'phone': '+1234567890',
                 'is_active': True,
+                'is_superuser': False,
                 'email_verified': True,
                 'two_factor_enabled': False,
                 'last_login_at': '2025-01-15T10:30:00Z',
                 'created_at': '2025-01-01T00:00:00Z',
-                'updated_at': '2025-01-15T10:30:00Z'
+                'updated_at': '2025-01-15T10:30:00Z',
+                'total_tenants': 2,
+                'tenants': [
+                    {
+                        'membership_id': '456e4567-e89b-12d3-a456-426614174001',
+                        'tenant': {
+                            'id': '789e4567-e89b-12d3-a456-426614174002',
+                            'name': 'Acme Corp',
+                            'slug': 'acme-corp',
+                            'status': 'active',
+                            'subscription': {
+                                'tier': 'professional',
+                                'status': 'active',
+                                'trial_ends_at': None
+                            }
+                        },
+                        'roles': [
+                            {
+                                'id': 'abc12345-e89b-12d3-a456-426614174003',
+                                'name': 'Owner',
+                                'description': 'Full access to all features',
+                                'is_system': True
+                            }
+                        ],
+                        'scopes': [
+                            'analytics:view',
+                            'catalog:edit',
+                            'catalog:view',
+                            'conversations:view',
+                            'finance:view',
+                            'integrations:manage',
+                            'orders:edit',
+                            'orders:view',
+                            'users:manage'
+                        ],
+                        'joined_at': '2025-01-01T00:00:00Z',
+                        'last_seen_at': '2025-01-15T10:30:00Z'
+                    },
+                    {
+                        'membership_id': '456e4567-e89b-12d3-a456-426614174004',
+                        'tenant': {
+                            'id': '789e4567-e89b-12d3-a456-426614174005',
+                            'name': 'Beta Inc',
+                            'slug': 'beta-inc',
+                            'status': 'active',
+                            'subscription': {
+                                'tier': 'trial',
+                                'status': 'active',
+                                'trial_ends_at': '2025-02-01T00:00:00Z'
+                            }
+                        },
+                        'roles': [
+                            {
+                                'id': 'def12345-e89b-12d3-a456-426614174006',
+                                'name': 'Catalog Manager',
+                                'description': 'Manage products and services',
+                                'is_system': True
+                            }
+                        ],
+                        'scopes': [
+                            'analytics:view',
+                            'catalog:edit',
+                            'catalog:view',
+                            'services:edit',
+                            'services:view'
+                        ],
+                        'joined_at': '2025-01-10T00:00:00Z',
+                        'last_seen_at': '2025-01-14T15:20:00Z'
+                    }
+                ],
+                'pending_invites': [
+                    {
+                        'id': 'ghi12345-e89b-12d3-a456-426614174007',
+                        'tenant': {
+                            'id': 'jkl12345-e89b-12d3-a456-426614174008',
+                            'name': 'Gamma LLC',
+                            'slug': 'gamma-llc'
+                        },
+                        'invited_by': {
+                            'email': 'admin@gamma-llc.com',
+                            'name': 'Jane Admin'
+                        },
+                        'invited_at': '2025-01-14T12:00:00Z'
+                    }
+                ]
             },
             response_only=True
         )
@@ -790,10 +888,12 @@ class UserProfileView(APIView):
     
     def get(self, request):
         """Get user profile."""
+        from django.contrib.auth.models import AnonymousUser
+        
         # User is attached to request by authentication middleware
         user = request.user
         
-        if not user or not hasattr(user, 'id') or not user.is_authenticated:
+        if not user or isinstance(user, AnonymousUser) or not hasattr(user, 'id'):
             return Response(
                 {
                     'error': 'Authentication required',
@@ -807,10 +907,12 @@ class UserProfileView(APIView):
     
     def put(self, request):
         """Update user profile."""
+        from django.contrib.auth.models import AnonymousUser
+        
         # User is attached to request by authentication middleware
         user = request.user
         
-        if not user or not hasattr(user, 'id') or not user.is_authenticated:
+        if not user or isinstance(user, AnonymousUser) or not hasattr(user, 'id'):
             return Response(
                 {
                     'error': 'Authentication required'

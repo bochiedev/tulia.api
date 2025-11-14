@@ -121,21 +121,197 @@ class PasswordResetSerializer(serializers.Serializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
-    """Serializer for user profile (GET /v1/auth/me)."""
+    """
+    Comprehensive serializer for user profile (GET /v1/auth/me).
+    
+    Returns complete user information including:
+    - Basic profile (name, email, phone)
+    - Account status (active, verified, 2FA)
+    - All tenant memberships with roles and permissions
+    - Activity timestamps
+    """
     
     full_name = serializers.CharField(source='get_full_name', read_only=True)
+    tenants = serializers.SerializerMethodField()
+    total_tenants = serializers.SerializerMethodField()
+    pending_invites = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'full_name',
-            'phone', 'is_active', 'email_verified', 'two_factor_enabled',
-            'last_login_at', 'created_at', 'updated_at'
+            'phone', 'is_active', 'is_superuser', 'email_verified', 
+            'two_factor_enabled', 'last_login_at', 'created_at', 
+            'updated_at', 'tenants', 'total_tenants', 'pending_invites'
         ]
         read_only_fields = [
-            'id', 'email', 'is_active', 'email_verified',
-            'two_factor_enabled', 'last_login_at', 'created_at', 'updated_at'
+            'id', 'email', 'is_active', 'is_superuser', 'email_verified',
+            'two_factor_enabled', 'last_login_at', 'created_at', 'updated_at', 
+            'tenants', 'total_tenants', 'pending_invites'
         ]
+    
+    def get_total_tenants(self, obj):
+        """Get count of active tenant memberships."""
+        from apps.rbac.models import TenantUser
+        from django.contrib.auth.models import AnonymousUser
+        
+        # Handle AnonymousUser
+        if isinstance(obj, AnonymousUser) or not obj or not hasattr(obj, 'id'):
+            return 0
+        
+        return TenantUser.objects.filter(
+            user=obj,
+            is_active=True,
+            invite_status='accepted'
+        ).count()
+    
+    def get_pending_invites(self, obj):
+        """
+        Get pending tenant invitations for this user.
+        
+        Returns list of tenants the user has been invited to but hasn't accepted yet.
+        """
+        from apps.rbac.models import TenantUser
+        from django.contrib.auth.models import AnonymousUser
+        
+        # Handle AnonymousUser
+        if isinstance(obj, AnonymousUser) or not obj or not hasattr(obj, 'id'):
+            return []
+        
+        try:
+            pending = TenantUser.objects.filter(
+                user=obj,
+                is_active=True,
+                invite_status='pending'
+            ).select_related('tenant', 'invited_by').order_by('-invited_at')
+            
+            invites_data = []
+            for invite in pending:
+                invites_data.append({
+                    'id': str(invite.id),
+                    'tenant': {
+                        'id': str(invite.tenant.id),
+                        'name': invite.tenant.name,
+                        'slug': invite.tenant.slug,
+                    },
+                    'invited_by': {
+                        'email': invite.invited_by.email if invite.invited_by else None,
+                        'name': invite.invited_by.get_full_name() if invite.invited_by else None,
+                    },
+                    'invited_at': invite.invited_at.isoformat() if invite.invited_at else None,
+                })
+            
+            return invites_data
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error getting pending invites: {str(e)}", exc_info=True)
+            return []
+    
+    def get_tenants(self, obj):
+        """
+        Get all active tenants the user belongs to with comprehensive details.
+        
+        Returns only accepted memberships for active tenants with:
+        - Tenant basic info (id, name, slug, status)
+        - User's roles in that tenant
+        - User's effective permissions/scopes
+        - Membership metadata (joined date, last seen)
+        """
+        from apps.rbac.models import TenantUser
+        from django.contrib.auth.models import AnonymousUser
+        
+        # Handle AnonymousUser
+        if isinstance(obj, AnonymousUser) or not obj or not hasattr(obj, 'id'):
+            return []
+        
+        try:
+            # SECURITY: Only return active, accepted memberships
+            memberships = TenantUser.objects.filter(
+                user=obj,
+                is_active=True,
+                invite_status='accepted'
+            ).select_related('tenant').prefetch_related(
+                'user_roles__role',
+                'user_roles__role__role_permissions__permission'
+            ).order_by('-created_at')
+            
+            tenants_data = []
+            for membership in memberships:
+                try:
+                    # Get detailed role information
+                    roles_info = []
+                    for user_role in membership.user_roles.all():
+                        role = user_role.role
+                        roles_info.append({
+                            'id': str(role.id),
+                            'name': role.name,
+                            'description': role.description,
+                            'is_system': role.is_system,
+                        })
+                    
+                    # Get effective scopes/permissions
+                    from apps.rbac.services import RBACService
+                    scopes = RBACService.resolve_scopes(membership)
+                    
+                    # Get tenant settings info (if available)
+                    tenant_info = {
+                        'id': str(membership.tenant.id),
+                        'name': membership.tenant.name,
+                        'slug': membership.tenant.slug,
+                        'status': membership.tenant.status,
+                    }
+                    
+                    # Add subscription info if available
+                    if hasattr(membership.tenant, 'subscription'):
+                        try:
+                            subscription = membership.tenant.subscription
+                            tenant_info['subscription'] = {
+                                'tier': subscription.tier,
+                                'status': subscription.status,
+                                'trial_ends_at': subscription.trial_ends_at.isoformat() if subscription.trial_ends_at else None,
+                            }
+                        except Exception:
+                            pass
+                    
+                    tenants_data.append({
+                        'membership_id': str(membership.id),
+                        'tenant': tenant_info,
+                        'roles': roles_info,
+                        'scopes': sorted(list(scopes)),
+                        'joined_at': membership.joined_at.isoformat() if membership.joined_at else None,
+                        'last_seen_at': membership.last_seen_at.isoformat() if membership.last_seen_at else None,
+                    })
+                except Exception as e:
+                    # Log error but continue processing other memberships
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(
+                        f"Error processing tenant membership {membership.id}: {str(e)}",
+                        exc_info=True
+                    )
+                    # Add basic tenant info without roles/scopes
+                    tenants_data.append({
+                        'membership_id': str(membership.id),
+                        'tenant': {
+                            'id': str(membership.tenant.id),
+                            'name': membership.tenant.name,
+                            'slug': membership.tenant.slug,
+                            'status': membership.tenant.status,
+                        },
+                        'roles': [],
+                        'scopes': [],
+                        'joined_at': membership.joined_at.isoformat() if membership.joined_at else None,
+                        'last_seen_at': membership.last_seen_at.isoformat() if membership.last_seen_at else None,
+                    })
+            
+            return tenants_data
+        except Exception as e:
+            # Return empty list on error
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error getting user tenants: {str(e)}", exc_info=True)
+            return []
 
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):

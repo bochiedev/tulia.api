@@ -286,10 +286,14 @@ def twilio_webhook(request):
                 }
             )
         
-        # Step 7: Trigger intent processing (will be implemented in task 9)
-        # TODO: Enqueue intent classification task
-        # from apps.bot.tasks import process_inbound_message
-        # process_inbound_message.delay(message.id)
+        # Step 7: Trigger intent processing
+        from apps.bot.tasks import process_inbound_message
+        process_inbound_message.delay(str(message.id))
+        
+        logger.info(
+            f"Intent processing task enqueued",
+            extra={'message_id': str(message.id)}
+        )
         
         # Mark webhook as successfully processed
         processing_time = int((timezone.now() - start_time).total_seconds() * 1000)

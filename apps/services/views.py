@@ -40,7 +40,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
     - services:edit: For POST, PUT, PATCH, DELETE operations
     """
     
-    permission_classes = [IsAuthenticated, HasTenantScopes]
+    permission_classes = [HasTenantScopes]
     
     def get_queryset(self):
         """Get services for the authenticated tenant."""
@@ -255,7 +255,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     - appointments:edit: For POST, PUT, PATCH, DELETE operations
     """
     
-    permission_classes = [IsAuthenticated, HasTenantScopes]
+    permission_classes = [HasTenantScopes]
     
     def get_queryset(self):
         """Get appointments for the authenticated tenant."""

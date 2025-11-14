@@ -9,8 +9,8 @@ from django.core.exceptions import ValidationError
 from apps.core.models import BaseModel
 
 
-class ServiceManager(models.Manager):
-    """Manager for service queries with tenant scoping."""
+class ServiceQuerySet(models.QuerySet):
+    """Custom QuerySet for Service with chainable methods."""
     
     def for_tenant(self, tenant):
         """Get services for a specific tenant."""
@@ -19,10 +19,26 @@ class ServiceManager(models.Manager):
     def active(self):
         """Get only active services."""
         return self.filter(is_active=True)
+
+
+class ServiceManager(models.Manager):
+    """Manager for service queries with tenant scoping."""
+    
+    def get_queryset(self):
+        """Return custom QuerySet."""
+        return ServiceQuerySet(self.model, using=self._db)
+    
+    def for_tenant(self, tenant):
+        """Get services for a specific tenant."""
+        return self.get_queryset().for_tenant(tenant)
+    
+    def active(self):
+        """Get only active services."""
+        return self.get_queryset().active()
     
     def for_tenant_active(self, tenant):
         """Get active services for a specific tenant."""
-        return self.filter(tenant=tenant, is_active=True)
+        return self.get_queryset().for_tenant(tenant).active()
 
 
 class Service(BaseModel):

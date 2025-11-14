@@ -75,13 +75,13 @@ class IntentService:
     
     ALL_INTENTS = PRODUCT_INTENTS + SERVICE_INTENTS + CONSENT_INTENTS + SUPPORT_INTENTS
     
-    def __init__(self, api_key: Optional[str] = None, model: str = 'gpt-4'):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         """
         Initialize intent service.
         
         Args:
             api_key: OpenAI API key (uses settings.OPENAI_API_KEY if not provided)
-            model: Model to use for classification (default: gpt-4)
+            model: Model to use for classification (uses settings.OPENAI_MODEL or defaults to gpt-4o-mini)
         """
         if not OPENAI_AVAILABLE:
             raise IntentServiceError("OpenAI library not installed")
@@ -90,8 +90,16 @@ class IntentService:
         if not self.api_key:
             raise IntentServiceError("OpenAI API key not configured")
         
-        self.model = model
+        # Use provided model, or from settings, or default to gpt-4o-mini
+        self.model = model or getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
         self.client = openai.OpenAI(api_key=self.api_key)
+        
+        # Check if model supports JSON mode
+        self.supports_json_mode = self._check_json_mode_support()
+        
+        logger.info(
+            f"IntentService initialized with model: {self.model} (JSON mode: {self.supports_json_mode})"
+        )
     
     def classify_intent(
         self,
@@ -123,21 +131,32 @@ class IntentService:
             # Build user prompt with context
             user_prompt = self._build_user_prompt(message_text, conversation_context)
             
-            # Call OpenAI API
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            # Call OpenAI API with appropriate parameters
+            api_params = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3,  # Lower temperature for more consistent classification
-                max_tokens=500,
-                response_format={"type": "json_object"}
-            )
+                "temperature": 0.3,  # Lower temperature for more consistent classification
+                "max_tokens": 500,
+            }
+            
+            # Only add response_format if model supports it
+            if self.supports_json_mode:
+                api_params["response_format"] = {"type": "json_object"}
+            
+            response = self.client.chat.completions.create(**api_params)
             
             # Parse response
             result_text = response.choices[0].message.content
-            result = json.loads(result_text)
+            
+            # Try to parse as JSON
+            try:
+                result = json.loads(result_text)
+            except json.JSONDecodeError:
+                # If not JSON, try to extract JSON from markdown code blocks
+                result = self._extract_json_from_text(result_text)
             
             # Calculate processing time
             processing_time_ms = int((time.time() - start_time) * 1000)
@@ -271,6 +290,67 @@ class IntentService:
                 'message': "I'm not quite sure what you're looking for. Could you please rephrase or provide more details?",
                 'attempt_count': attempt_count
             }
+    
+    def _check_json_mode_support(self) -> bool:
+        """
+        Check if the model supports JSON mode.
+        
+        Models that support JSON mode:
+        - gpt-4o, gpt-4o-mini, gpt-4-turbo
+        - gpt-3.5-turbo-1106 and later
+        
+        Returns:
+            bool: True if model supports JSON mode
+        """
+        json_mode_models = [
+            'gpt-4o',
+            'gpt-4o-mini',
+            'gpt-4-turbo',
+            'gpt-4-1106-preview',
+            'gpt-4-0125-preview',
+            'gpt-3.5-turbo-1106',
+            'gpt-3.5-turbo-0125',
+        ]
+        
+        # Check if model name starts with any supported model
+        for supported_model in json_mode_models:
+            if self.model.startswith(supported_model):
+                return True
+        
+        return False
+    
+    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
+        """
+        Extract JSON from text that might contain markdown code blocks.
+        
+        Args:
+            text: Text that might contain JSON
+            
+        Returns:
+            dict: Parsed JSON object
+            
+        Raises:
+            json.JSONDecodeError: If no valid JSON found
+        """
+        # Try to find JSON in markdown code blocks
+        import re
+        
+        # Look for ```json ... ``` or ``` ... ```
+        code_block_pattern = r'```(?:json)?\s*(\{.*?\})\s*```'
+        match = re.search(code_block_pattern, text, re.DOTALL)
+        
+        if match:
+            return json.loads(match.group(1))
+        
+        # Look for JSON object directly
+        json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+        match = re.search(json_pattern, text, re.DOTALL)
+        
+        if match:
+            return json.loads(match.group(0))
+        
+        # If nothing found, raise error
+        raise json.JSONDecodeError(f"No valid JSON found in text: {text[:200]}", text, 0)
     
     def _build_system_prompt(self) -> str:
         """Build system prompt with intent definitions."""
@@ -412,12 +492,12 @@ GUIDELINES:
         return confidence_score < self.CONFIDENCE_THRESHOLD
 
 
-def create_intent_service(model: str = 'gpt-4') -> IntentService:
+def create_intent_service(model: Optional[str] = None) -> IntentService:
     """
     Factory function to create IntentService instance.
     
     Args:
-        model: OpenAI model to use (default: gpt-4)
+        model: OpenAI model to use (uses settings.OPENAI_MODEL or defaults to gpt-4o-mini)
         
     Returns:
         IntentService: Configured service instance

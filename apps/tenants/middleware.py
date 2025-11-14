@@ -121,7 +121,11 @@ class TenantContextMiddleware(MiddlewareMixin):
             )
         
         # Set authenticated user on request
+        # CRITICAL: We must override Django's SimpleLazyObject to prevent it from
+        # evaluating to AnonymousUser when DRF wraps the request
         request.user = user
+        request._cached_user = user  # Cache for Django's get_user() function
+        
         logger.debug(
             f"JWT authentication successful for user: {user.email}",
             extra={'request_id': request_id}
