@@ -78,7 +78,7 @@ Check Celery terminal for errors:
 
 Your `.env` already has:
 ```
-OPENAI_API_KEY=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
+OPENAI_API_KEY=sk-proj-Ye_pcWZ5VbrAK3y267dgG4kGmRYujSe9zJV-VXOyEid0-jhbufyfiyuvht-P-XjDqwsy0pWWp5cmgMWdUmwO34QwWFpAAGDPvwt1Lk9doL0gA
 ```
 
 ⚠️ **Note:** This key is visible in your `.env` - make sure it's in `.gitignore`!
