@@ -948,6 +948,36 @@ class MessageCampaign(BaseModel):
         help_text="Template used for this campaign"
     )
     
+    # Rich Media Support
+    media_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('text', 'Text Only'),
+            ('image', 'Image'),
+            ('video', 'Video'),
+            ('document', 'Document'),
+        ],
+        default='text',
+        help_text="Type of media included in campaign"
+    )
+    media_url = models.URLField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="URL to media file (image, video, or document)"
+    )
+    media_caption = models.TextField(
+        blank=True,
+        help_text="Caption for media (used with images, videos, documents)"
+    )
+    
+    # Button Configuration (WhatsApp Interactive Messages)
+    buttons = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of button configurations (max 3): [{id, title, type}]"
+    )
+    
     # Targeting
     target_criteria = models.JSONField(
         default=dict,
@@ -1128,3 +1158,378 @@ class MessageCampaign(BaseModel):
         """Increment conversion count."""
         self.conversion_count += 1
         self.save(update_fields=['conversion_count'])
+    
+    def validate_buttons(self):
+        """
+        Validate button configuration against WhatsApp limits.
+        
+        Raises:
+            ValueError: If button configuration is invalid
+        """
+        if not self.buttons:
+            return
+        
+        # WhatsApp allows max 3 buttons
+        if len(self.buttons) > 3:
+            raise ValueError("Maximum 3 buttons allowed per message")
+        
+        # Validate each button
+        for idx, button in enumerate(self.buttons):
+            # Check required fields
+            if 'id' not in button:
+                raise ValueError(f"Button {idx} missing required field: id")
+            if 'title' not in button:
+                raise ValueError(f"Button {idx} missing required field: title")
+            
+            # Validate title length (WhatsApp limit: 20 characters)
+            if len(button['title']) > 20:
+                raise ValueError(
+                    f"Button {idx} title exceeds 20 characters: {button['title']}"
+                )
+            
+            # Validate button type
+            button_type = button.get('type', 'reply')
+            if button_type not in ['reply', 'url', 'call']:
+                raise ValueError(
+                    f"Button {idx} has invalid type: {button_type}. "
+                    f"Must be 'reply', 'url', or 'call'"
+                )
+            
+            # Validate type-specific fields
+            if button_type == 'url' and 'url' not in button:
+                raise ValueError(f"Button {idx} of type 'url' missing url field")
+            if button_type == 'call' and 'phone_number' not in button:
+                raise ValueError(f"Button {idx} of type 'call' missing phone_number field")
+    
+    def validate_media(self):
+        """
+        Validate media configuration.
+        
+        Raises:
+            ValueError: If media configuration is invalid
+        """
+        if self.media_type == 'text':
+            # Text-only messages don't need media_url
+            return
+        
+        # Non-text messages require media_url
+        if not self.media_url:
+            raise ValueError(
+                f"media_url is required for media_type '{self.media_type}'"
+            )
+        
+        # Validate caption length (WhatsApp limit: 1024 characters)
+        if self.media_caption and len(self.media_caption) > 1024:
+            raise ValueError(
+                f"media_caption exceeds 1024 characters: {len(self.media_caption)}"
+            )
+    
+    def save(self, *args, **kwargs):
+        """Override save to validate button and media configuration."""
+        # Validate buttons if present
+        if self.buttons:
+            self.validate_buttons()
+        
+        # Validate media configuration
+        self.validate_media()
+        
+        super().save(*args, **kwargs)
+
+
+class MessageQueueManager(models.Manager):
+    """Manager for message queue queries."""
+    
+    def for_conversation(self, conversation):
+        """Get queued messages for a specific conversation."""
+        return self.filter(conversation=conversation).order_by('queue_position')
+    
+    def pending(self, conversation=None):
+        """Get pending messages in queue."""
+        qs = self.filter(status='queued')
+        if conversation:
+            qs = qs.filter(conversation=conversation)
+        return qs.order_by('queue_position')
+    
+    def processing(self, conversation=None):
+        """Get messages currently being processed."""
+        qs = self.filter(status='processing')
+        if conversation:
+            qs = qs.filter(conversation=conversation)
+        return qs
+    
+    def ready_for_batch(self, conversation, delay_seconds=5):
+        """
+        Get messages ready for batch processing.
+        
+        Returns messages that have been queued for at least delay_seconds
+        and are still in queued status.
+        """
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        cutoff_time = timezone.now() - timedelta(seconds=delay_seconds)
+        
+        return self.filter(
+            conversation=conversation,
+            status='queued',
+            queued_at__lte=cutoff_time
+        ).order_by('queue_position')
+
+
+class CampaignButtonInteraction(BaseModel):
+    """
+    Tracks button clicks from campaign messages.
+    
+    Records when customers interact with buttons in campaign messages,
+    enabling analytics on button engagement and conversion tracking.
+    
+    TENANT SCOPING: Inherits tenant from campaign relationship.
+    """
+    
+    campaign = models.ForeignKey(
+        MessageCampaign,
+        on_delete=models.CASCADE,
+        related_name='button_interactions',
+        db_index=True,
+        help_text="Campaign this interaction belongs to"
+    )
+    
+    customer = models.ForeignKey(
+        'tenants.Customer',
+        on_delete=models.CASCADE,
+        related_name='campaign_button_interactions',
+        db_index=True,
+        help_text="Customer who clicked the button"
+    )
+    
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name='button_interactions',
+        help_text="Campaign message that contained the button"
+    )
+    
+    # Button Details
+    button_id = models.CharField(
+        max_length=100,
+        help_text="ID of the button that was clicked"
+    )
+    button_title = models.CharField(
+        max_length=100,
+        help_text="Title/text of the button"
+    )
+    button_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('reply', 'Reply Button'),
+            ('url', 'URL Button'),
+            ('call', 'Call Button'),
+        ],
+        help_text="Type of button clicked"
+    )
+    
+    # Interaction Context
+    clicked_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        help_text="Timestamp when button was clicked"
+    )
+    
+    # Response Tracking
+    response_message = models.ForeignKey(
+        Message,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='triggered_by_button',
+        help_text="Customer's response message after clicking button"
+    )
+    
+    # Conversion Tracking
+    led_to_conversion = models.BooleanField(
+        default=False,
+        help_text="Whether this interaction led to a conversion (order/booking)"
+    )
+    conversion_type = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        choices=[
+            ('order', 'Order'),
+            ('appointment', 'Appointment'),
+        ],
+        help_text="Type of conversion if applicable"
+    )
+    conversion_reference_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text="ID of the order or appointment"
+    )
+    
+    # Metadata
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional interaction metadata"
+    )
+    
+    class Meta:
+        db_table = 'campaign_button_interactions'
+        ordering = ['-clicked_at']
+        indexes = [
+            models.Index(fields=['campaign', 'clicked_at']),
+            models.Index(fields=['campaign', 'button_id']),
+            models.Index(fields=['customer', 'clicked_at']),
+            models.Index(fields=['campaign', 'led_to_conversion']),
+        ]
+    
+    def __str__(self):
+        return f"ButtonInteraction: {self.button_title} - Campaign {self.campaign_id}"
+    
+    def mark_conversion(self, conversion_type: str, reference_id: str):
+        """
+        Mark this interaction as leading to a conversion.
+        
+        Args:
+            conversion_type: Type of conversion ('order' or 'appointment')
+            reference_id: ID of the order or appointment
+        """
+        self.led_to_conversion = True
+        self.conversion_type = conversion_type
+        self.conversion_reference_id = reference_id
+        self.save(update_fields=['led_to_conversion', 'conversion_type', 'conversion_reference_id'])
+
+
+class MessageQueue(BaseModel):
+    """
+    Message queue for handling message bursts.
+    
+    When customers send multiple messages in rapid succession (within 5 seconds),
+    messages are queued instead of being processed immediately. This allows the
+    AI agent to:
+    - Process all messages together with full context
+    - Detect and handle multiple intents in a single response
+    - Prevent duplicate intent processing
+    - Provide more coherent responses to message bursts
+    
+    Queue workflow:
+    1. Detect rapid messages (within 5 seconds of previous)
+    2. Add to queue with incremental position
+    3. Wait for delay period (5 seconds)
+    4. Batch process all queued messages together
+    5. Mark as processed
+    
+    TENANT SCOPING: Inherits tenant from conversation relationship.
+    """
+    
+    STATUS_CHOICES = [
+        ('queued', 'Queued'),
+        ('processing', 'Processing'),
+        ('processed', 'Processed'),
+        ('failed', 'Failed'),
+    ]
+    
+    conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.CASCADE,
+        related_name='message_queue',
+        db_index=True,
+        help_text="Conversation this queued message belongs to"
+    )
+    
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name='queue_entries',
+        help_text="Message that is queued"
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='queued',
+        db_index=True,
+        help_text="Current status of queued message"
+    )
+    
+    queue_position = models.IntegerField(
+        help_text="Position in queue (lower = earlier)"
+    )
+    
+    queued_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        help_text="Timestamp when message was queued"
+    )
+    
+    processed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when message was processed"
+    )
+    
+    # Error tracking
+    error_message = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Error message if processing failed"
+    )
+    
+    # Custom manager
+    objects = MessageQueueManager()
+    
+    class Meta:
+        db_table = 'message_queue'
+        ordering = ['conversation', 'queue_position']
+        indexes = [
+            models.Index(fields=['conversation', 'status', 'queue_position']),
+            models.Index(fields=['status', 'queued_at']),
+            models.Index(fields=['conversation', 'queued_at']),
+        ]
+        unique_together = [('conversation', 'queue_position')]
+    
+    def __str__(self):
+        return f"MessageQueue {self.id} - Conversation {self.conversation_id} - Position {self.queue_position}"
+    
+    def mark_processing(self):
+        """Mark message as currently being processed."""
+        self.status = 'processing'
+        self.save(update_fields=['status'])
+    
+    def mark_processed(self):
+        """Mark message as successfully processed."""
+        from django.utils import timezone
+        self.status = 'processed'
+        self.processed_at = timezone.now()
+        self.save(update_fields=['status', 'processed_at'])
+    
+    def mark_failed(self, error_message=None):
+        """Mark message processing as failed."""
+        from django.utils import timezone
+        self.status = 'failed'
+        self.processed_at = timezone.now()
+        if error_message:
+            self.error_message = error_message
+        self.save(update_fields=['status', 'processed_at', 'error_message'])
+    
+    def is_ready_for_batch(self, delay_seconds=5):
+        """Check if message has been queued long enough for batch processing."""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        if self.status != 'queued':
+            return False
+        
+        cutoff_time = timezone.now() - timedelta(seconds=delay_seconds)
+        return self.queued_at <= cutoff_time
+    
+    def save(self, *args, **kwargs):
+        """Override save to validate message belongs to same conversation."""
+        if self.message_id and self.conversation_id:
+            if self.message.conversation_id != self.conversation_id:
+                raise ValueError(
+                    f"MessageQueue conversation ({self.conversation_id}) must match "
+                    f"Message conversation ({self.message.conversation_id})"
+                )
+        
+        super().save(*args, **kwargs)

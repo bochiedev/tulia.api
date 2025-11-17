@@ -1257,6 +1257,14 @@ class TenantSettings(BaseModel):
         help_text="Encrypted OpenAI organization ID"
     )
     
+    # Together AI
+    together_api_key = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted Together AI API key"
+    )
+    
     # LLM Configuration
     llm_provider = models.CharField(
         max_length=50,

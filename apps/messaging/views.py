@@ -26,6 +26,8 @@ from apps.messaging.serializers import (
     MessageCampaignCreateSerializer,
     CampaignExecuteSerializer,
     CampaignReportSerializer,
+    CampaignButtonInteractionSerializer,
+    TrackButtonClickSerializer,
 )
 from apps.core.permissions import HasTenantScopes, requires_scopes
 
@@ -754,7 +756,11 @@ class CampaignListCreateView(APIView):
                 scheduled_at=data.get('scheduled_at'),
                 is_ab_test=data.get('is_ab_test', False),
                 variants=data.get('variants', []),
-                description=data.get('description', '')
+                description=data.get('description', ''),
+                media_type=data.get('media_type', 'text'),
+                media_url=data.get('media_url'),
+                media_caption=data.get('media_caption', ''),
+                buttons=data.get('buttons', [])
             )
             
             response_serializer = MessageCampaignSerializer(campaign)
@@ -954,6 +960,138 @@ class CampaignExecuteView(APIView):
             )
             return Response(
                 {'error': f'Failed to execute campaign: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class CampaignButtonClickView(APIView):
+    """
+    Track button clicks from campaign messages.
+    
+    POST /v1/campaigns/{campaign_id}/button-click - Track button click
+    """
+    permission_classes = [HasTenantScopes]
+    required_scopes = {'conversations:view'}
+    
+    @extend_schema(
+        summary="Track campaign button click",
+        description="Record when a customer clicks a button in a campaign message",
+        parameters=[
+            OpenApiParameter(
+                name='campaign_id',
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description='Campaign UUID'
+            ),
+        ],
+        request=TrackButtonClickSerializer,
+        responses={
+            200: CampaignButtonInteractionSerializer,
+            400: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'details': {'type': 'object'}
+                }
+            },
+            404: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'}
+                }
+            }
+        },
+        tags=['Campaigns']
+    )
+    def post(self, request, campaign_id):
+        """Track button click."""
+        from apps.messaging.services import CampaignService
+        from apps.messaging.models import MessageCampaign, Message
+        from apps.messaging.serializers import (
+            TrackButtonClickSerializer,
+            CampaignButtonInteractionSerializer
+        )
+        
+        tenant = request.tenant
+        
+        # Validate request data
+        serializer = TrackButtonClickSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    'error': 'Invalid request data',
+                    'details': serializer.errors
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        data = serializer.validated_data
+        
+        # Get campaign
+        try:
+            campaign = MessageCampaign.objects.get(id=campaign_id, tenant=tenant)
+        except MessageCampaign.DoesNotExist:
+            return Response(
+                {'error': 'Campaign not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get message
+        try:
+            message = Message.objects.get(
+                id=data['message_id'],
+                conversation__tenant=tenant
+            )
+        except Message.DoesNotExist:
+            return Response(
+                {'error': 'Message not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get customer from message conversation
+        customer = message.conversation.customer
+        
+        # Track button click
+        try:
+            campaign_service = CampaignService()
+            interaction = campaign_service.track_button_click(
+                campaign=campaign,
+                customer=customer,
+                message=message,
+                button_id=data['button_id'],
+                button_title=data['button_title'],
+                button_type=data.get('button_type', 'reply'),
+                metadata=data.get('metadata', {})
+            )
+            
+            response_serializer = CampaignButtonInteractionSerializer({
+                'id': interaction.id,
+                'campaign_id': interaction.campaign_id,
+                'customer_id': interaction.customer_id,
+                'message_id': interaction.message_id,
+                'button_id': interaction.button_id,
+                'button_title': interaction.button_title,
+                'button_type': interaction.button_type,
+                'clicked_at': interaction.clicked_at,
+                'led_to_conversion': interaction.led_to_conversion,
+                'conversion_type': interaction.conversion_type,
+                'conversion_reference_id': interaction.conversion_reference_id
+            })
+            
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(
+                f"Error tracking button click",
+                extra={
+                    'tenant_id': str(tenant.id),
+                    'campaign_id': str(campaign_id),
+                    'message_id': str(data['message_id'])
+                },
+                exc_info=True
+            )
+            return Response(
+                {'error': f'Failed to track button click: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

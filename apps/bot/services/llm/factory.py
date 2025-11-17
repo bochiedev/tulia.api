@@ -7,6 +7,7 @@ from typing import Dict, Type, Optional
 
 from .base import LLMProvider
 from .openai_provider import OpenAIProvider
+from .together_provider import TogetherAIProvider
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class LLMProviderFactory:
     # Registry of available providers
     _providers: Dict[str, Type[LLMProvider]] = {
         'openai': OpenAIProvider,
+        'together': TogetherAIProvider,
     }
     
     @classmethod

@@ -379,6 +379,10 @@ class MessageCampaignSerializer(serializers.ModelSerializer):
             'target_criteria',
             'is_ab_test',
             'variants',
+            'media_type',
+            'media_url',
+            'media_caption',
+            'buttons',
             'delivery_count',
             'delivered_count',
             'failed_count',
@@ -482,11 +486,80 @@ class MessageCampaignCreateSerializer(serializers.Serializer):
         help_text="A/B test variants: [{name, content}]"
     )
     
+    # Rich Media Fields
+    media_type = serializers.ChoiceField(
+        choices=['text', 'image', 'video', 'document'],
+        default='text',
+        help_text="Type of media to include"
+    )
+    media_url = serializers.URLField(
+        required=False,
+        allow_null=True,
+        max_length=500,
+        help_text="URL to media file (required for non-text media types)"
+    )
+    media_caption = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1024,
+        help_text="Caption for media (max 1024 characters)"
+    )
+    buttons = serializers.ListField(
+        child=serializers.JSONField(),
+        required=False,
+        default=list,
+        max_length=3,
+        help_text="Button configurations (max 3): [{id, title, type, url?, phone_number?}]"
+    )
+    
     def validate_scheduled_at(self, value):
         """Validate that scheduled_at is in the future."""
         from django.utils import timezone
         if value and value <= timezone.now():
             raise serializers.ValidationError("scheduled_at must be in the future")
+        return value
+    
+    def validate_buttons(self, value):
+        """Validate button configurations."""
+        if not value:
+            return value
+        
+        # Max 3 buttons
+        if len(value) > 3:
+            raise serializers.ValidationError("Maximum 3 buttons allowed per message")
+        
+        # Validate each button
+        for idx, button in enumerate(value):
+            # Check required fields
+            if 'id' not in button:
+                raise serializers.ValidationError(f"Button {idx} missing required field: id")
+            if 'title' not in button:
+                raise serializers.ValidationError(f"Button {idx} missing required field: title")
+            
+            # Validate title length (WhatsApp limit: 20 characters)
+            if len(button['title']) > 20:
+                raise serializers.ValidationError(
+                    f"Button {idx} title exceeds 20 characters: {button['title']}"
+                )
+            
+            # Validate button type
+            button_type = button.get('type', 'reply')
+            if button_type not in ['reply', 'url', 'call']:
+                raise serializers.ValidationError(
+                    f"Button {idx} has invalid type: {button_type}. "
+                    f"Must be 'reply', 'url', or 'call'"
+                )
+            
+            # Validate type-specific fields
+            if button_type == 'url' and 'url' not in button:
+                raise serializers.ValidationError(
+                    f"Button {idx} of type 'url' missing url field"
+                )
+            if button_type == 'call' and 'phone_number' not in button:
+                raise serializers.ValidationError(
+                    f"Button {idx} of type 'call' missing phone_number field"
+                )
+        
         return value
     
     def validate(self, data):
@@ -509,6 +582,22 @@ class MessageCampaignCreateSerializer(serializers.Serializer):
                     raise serializers.ValidationError({
                         'variants': f'Variant {idx} missing required field: content'
                     })
+        
+        # Validate media configuration
+        media_type = data.get('media_type', 'text')
+        media_url = data.get('media_url')
+        
+        if media_type != 'text' and not media_url:
+            raise serializers.ValidationError({
+                'media_url': f"media_url is required for media_type '{media_type}'"
+            })
+        
+        # Validate caption length
+        media_caption = data.get('media_caption', '')
+        if media_caption and len(media_caption) > 1024:
+            raise serializers.ValidationError({
+                'media_caption': f"media_caption exceeds 1024 characters: {len(media_caption)}"
+            })
         
         return data
 
@@ -546,3 +635,48 @@ class CampaignReportSerializer(serializers.Serializer):
     delivery = serializers.JSONField(read_only=True)
     engagement = serializers.JSONField(read_only=True)
     ab_test = serializers.JSONField(read_only=True)
+    button_analytics = serializers.JSONField(read_only=True, required=False)
+
+
+class CampaignButtonInteractionSerializer(serializers.Serializer):
+    """Serializer for campaign button interactions."""
+    
+    id = serializers.UUIDField(read_only=True)
+    campaign_id = serializers.UUIDField(read_only=True)
+    customer_id = serializers.UUIDField(read_only=True)
+    message_id = serializers.UUIDField(read_only=True)
+    button_id = serializers.CharField(read_only=True)
+    button_title = serializers.CharField(read_only=True)
+    button_type = serializers.CharField(read_only=True)
+    clicked_at = serializers.DateTimeField(read_only=True)
+    led_to_conversion = serializers.BooleanField(read_only=True)
+    conversion_type = serializers.CharField(read_only=True, allow_null=True)
+    conversion_reference_id = serializers.UUIDField(read_only=True, allow_null=True)
+
+
+class TrackButtonClickSerializer(serializers.Serializer):
+    """Serializer for tracking button clicks."""
+    
+    button_id = serializers.CharField(
+        required=True,
+        help_text="ID of the button that was clicked"
+    )
+    button_title = serializers.CharField(
+        required=True,
+        max_length=100,
+        help_text="Title/text of the button"
+    )
+    button_type = serializers.ChoiceField(
+        choices=['reply', 'url', 'call'],
+        default='reply',
+        help_text="Type of button clicked"
+    )
+    message_id = serializers.UUIDField(
+        required=True,
+        help_text="ID of the campaign message containing the button"
+    )
+    metadata = serializers.JSONField(
+        required=False,
+        default=dict,
+        help_text="Additional metadata"
+    )

@@ -2,13 +2,15 @@
 Twilio integration service for WhatsApp messaging.
 
 Handles sending and receiving WhatsApp messages via Twilio API,
-including signature verification for webhook security.
+including signature verification for webhook security and support
+for WhatsApp interactive messages (buttons, lists, media).
 """
 import hashlib
 import hmac
 import base64
 import logging
-from typing import Optional, Dict, Any
+import json
+from typing import Optional, Dict, Any, List
 from urllib.parse import urlencode
 
 from twilio.rest import Client
@@ -350,6 +352,275 @@ class TwilioService:
             phone = f'whatsapp:{phone}'
         
         return phone
+    
+    def send_button_message(
+        self,
+        to: str,
+        body: str,
+        buttons: List[Dict[str, str]],
+        media_url: Optional[str] = None,
+        status_callback: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Send a WhatsApp message with interactive buttons.
+        
+        Note: Twilio's WhatsApp API has limited support for interactive messages.
+        This method sends a regular message with the button text appended as options.
+        For full interactive button support, consider using WhatsApp Business API directly.
+        
+        Args:
+            to: Recipient phone number in E.164 format
+            body: Message text content
+            buttons: List of button definitions (each with 'id' and 'text')
+            media_url: Optional URL for media attachment
+            status_callback: Optional URL for delivery status callbacks
+            
+        Returns:
+            dict: Message details including SID and status
+            
+        Raises:
+            TwilioServiceError: If message sending fails
+            
+        Example:
+            >>> service = TwilioService(sid, token, '+14155238886')
+            >>> buttons = [{'id': 'yes', 'text': 'Yes'}, {'id': 'no', 'text': 'No'}]
+            >>> result = service.send_button_message('+1234567890', 'Confirm?', buttons)
+        """
+        # Build message with button options
+        message_body = body
+        if buttons:
+            message_body += "\n\nOptions:"
+            for i, button in enumerate(buttons, 1):
+                message_body += f"\n{i}. {button.get('text', '')}"
+        
+        # Send as regular WhatsApp message
+        return self.send_whatsapp(
+            to=to,
+            body=message_body,
+            media_url=media_url,
+            status_callback=status_callback
+        )
+    
+    def send_list_message(
+        self,
+        to: str,
+        body: str,
+        list_data: Dict[str, Any],
+        media_url: Optional[str] = None,
+        status_callback: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Send a WhatsApp message with a list of options.
+        
+        Note: Twilio's WhatsApp API has limited support for interactive lists.
+        This method sends a regular message with the list items formatted as text.
+        For full interactive list support, consider using WhatsApp Business API directly.
+        
+        Args:
+            to: Recipient phone number in E.164 format
+            body: Message text content
+            list_data: List data structure with 'sections' containing 'rows'
+            media_url: Optional URL for media attachment
+            status_callback: Optional URL for delivery status callbacks
+            
+        Returns:
+            dict: Message details including SID and status
+            
+        Raises:
+            TwilioServiceError: If message sending fails
+            
+        Example:
+            >>> service = TwilioService(sid, token, '+14155238886')
+            >>> list_data = {
+            ...     'title': 'Choose a product',
+            ...     'sections': [
+            ...         {
+            ...             'title': 'Products',
+            ...             'rows': [
+            ...                 {'id': '1', 'title': 'Product 1', 'description': 'Desc 1'},
+            ...                 {'id': '2', 'title': 'Product 2', 'description': 'Desc 2'}
+            ...             ]
+            ...         }
+            ...     ]
+            ... }
+            >>> result = service.send_list_message('+1234567890', 'Select:', list_data)
+        """
+        # Build message with list items
+        message_body = body
+        
+        sections = list_data.get('sections', [])
+        if sections:
+            counter = 1
+            for section in sections:
+                section_title = section.get('title', '')
+                if section_title:
+                    message_body += f"\n\n*{section_title}*"
+                
+                for row in section.get('rows', []):
+                    title = row.get('title', '')
+                    description = row.get('description', '')
+                    message_body += f"\n{counter}. {title}"
+                    if description:
+                        message_body += f" - {description}"
+                    counter += 1
+        
+        # Send as regular WhatsApp message
+        return self.send_whatsapp(
+            to=to,
+            body=message_body,
+            media_url=media_url,
+            status_callback=status_callback
+        )
+    
+    def send_media_with_caption(
+        self,
+        to: str,
+        media_url: str,
+        caption: str,
+        status_callback: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Send a WhatsApp media message with caption.
+        
+        Args:
+            to: Recipient phone number in E.164 format
+            media_url: URL of the media file (image, video, document)
+            caption: Caption text for the media
+            status_callback: Optional URL for delivery status callbacks
+            
+        Returns:
+            dict: Message details including SID and status
+            
+        Raises:
+            TwilioServiceError: If message sending fails
+            
+        Example:
+            >>> service = TwilioService(sid, token, '+14155238886')
+            >>> result = service.send_media_with_caption(
+            ...     '+1234567890',
+            ...     'https://example.com/image.jpg',
+            ...     'Check out this product!'
+            ... )
+        """
+        return self.send_whatsapp(
+            to=to,
+            body=caption,
+            media_url=media_url,
+            status_callback=status_callback
+        )
+    
+    def handle_button_response(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process button click response from WhatsApp.
+        
+        Extracts button interaction data from webhook payload.
+        
+        Args:
+            payload: Webhook payload from button interaction
+            
+        Returns:
+            dict: Parsed button response information
+            
+        Example:
+            >>> service = TwilioService(sid, token, '+14155238886')
+            >>> response = service.handle_button_response(request.POST.dict())
+            >>> print(response['button_id'])
+        """
+        # Extract button response data
+        # Note: The exact format depends on how the button was sent
+        # For text-based button responses, we parse the message body
+        
+        body = payload.get('Body', '')
+        from_number = payload.get('From', '')
+        message_sid = payload.get('MessageSid', '')
+        
+        # Try to extract button selection from numbered response
+        button_id = None
+        button_text = None
+        
+        # Check if it's a numeric response (1, 2, 3)
+        if body.strip().isdigit():
+            button_id = f"option_{body.strip()}"
+            button_text = body.strip()
+        else:
+            button_text = body
+        
+        return {
+            'button_id': button_id,
+            'button_text': button_text,
+            'from': from_number,
+            'message_sid': message_sid,
+            'raw_body': body
+        }
+    
+    def send_rich_message(
+        self,
+        to: str,
+        whatsapp_message,
+        status_callback: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Send a rich WhatsApp message using WhatsAppMessage object.
+        
+        This is a convenience method that accepts a WhatsAppMessage object
+        from the RichMessageBuilder and sends it via the appropriate method.
+        
+        Args:
+            to: Recipient phone number in E.164 format
+            whatsapp_message: WhatsAppMessage instance from RichMessageBuilder
+            status_callback: Optional URL for delivery status callbacks
+            
+        Returns:
+            dict: Message details including SID and status
+            
+        Raises:
+            TwilioServiceError: If message sending fails
+            
+        Example:
+            >>> from apps.bot.services import RichMessageBuilder
+            >>> builder = RichMessageBuilder()
+            >>> message = builder.build_button_message('Confirm?', [
+            ...     {'id': 'yes', 'text': 'Yes'},
+            ...     {'id': 'no', 'text': 'No'}
+            ... ])
+            >>> service = TwilioService(sid, token, '+14155238886')
+            >>> result = service.send_rich_message('+1234567890', message)
+        """
+        message_type = whatsapp_message.message_type
+        
+        if message_type == 'button':
+            return self.send_button_message(
+                to=to,
+                body=whatsapp_message.body,
+                buttons=whatsapp_message.buttons,
+                media_url=whatsapp_message.media_url,
+                status_callback=status_callback
+            )
+        
+        elif message_type == 'list':
+            return self.send_list_message(
+                to=to,
+                body=whatsapp_message.body,
+                list_data=whatsapp_message.list_data,
+                media_url=whatsapp_message.media_url,
+                status_callback=status_callback
+            )
+        
+        elif message_type == 'media':
+            return self.send_media_with_caption(
+                to=to,
+                media_url=whatsapp_message.media_url,
+                caption=whatsapp_message.body,
+                status_callback=status_callback
+            )
+        
+        else:  # Default to text message
+            return self.send_whatsapp(
+                to=to,
+                body=whatsapp_message.body,
+                media_url=whatsapp_message.media_url,
+                status_callback=status_callback
+            )
     
     def retry_send_whatsapp(
         self,

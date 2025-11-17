@@ -16,6 +16,9 @@ from apps.tenants.views_settings import (
     shopify_credentials_view,
     twilio_credentials_view,
     set_openai_credentials,
+    together_ai_credentials_view,
+    llm_configuration_view,
+    llm_providers_view,
     integrations_list_view,
     payment_methods_view,
     payment_method_set_default_view,
@@ -45,6 +48,11 @@ urlpatterns = [
     path('settings/integrations/woocommerce', woocommerce_credentials_view, name='settings-woocommerce'),
     path('settings/integrations/shopify', shopify_credentials_view, name='settings-shopify'),
     path('settings/integrations/openai', set_openai_credentials, name='settings-openai'),
+    path('settings/integrations/together-ai', together_ai_credentials_view, name='settings-together-ai'),
+    
+    # LLM Configuration
+    path('settings/llm/configuration', llm_configuration_view, name='settings-llm-configuration'),
+    path('settings/llm/providers', llm_providers_view, name='settings-llm-providers'),
     
     # Payment methods
     path('settings/payment-methods', payment_methods_view, name='settings-payment-methods'),

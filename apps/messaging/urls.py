@@ -12,6 +12,7 @@ from apps.messaging.views import (
     CampaignListCreateView,
     CampaignDetailView,
     CampaignExecuteView,
+    CampaignButtonClickView,
     CampaignReportView,
 )
 from apps.messaging.views_conversation import (
@@ -97,6 +98,11 @@ urlpatterns = [
         'campaigns/<uuid:campaign_id>/execute',
         CampaignExecuteView.as_view(),
         name='campaign-execute'
+    ),
+    path(
+        'campaigns/<uuid:campaign_id>/button-click',
+        CampaignButtonClickView.as_view(),
+        name='campaign-button-click'
     ),
     path(
         'campaigns/<uuid:campaign_id>/report',

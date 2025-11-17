@@ -43,7 +43,11 @@ class CampaignService:
         scheduled_at=None,
         is_ab_test: bool = False,
         variants: List[Dict] = None,
-        description: str = ""
+        description: str = "",
+        media_type: str = "text",
+        media_url: str = None,
+        media_caption: str = "",
+        buttons: List[Dict] = None
     ) -> MessageCampaign:
         """
         Create a new message campaign with validation.
@@ -59,6 +63,10 @@ class CampaignService:
             is_ab_test: Whether this is an A/B test
             variants: List of variant dicts for A/B testing
             description: Campaign description
+            media_type: Type of media (text, image, video, document)
+            media_url: URL to media file
+            media_caption: Caption for media
+            buttons: List of button configurations
             
         Returns:
             MessageCampaign: Created campaign instance
@@ -111,7 +119,11 @@ class CampaignService:
             variants=variants or [],
             scheduled_at=scheduled_at,
             status='scheduled' if scheduled_at else 'draft',
-            created_by=created_by
+            created_by=created_by,
+            media_type=media_type,
+            media_url=media_url,
+            media_caption=media_caption,
+            buttons=buttons or []
         )
         
         logger.info(
@@ -308,6 +320,17 @@ class CampaignService:
                     defaults={'status': 'open', 'channel': 'whatsapp'}
                 )
                 
+                # Prepare message payload with rich media and buttons
+                payload = {}
+                if campaign.media_url:
+                    payload['media_url'] = campaign.media_url
+                    payload['media_type'] = campaign.media_type
+                    if campaign.media_caption:
+                        payload['media_caption'] = campaign.media_caption
+                
+                if campaign.buttons:
+                    payload['buttons'] = campaign.buttons
+                
                 # Send via messaging service
                 message = self.messaging_service.send_message(
                     tenant=campaign.tenant,
@@ -315,8 +338,14 @@ class CampaignService:
                     content=message_content,
                     message_type='scheduled_promotional',
                     template_id=campaign.template.id if campaign.template else None,
-                    conversation=conversation
+                    conversation=conversation,
+                    media_url=campaign.media_url
                 )
+                
+                # Store rich media payload in message
+                if payload:
+                    message.payload.update(payload)
+                    message.save(update_fields=['payload'])
                 
                 if message:
                     results['sent'] += 1
@@ -499,6 +528,165 @@ class CampaignService:
             }
         )
     
+    def track_button_click(
+        self,
+        campaign: MessageCampaign,
+        customer,
+        message: Message,
+        button_id: str,
+        button_title: str,
+        button_type: str = 'reply',
+        response_message: Message = None,
+        metadata: Dict = None
+    ):
+        """
+        Track a button click from a campaign message.
+        
+        Args:
+            campaign: MessageCampaign instance
+            customer: Customer who clicked the button
+            message: Campaign message that contained the button
+            button_id: ID of the button clicked
+            button_title: Title/text of the button
+            button_type: Type of button ('reply', 'url', 'call')
+            response_message: Optional customer response message
+            metadata: Optional additional metadata
+        
+        Returns:
+            CampaignButtonInteraction: Created interaction record
+        """
+        from apps.messaging.models import CampaignButtonInteraction
+        
+        interaction = CampaignButtonInteraction.objects.create(
+            campaign=campaign,
+            customer=customer,
+            message=message,
+            button_id=button_id,
+            button_title=button_title,
+            button_type=button_type,
+            response_message=response_message,
+            metadata=metadata or {}
+        )
+        
+        logger.info(
+            f"Campaign {campaign.id} button click tracked: {button_title}",
+            extra={
+                'campaign_id': str(campaign.id),
+                'customer_id': str(customer.id),
+                'button_id': button_id,
+                'button_type': button_type
+            }
+        )
+        
+        return interaction
+    
+    def track_button_conversion(
+        self,
+        interaction_id: str,
+        conversion_type: str,
+        reference_id: str
+    ):
+        """
+        Mark a button interaction as leading to a conversion.
+        
+        Args:
+            interaction_id: ID of the CampaignButtonInteraction
+            conversion_type: Type of conversion ('order' or 'appointment')
+            reference_id: ID of the order or appointment
+        """
+        from apps.messaging.models import CampaignButtonInteraction
+        
+        try:
+            interaction = CampaignButtonInteraction.objects.get(id=interaction_id)
+            interaction.mark_conversion(conversion_type, reference_id)
+            
+            # Also track conversion on campaign
+            self.track_conversion(
+                interaction.campaign,
+                conversion_type,
+                reference_id
+            )
+            
+            logger.info(
+                f"Button interaction {interaction_id} marked as conversion: {conversion_type} {reference_id}",
+                extra={
+                    'interaction_id': str(interaction_id),
+                    'campaign_id': str(interaction.campaign_id),
+                    'conversion_type': conversion_type,
+                    'reference_id': reference_id
+                }
+            )
+            
+        except CampaignButtonInteraction.DoesNotExist:
+            logger.error(
+                f"Button interaction {interaction_id} not found",
+                extra={'interaction_id': str(interaction_id)}
+            )
+    
+    def get_button_analytics(self, campaign: MessageCampaign) -> Dict:
+        """
+        Get analytics for button interactions in a campaign.
+        
+        Args:
+            campaign: MessageCampaign to analyze
+            
+        Returns:
+            Dict with button analytics:
+            {
+                'total_clicks': int,
+                'unique_customers': int,
+                'clicks_by_button': {button_id: count},
+                'conversion_rate': float,
+                'conversions_by_button': {button_id: count}
+            }
+        """
+        from apps.messaging.models import CampaignButtonInteraction
+        from django.db.models import Count, Q
+        
+        interactions = CampaignButtonInteraction.objects.filter(campaign=campaign)
+        
+        # Total clicks
+        total_clicks = interactions.count()
+        
+        # Unique customers who clicked
+        unique_customers = interactions.values('customer').distinct().count()
+        
+        # Clicks by button
+        clicks_by_button = {}
+        button_clicks = interactions.values('button_id', 'button_title').annotate(
+            count=Count('id')
+        )
+        for item in button_clicks:
+            clicks_by_button[item['button_id']] = {
+                'title': item['button_title'],
+                'clicks': item['count']
+            }
+        
+        # Conversions
+        conversions = interactions.filter(led_to_conversion=True)
+        conversion_count = conversions.count()
+        conversion_rate = (conversion_count / total_clicks * 100) if total_clicks > 0 else 0
+        
+        # Conversions by button
+        conversions_by_button = {}
+        button_conversions = conversions.values('button_id', 'button_title').annotate(
+            count=Count('id')
+        )
+        for item in button_conversions:
+            conversions_by_button[item['button_id']] = {
+                'title': item['button_title'],
+                'conversions': item['count']
+            }
+        
+        return {
+            'total_clicks': total_clicks,
+            'unique_customers': unique_customers,
+            'clicks_by_button': clicks_by_button,
+            'conversion_rate': round(conversion_rate, 2),
+            'conversions_by_button': conversions_by_button,
+            'total_conversions': conversion_count
+        }
+    
     def generate_report(self, campaign: MessageCampaign) -> Dict:
         """
         Generate comprehensive analytics report for a campaign.
@@ -587,6 +775,10 @@ class CampaignService:
                 'is_ab_test': False,
                 'variants': []
             }
+        
+        # Add button analytics if campaign has buttons
+        if campaign.buttons:
+            report['button_analytics'] = self.get_button_analytics(campaign)
         
         return report
     

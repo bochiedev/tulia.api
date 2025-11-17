@@ -4,9 +4,10 @@ Tests for AgentConfiguration model, service, and API endpoints.
 import pytest
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from rest_framework.test import APIClient
+from rest_framework.test import APIRequestFactory, force_authenticate
 from apps.bot.models import AgentConfiguration
 from apps.bot.services import AgentConfigurationService
+from apps.bot.views import AgentConfigurationView
 from apps.tenants.models import Tenant
 from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission, TenantUserRole
 
@@ -72,9 +73,9 @@ def tenant_user_with_scope(db, tenant, user):
 
 
 @pytest.fixture
-def api_client():
-    """Create API client."""
-    return APIClient()
+def request_factory():
+    """Create API request factory for unit testing views."""
+    return APIRequestFactory()
 
 
 @pytest.mark.django_db
@@ -277,91 +278,116 @@ class TestAgentConfigurationAPI:
         """Clear cache before each test."""
         cache.clear()
     
-    def test_get_agent_config_requires_scope(self, api_client, tenant, user):
+    def test_get_agent_config_requires_scope(self, request_factory, tenant, user):
         """Test that GET requires integrations:manage scope."""
         # Create tenant user WITHOUT scope
-        TenantUser.objects.create(
+        tenant_user = TenantUser.objects.create(
             tenant=tenant,
             user=user,
             invite_status='accepted'
         )
         
-        api_client.force_authenticate(user=user)
-        response = api_client.get(
-            '/v1/bot/agent-config',
-            HTTP_X_TENANT_ID=str(tenant.id)
-        )
+        # Create request without required scope
+        request = request_factory.get('/v1/bot/agent-config')
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        request.membership = tenant_user
+        request.scopes = set()  # No scopes
         
-        # Should return 401 or 403 (401 if middleware not set up, 403 if no scope)
-        assert response.status_code in [401, 403]
+        # Should return 403 without required scope
+        view = AgentConfigurationView.as_view()
+        response = view(request)
+        assert response.status_code == 403
     
-    def test_get_agent_config_with_scope(self, api_client, tenant, user, tenant_user_with_scope):
+    def test_get_agent_config_with_scope(self, request_factory, tenant, user, tenant_user_with_scope):
         """Test GET with proper scope."""
-        api_client.force_authenticate(user=user)
-        response = api_client.get(
-            '/v1/bot/agent-config',
-            HTTP_X_TENANT_ID=str(tenant.id)
-        )
+        # Create request with required scope
+        request = request_factory.get('/v1/bot/agent-config')
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        request.membership = tenant_user_with_scope
+        request.scopes = {'integrations:manage'}
+        
+        # Should succeed with proper scope
+        view = AgentConfigurationView.as_view()
+        response = view(request)
         
         assert response.status_code == 200
         assert 'agent_name' in response.data
         assert 'default_model' in response.data
     
-    def test_update_agent_config_requires_scope(self, api_client, tenant, user):
+    def test_update_agent_config_requires_scope(self, request_factory, tenant, user):
         """Test that PUT requires integrations:manage scope."""
         # Create tenant user WITHOUT scope
-        TenantUser.objects.create(
+        tenant_user = TenantUser.objects.create(
             tenant=tenant,
             user=user,
             invite_status='accepted'
         )
         
-        api_client.force_authenticate(user=user)
-        response = api_client.put(
+        # Create request without required scope
+        request = request_factory.put(
             '/v1/bot/agent-config',
             {'agent_name': 'NewBot'},
-            format='json',
-            HTTP_X_TENANT_ID=str(tenant.id)
+            format='json'
         )
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        request.membership = tenant_user
+        request.scopes = set()  # No scopes
         
-        # Should return 401 or 403 (401 if middleware not set up, 403 if no scope)
-        assert response.status_code in [401, 403]
+        # Should return 403 without required scope
+        view = AgentConfigurationView.as_view()
+        response = view(request)
+        assert response.status_code == 403
     
-    def test_update_agent_config_with_scope(self, api_client, tenant, user, tenant_user_with_scope):
+    def test_update_agent_config_with_scope(self, request_factory, tenant, user, tenant_user_with_scope):
         """Test PUT with proper scope."""
-        api_client.force_authenticate(user=user)
-        response = api_client.put(
+        # Create request with required scope
+        request = request_factory.put(
             '/v1/bot/agent-config',
             {
                 'agent_name': 'Sarah',
                 'tone': 'professional',
                 'confidence_threshold': 0.8
             },
-            format='json',
-            HTTP_X_TENANT_ID=str(tenant.id)
+            format='json'
         )
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        request.membership = tenant_user_with_scope
+        request.scopes = {'integrations:manage'}
+        
+        # Should succeed with proper scope
+        view = AgentConfigurationView.as_view()
+        response = view(request)
         
         assert response.status_code == 200
         assert response.data['agent_name'] == 'Sarah'
         assert response.data['tone'] == 'professional'
         assert response.data['confidence_threshold'] == 0.8
     
-    def test_update_agent_config_validation(self, api_client, tenant, user, tenant_user_with_scope):
+    def test_update_agent_config_validation(self, request_factory, tenant, user, tenant_user_with_scope):
         """Test that API validates configuration data."""
-        api_client.force_authenticate(user=user)
-        
-        # Invalid temperature
-        response = api_client.put(
+        # Create request with invalid data
+        request = request_factory.put(
             '/v1/bot/agent-config',
             {'temperature': 3.0},
-            format='json',
-            HTTP_X_TENANT_ID=str(tenant.id)
+            format='json'
         )
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        request.membership = tenant_user_with_scope
+        request.scopes = {'integrations:manage'}
+        
+        # Should return 400 for invalid data
+        view = AgentConfigurationView.as_view()
+        response = view(request)
         
         assert response.status_code == 400
         assert 'temperature' in response.data
     
-    def test_update_agent_config_partial(self, api_client, tenant, user, tenant_user_with_scope):
+    def test_update_agent_config_partial(self, request_factory, tenant, user, tenant_user_with_scope):
         """Test partial update of configuration."""
         # Create initial configuration
         AgentConfiguration.objects.create(
@@ -370,15 +396,20 @@ class TestAgentConfigurationAPI:
             tone="casual"
         )
         
-        api_client.force_authenticate(user=user)
-        
-        # Update only agent_name
-        response = api_client.put(
+        # Create request for partial update
+        request = request_factory.put(
             '/v1/bot/agent-config',
             {'agent_name': 'NewBot'},
-            format='json',
-            HTTP_X_TENANT_ID=str(tenant.id)
+            format='json'
         )
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        request.membership = tenant_user_with_scope
+        request.scopes = {'integrations:manage'}
+        
+        # Should succeed and preserve unchanged fields
+        view = AgentConfigurationView.as_view()
+        response = view(request)
         
         assert response.status_code == 200
         assert response.data['agent_name'] == 'NewBot'

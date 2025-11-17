@@ -10,6 +10,7 @@ from apps.bot.services.llm import (
     LLMResponse,
     ModelInfo,
     OpenAIProvider,
+    TogetherAIProvider,
     LLMProviderFactory
 )
 
@@ -293,6 +294,263 @@ class TestOpenAIProvider:
         assert mock_client.chat.completions.create.call_count == 3
 
 
+class TestTogetherAIProvider:
+    """Test Together AI provider implementation."""
+    
+    def test_initialization(self):
+        """Test Together AI provider initialization."""
+        provider = TogetherAIProvider(api_key="test-key")
+        
+        assert provider.api_key == "test-key"
+        assert provider.provider_name == "together"
+        assert provider.session is not None
+    
+    def test_initialization_with_config(self):
+        """Test Together AI provider initialization with custom config."""
+        provider = TogetherAIProvider(
+            api_key="test-key",
+            timeout=30.0,
+            max_retries=5
+        )
+        
+        assert provider.api_key == "test-key"
+        assert provider.timeout == 30.0
+        assert provider.max_retries == 5
+    
+    def test_get_available_models(self):
+        """Test getting available models."""
+        provider = TogetherAIProvider(api_key="test-key")
+        models = provider.get_available_models()
+        
+        assert len(models) > 0
+        assert all(isinstance(m, ModelInfo) for m in models)
+        
+        # Check specific models exist
+        model_names = [m.name for m in models]
+        assert "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo" in model_names
+        assert "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo" in model_names
+        assert "mistralai/Mistral-7B-Instruct-v0.3" in model_names
+    
+    def test_model_configurations(self):
+        """Test that model configurations are properly defined."""
+        provider = TogetherAIProvider(api_key="test-key")
+        
+        # Check Llama 3.1 8B configuration
+        assert "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo" in provider.MODELS
+        llama_8b = provider.MODELS["meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"]
+        assert llama_8b["context_window"] == 131072
+        assert llama_8b["input_cost_per_1k"] > 0
+        assert llama_8b["output_cost_per_1k"] > 0
+        assert "chat" in llama_8b["capabilities"]
+        
+        # Check Llama 3.1 405B configuration
+        assert "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo" in provider.MODELS
+        llama_405b = provider.MODELS["meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo"]
+        assert "reasoning" in llama_405b["capabilities"]
+        assert "complex_tasks" in llama_405b["capabilities"]
+    
+    def test_calculate_cost(self):
+        """Test cost calculation."""
+        provider = TogetherAIProvider(api_key="test-key")
+        
+        # Test Llama 3.1 8B cost calculation
+        cost = provider._calculate_cost(
+            "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+            1000,
+            500
+        )
+        expected = (Decimal("1000") / 1000 * Decimal("0.00018")) + \
+                   (Decimal("500") / 1000 * Decimal("0.00018"))
+        assert cost == expected
+        
+        # Test unknown model returns 0
+        cost = provider._calculate_cost("unknown-model", 1000, 500)
+        assert cost == Decimal("0")
+    
+    def test_calculate_retry_delay(self):
+        """Test exponential backoff calculation."""
+        provider = TogetherAIProvider(api_key="test-key")
+        
+        # Test exponential backoff
+        delay1 = provider._calculate_retry_delay(1)
+        delay2 = provider._calculate_retry_delay(2)
+        delay3 = provider._calculate_retry_delay(3)
+        
+        assert delay1 == 1.0
+        assert delay2 == 2.0
+        assert delay3 == 4.0
+        
+        # Test max delay cap
+        delay_large = provider._calculate_retry_delay(10)
+        assert delay_large <= provider.MAX_RETRY_DELAY
+    
+    @patch('apps.bot.services.llm.together_provider.requests.Session')
+    def test_generate_success(self, mock_session_class):
+        """Test successful generation."""
+        # Mock session
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+        
+        # Mock response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'id': 'test-id',
+            'created': 1234567890,
+            'model': 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
+            'choices': [{
+                'message': {
+                    'content': 'Hello, how can I help?'
+                },
+                'finish_reason': 'stop'
+            }],
+            'usage': {
+                'prompt_tokens': 10,
+                'completion_tokens': 5,
+                'total_tokens': 15
+            }
+        }
+        mock_session.post.return_value = mock_response
+        
+        # Create provider and generate
+        provider = TogetherAIProvider(api_key="test-key")
+        result = provider.generate(
+            messages=[{"role": "user", "content": "Hello"}],
+            model="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+            temperature=0.7,
+            max_tokens=100
+        )
+        
+        # Verify result
+        assert isinstance(result, LLMResponse)
+        assert result.content == "Hello, how can I help?"
+        assert result.model == "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+        assert result.provider == "together"
+        assert result.input_tokens == 10
+        assert result.output_tokens == 5
+        assert result.total_tokens == 15
+        assert result.finish_reason == "stop"
+        assert result.estimated_cost > 0
+        
+        # Verify API was called correctly
+        mock_session.post.assert_called_once()
+        call_args = mock_session.post.call_args
+        assert "chat/completions" in call_args[0][0]
+        payload = call_args[1]['json']
+        assert payload["model"] == "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+        assert payload["temperature"] == 0.7
+        assert payload["max_tokens"] == 100
+    
+    @patch('apps.bot.services.llm.together_provider.requests.Session')
+    @patch('time.sleep')
+    def test_generate_retry_on_rate_limit(self, mock_sleep, mock_session_class):
+        """Test retry logic on rate limit error."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+        
+        # Mock successful response after retry
+        success_response = Mock()
+        success_response.status_code = 200
+        success_response.json.return_value = {
+            'id': 'test-id',
+            'created': 1234567890,
+            'model': 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
+            'choices': [{
+                'message': {'content': 'Success'},
+                'finish_reason': 'stop'
+            }],
+            'usage': {
+                'prompt_tokens': 10,
+                'completion_tokens': 5,
+                'total_tokens': 15
+            }
+        }
+        
+        # First call returns 429, second succeeds
+        rate_limit_response = Mock()
+        rate_limit_response.status_code = 429
+        
+        mock_session.post.side_effect = [rate_limit_response, success_response]
+        
+        provider = TogetherAIProvider(api_key="test-key", max_retries=3)
+        result = provider.generate(
+            messages=[{"role": "user", "content": "Hello"}],
+            model="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+        )
+        
+        # Verify retry happened
+        assert mock_session.post.call_count == 2
+        assert mock_sleep.called
+        assert result.content == "Success"
+    
+    @patch('apps.bot.services.llm.together_provider.requests.Session')
+    @patch('time.sleep')
+    def test_generate_max_retries_exceeded(self, mock_sleep, mock_session_class):
+        """Test that max retries are respected."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+        
+        # Always return 429
+        rate_limit_response = Mock()
+        rate_limit_response.status_code = 429
+        rate_limit_response.raise_for_status.side_effect = Exception("Rate limit exceeded")
+        
+        mock_session.post.return_value = rate_limit_response
+        
+        provider = TogetherAIProvider(api_key="test-key", max_retries=2)
+        
+        with pytest.raises(Exception):
+            provider.generate(
+                messages=[{"role": "user", "content": "Hello"}],
+                model="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+            )
+        
+        # Should try initial + 2 retries = 3 total
+        assert mock_session.post.call_count == 3
+    
+    @patch('apps.bot.services.llm.together_provider.requests.Session')
+    @patch('time.sleep')
+    def test_generate_retry_on_server_error(self, mock_sleep, mock_session_class):
+        """Test retry logic on server error."""
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+        
+        # Mock successful response after retry
+        success_response = Mock()
+        success_response.status_code = 200
+        success_response.json.return_value = {
+            'id': 'test-id',
+            'created': 1234567890,
+            'model': 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
+            'choices': [{
+                'message': {'content': 'Success'},
+                'finish_reason': 'stop'
+            }],
+            'usage': {
+                'prompt_tokens': 10,
+                'completion_tokens': 5,
+                'total_tokens': 15
+            }
+        }
+        
+        # First call returns 500, second succeeds
+        server_error_response = Mock()
+        server_error_response.status_code = 500
+        
+        mock_session.post.side_effect = [server_error_response, success_response]
+        
+        provider = TogetherAIProvider(api_key="test-key", max_retries=3)
+        result = provider.generate(
+            messages=[{"role": "user", "content": "Hello"}],
+            model="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+        )
+        
+        # Verify retry happened
+        assert mock_session.post.call_count == 2
+        assert mock_sleep.called
+        assert result.content == "Success"
+
+
 class TestLLMProviderFactory:
     """Test LLM provider factory."""
     
@@ -301,13 +559,21 @@ class TestLLMProviderFactory:
         providers = LLMProviderFactory.list_providers()
         
         assert "openai" in providers
-        assert len(providers) > 0
+        assert "together" in providers
+        assert len(providers) >= 2
     
     def test_get_provider_openai(self):
         """Test getting OpenAI provider."""
         provider = LLMProviderFactory.get_provider("openai", "test-key")
         
         assert isinstance(provider, OpenAIProvider)
+        assert provider.api_key == "test-key"
+    
+    def test_get_provider_together(self):
+        """Test getting Together AI provider."""
+        provider = LLMProviderFactory.get_provider("together", "test-key")
+        
+        assert isinstance(provider, TogetherAIProvider)
         assert provider.api_key == "test-key"
     
     def test_get_provider_case_insensitive(self):
@@ -398,6 +664,32 @@ class TestLLMProviderFactory:
         assert isinstance(provider, OpenAIProvider)
         assert provider.api_key == "test-openai-key"
         assert provider.max_retries == 5
+    
+    @pytest.mark.django_db
+    def test_create_from_tenant_settings_together(self):
+        """Test creating Together AI provider from tenant settings."""
+        from apps.tenants.models import Tenant, TenantSettings
+        
+        # Create tenant (settings will be auto-created by signal)
+        tenant = Tenant.objects.create(
+            name="Test Tenant Together",
+            slug="test-tenant-together"
+        )
+        
+        # Update the auto-created settings with Together AI API key
+        tenant.settings.together_api_key = "test-together-key"
+        tenant.settings.llm_provider = "together"
+        tenant.settings.llm_timeout = 45.0
+        tenant.settings.llm_max_retries = 4
+        tenant.settings.save()
+        
+        # Create provider from tenant settings
+        provider = LLMProviderFactory.create_from_tenant_settings(tenant)
+        
+        assert isinstance(provider, TogetherAIProvider)
+        assert provider.api_key == "test-together-key"
+        assert provider.timeout == 45.0
+        assert provider.max_retries == 4
     
     @pytest.mark.django_db
     def test_create_from_tenant_settings_no_api_key(self):

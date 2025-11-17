@@ -452,3 +452,399 @@ class KnowledgeEntry(BaseModel):
     def save(self, *args, **kwargs):
         """Override save to validate tenant consistency."""
         super().save(*args, **kwargs)
+
+
+class ConversationContextManager(models.Manager):
+    """Manager for conversation context queries with tenant scoping."""
+    
+    def for_conversation(self, conversation):
+        """Get context for a specific conversation."""
+        return self.filter(conversation=conversation).first()
+    
+    def for_tenant(self, tenant):
+        """Get contexts for a specific tenant."""
+        return self.filter(conversation__tenant=tenant)
+    
+    def active(self):
+        """Get contexts that haven't expired."""
+        from django.utils import timezone
+        return self.filter(
+            models.Q(context_expires_at__isnull=True) |
+            models.Q(context_expires_at__gt=timezone.now())
+        )
+    
+    def expired(self):
+        """Get contexts that have expired."""
+        from django.utils import timezone
+        return self.filter(
+            context_expires_at__isnull=False,
+            context_expires_at__lte=timezone.now()
+        )
+
+
+class ConversationContext(BaseModel):
+    """
+    Conversation context for memory storage and state tracking.
+    
+    Stores contextual information about ongoing conversations to enable
+    the AI agent to maintain memory across messages. This includes:
+    - Current topic being discussed
+    - Pending actions or requests
+    - Extracted entities (product names, dates, etc.)
+    - References to last viewed items
+    - Conversation summary for long histories
+    - Key facts to remember
+    
+    Context expires after 30 minutes of inactivity by default, but key
+    facts are preserved for future sessions.
+    
+    TENANT SCOPING: Inherits tenant from conversation relationship.
+    """
+    
+    conversation = models.OneToOneField(
+        'messaging.Conversation',
+        on_delete=models.CASCADE,
+        related_name='context',
+        db_index=True,
+        help_text="Conversation this context belongs to"
+    )
+    
+    # Current State
+    current_topic = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Current topic being discussed (e.g., 'product_inquiry', 'booking_appointment')"
+    )
+    
+    pending_action = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Pending action waiting for customer input (e.g., 'awaiting_date_selection')"
+    )
+    
+    extracted_entities = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Extracted entities from conversation (e.g., {'product_name': 'Blue Shirt', 'size': 'L'})"
+    )
+    
+    # References to Catalog Items
+    last_product_viewed = models.ForeignKey(
+        'catalog.Product',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='context_views',
+        help_text="Last product the customer viewed or inquired about"
+    )
+    
+    last_service_viewed = models.ForeignKey(
+        'services.Service',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='context_views',
+        help_text="Last service the customer viewed or inquired about"
+    )
+    
+    # Memory and Summary
+    conversation_summary = models.TextField(
+        blank=True,
+        help_text="AI-generated summary of conversation history for context window management"
+    )
+    
+    key_facts = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of key facts to remember (e.g., ['Customer prefers blue', 'Budget is $50'])"
+    )
+    
+    # Timing
+    last_interaction = models.DateTimeField(
+        auto_now=True,
+        help_text="Timestamp of last interaction (auto-updated)"
+    )
+    
+    context_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="When this context expires (null = never expires)"
+    )
+    
+    # Custom manager
+    objects = ConversationContextManager()
+    
+    class Meta:
+        db_table = 'conversation_contexts'
+        verbose_name = 'Conversation Context'
+        verbose_name_plural = 'Conversation Contexts'
+        indexes = [
+            models.Index(fields=['conversation', 'last_interaction']),
+            models.Index(fields=['context_expires_at']),
+        ]
+    
+    def __str__(self):
+        return f"Context for Conversation {self.conversation_id} - {self.current_topic or 'No topic'}"
+    
+    def get_entity(self, entity_name, default=None):
+        """Get a specific extracted entity value."""
+        return self.extracted_entities.get(entity_name, default)
+    
+    def set_entity(self, entity_name, value):
+        """Set a specific extracted entity value."""
+        self.extracted_entities[entity_name] = value
+        self.save(update_fields=['extracted_entities'])
+    
+    def add_key_fact(self, fact):
+        """Add a key fact to remember."""
+        if fact not in self.key_facts:
+            self.key_facts.append(fact)
+            self.save(update_fields=['key_facts'])
+    
+    def clear_key_facts(self):
+        """Clear all key facts."""
+        self.key_facts = []
+        self.save(update_fields=['key_facts'])
+    
+    def is_expired(self):
+        """Check if context has expired."""
+        if not self.context_expires_at:
+            return False
+        from django.utils import timezone
+        return self.context_expires_at <= timezone.now()
+    
+    def extend_expiration(self, minutes=30):
+        """Extend context expiration by specified minutes."""
+        from django.utils import timezone
+        from datetime import timedelta
+        self.context_expires_at = timezone.now() + timedelta(minutes=minutes)
+        self.save(update_fields=['context_expires_at'])
+    
+    def clear_context(self, preserve_key_facts=True):
+        """Clear context state, optionally preserving key facts."""
+        self.current_topic = ''
+        self.pending_action = ''
+        self.extracted_entities = {}
+        self.last_product_viewed = None
+        self.last_service_viewed = None
+        self.conversation_summary = ''
+        
+        if not preserve_key_facts:
+            self.key_facts = []
+        
+        update_fields = [
+            'current_topic', 'pending_action', 'extracted_entities',
+            'last_product_viewed', 'last_service_viewed', 'conversation_summary'
+        ]
+        if not preserve_key_facts:
+            update_fields.append('key_facts')
+        
+        self.save(update_fields=update_fields)
+    
+    def save(self, *args, **kwargs):
+        """Override save to set default expiration if not set."""
+        if not self.context_expires_at and not self.pk:
+            # Set default expiration to 30 minutes on creation
+            from django.utils import timezone
+            from datetime import timedelta
+            self.context_expires_at = timezone.now() + timedelta(minutes=30)
+        
+        super().save(*args, **kwargs)
+
+
+class AgentInteractionManager(models.Manager):
+    """Manager for agent interaction queries with tenant scoping."""
+    
+    def for_tenant(self, tenant):
+        """Get agent interactions for a specific tenant."""
+        return self.filter(conversation__tenant=tenant)
+    
+    def for_conversation(self, conversation):
+        """Get agent interactions for a specific conversation."""
+        return self.filter(conversation=conversation).order_by('-created_at')
+    
+    def by_model(self, tenant, model_name):
+        """Get interactions for a specific model within a tenant."""
+        return self.filter(conversation__tenant=tenant, model_used=model_name)
+    
+    def with_handoff(self, tenant):
+        """Get interactions that triggered handoff for a tenant."""
+        return self.filter(conversation__tenant=tenant, handoff_triggered=True)
+    
+    def high_confidence(self, tenant, threshold=0.7):
+        """Get interactions with confidence above threshold for a tenant."""
+        return self.filter(conversation__tenant=tenant, confidence_score__gte=threshold)
+    
+    def low_confidence(self, tenant, threshold=0.7):
+        """Get interactions with confidence below threshold for a tenant."""
+        return self.filter(conversation__tenant=tenant, confidence_score__lt=threshold)
+
+
+class AgentInteraction(BaseModel):
+    """
+    Agent interaction tracking for analytics and monitoring.
+    
+    Records every interaction between the AI agent and customers, including:
+    - Customer message and detected intents
+    - Model used and processing details
+    - Agent response and confidence score
+    - Handoff decisions and reasons
+    - Token usage and estimated costs
+    - Message type (text, button, list, media)
+    
+    This data enables:
+    - Performance monitoring and optimization
+    - Cost tracking and budgeting
+    - Quality assurance and improvement
+    - Analytics on common topics and intents
+    - Handoff pattern analysis
+    
+    TENANT SCOPING: Inherits tenant from conversation relationship.
+    All queries MUST filter by conversation__tenant to prevent cross-tenant data leakage.
+    """
+    
+    conversation = models.ForeignKey(
+        'messaging.Conversation',
+        on_delete=models.CASCADE,
+        related_name='agent_interactions',
+        db_index=True,
+        help_text="Conversation this interaction belongs to"
+    )
+    
+    # Input
+    customer_message = models.TextField(
+        help_text="Original customer message text"
+    )
+    
+    detected_intents = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of detected intents with confidence scores"
+    )
+    
+    # Processing
+    model_used = models.CharField(
+        max_length=50,
+        db_index=True,
+        help_text="LLM model used for this interaction (e.g., 'gpt-4o', 'o1-preview')"
+    )
+    
+    context_size = models.IntegerField(
+        default=0,
+        help_text="Size of context provided to the model in tokens"
+    )
+    
+    processing_time_ms = models.IntegerField(
+        default=0,
+        help_text="Time taken to process and generate response in milliseconds"
+    )
+    
+    # Output
+    agent_response = models.TextField(
+        help_text="Generated agent response text"
+    )
+    
+    confidence_score = models.FloatField(
+        db_index=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Confidence score for the response (0.0-1.0)"
+    )
+    
+    handoff_triggered = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Whether this interaction triggered a handoff to human agent"
+    )
+    
+    handoff_reason = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Reason for handoff (e.g., 'low_confidence', 'explicit_request', 'restricted_topic')"
+    )
+    
+    # Rich Message
+    message_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('text', 'Text'),
+            ('button', 'Button'),
+            ('list', 'List'),
+            ('media', 'Media'),
+        ],
+        default='text',
+        db_index=True,
+        help_text="Type of message sent to customer"
+    )
+    
+    # Metrics
+    token_usage = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Token usage breakdown (e.g., {'prompt_tokens': 100, 'completion_tokens': 50, 'total_tokens': 150})"
+    )
+    
+    estimated_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        default=0,
+        help_text="Estimated cost in USD for this interaction"
+    )
+    
+    # Custom manager
+    objects = AgentInteractionManager()
+    
+    class Meta:
+        db_table = 'agent_interactions'
+        verbose_name = 'Agent Interaction'
+        verbose_name_plural = 'Agent Interactions'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['conversation', 'created_at']),
+            models.Index(fields=['model_used', 'created_at']),
+            models.Index(fields=['confidence_score']),
+            models.Index(fields=['handoff_triggered', 'created_at']),
+            models.Index(fields=['message_type', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"AgentInteraction {self.id} - {self.model_used} (confidence: {self.confidence_score:.2f})"
+    
+    def is_high_confidence(self, threshold=0.7):
+        """Check if confidence score is above threshold."""
+        return self.confidence_score >= threshold
+    
+    def is_low_confidence(self, threshold=0.7):
+        """Check if confidence score is below threshold."""
+        return self.confidence_score < threshold
+    
+    def get_total_tokens(self):
+        """Get total token count from token_usage."""
+        return self.token_usage.get('total_tokens', 0)
+    
+    def get_prompt_tokens(self):
+        """Get prompt token count from token_usage."""
+        return self.token_usage.get('prompt_tokens', 0)
+    
+    def get_completion_tokens(self):
+        """Get completion token count from token_usage."""
+        return self.token_usage.get('completion_tokens', 0)
+    
+    def get_cost_per_token(self):
+        """Calculate cost per token if tokens were used."""
+        total_tokens = self.get_total_tokens()
+        if total_tokens > 0 and self.estimated_cost > 0:
+            return float(self.estimated_cost) / total_tokens
+        return 0.0
+    
+    def get_intent_names(self):
+        """Get list of detected intent names."""
+        return [intent.get('name', '') for intent in self.detected_intents if isinstance(intent, dict)]
+    
+    def get_primary_intent(self):
+        """Get the primary (highest confidence) intent."""
+        if not self.detected_intents:
+            return None
+        if isinstance(self.detected_intents, list) and len(self.detected_intents) > 0:
+            return self.detected_intents[0]
+        return None

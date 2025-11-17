@@ -275,6 +275,10 @@ class NotificationSettingsSerializer(serializers.Serializer):
 class FeatureFlagsSerializer(serializers.Serializer):
     """Serializer for feature flags."""
     
+    ai_agent_enabled = serializers.BooleanField(
+        required=False,
+        help_text="Enable AI-powered agent (uses LLM for intelligent responses)"
+    )
     ai_responses_enabled = serializers.BooleanField(required=False)
     auto_handoff_enabled = serializers.BooleanField(required=False)
     product_recommendations = serializers.BooleanField(required=False)
@@ -635,3 +639,128 @@ class BusinessSettingsSerializer(serializers.Serializer):
                     )
         
         return value
+
+
+class TogetherAICredentialsSerializer(serializers.Serializer):
+    """Serializer for setting Together AI credentials."""
+    
+    api_key = serializers.CharField(required=True, min_length=20)
+    test_connection = serializers.BooleanField(default=False)
+    
+    def validate(self, data):
+        """Validate Together AI credentials by testing connection."""
+        if data.get('test_connection', False):
+            from apps.bot.services.llm import TogetherAIProvider
+            
+            try:
+                provider = TogetherAIProvider(api_key=data['api_key'])
+                # Test connection by getting available models
+                models = provider.get_available_models()
+                if not models:
+                    raise serializers.ValidationError({
+                        'non_field_errors': 'Failed to retrieve models from Together AI'
+                    })
+            except Exception as e:
+                raise serializers.ValidationError({
+                    'non_field_errors': f'Failed to connect to Together AI: {str(e)}'
+                })
+        
+        return data
+
+
+class LLMConfigurationSerializer(serializers.Serializer):
+    """
+    Serializer for LLM configuration.
+    
+    Allows tenants to configure their LLM provider, model selection,
+    and related settings for the AI agent.
+    """
+    
+    llm_provider = serializers.ChoiceField(
+        choices=['openai', 'together'],
+        default='openai',
+        help_text="LLM provider to use (openai, together)"
+    )
+    llm_timeout = serializers.FloatField(
+        required=False,
+        allow_null=True,
+        min_value=1.0,
+        max_value=300.0,
+        help_text="Timeout in seconds for LLM API calls (1-300)"
+    )
+    llm_max_retries = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=0,
+        max_value=5,
+        help_text="Maximum number of retries for LLM API calls (0-5)"
+    )
+    
+    def validate(self, data):
+        """Validate LLM configuration."""
+        provider = data.get('llm_provider', 'openai')
+        
+        # Get tenant from context
+        tenant = self.context.get('tenant')
+        if not tenant:
+            raise serializers.ValidationError('Tenant context is required')
+        
+        # Check if API key is configured for the selected provider
+        settings = tenant.settings
+        
+        if provider == 'openai':
+            if not settings.openai_api_key:
+                raise serializers.ValidationError({
+                    'llm_provider': 'OpenAI API key is not configured. Please configure OpenAI credentials first.'
+                })
+        elif provider == 'together':
+            if not settings.together_api_key:
+                raise serializers.ValidationError({
+                    'llm_provider': 'Together AI API key is not configured. Please configure Together AI credentials first.'
+                })
+        
+        return data
+
+
+class LLMProviderInfoSerializer(serializers.Serializer):
+    """
+    Serializer for LLM provider information.
+    
+    Returns available providers and their configuration status.
+    """
+    
+    provider = serializers.CharField(read_only=True)
+    display_name = serializers.CharField(read_only=True)
+    is_configured = serializers.BooleanField(read_only=True)
+    available_models = serializers.ListField(
+        child=serializers.DictField(),
+        read_only=True
+    )
+
+
+class LLMModelInfoSerializer(serializers.Serializer):
+    """
+    Serializer for LLM model information.
+    
+    Returns details about a specific model including pricing and capabilities.
+    """
+    
+    name = serializers.CharField(read_only=True)
+    display_name = serializers.CharField(read_only=True)
+    provider = serializers.CharField(read_only=True)
+    context_window = serializers.IntegerField(read_only=True)
+    input_cost_per_1k = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        read_only=True
+    )
+    output_cost_per_1k = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        read_only=True
+    )
+    capabilities = serializers.ListField(
+        child=serializers.CharField(),
+        read_only=True
+    )
+    description = serializers.CharField(read_only=True)

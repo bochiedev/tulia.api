@@ -40,7 +40,7 @@ class TenantContextMiddleware(MiddlewareMixin):
         '/v1/auth/reset-password',   # Password reset
         '/v1/auth/refresh-token',    # Token refresh
         '/schema',        # OpenAPI schema endpoints for documentation
-        '/admin/',        # Django admin interface (uses session authentication)
+        '/admin',         # Django admin interface (uses session authentication) - handles both /admin and /admin/
     ]
     
     # Paths that require JWT authentication but not tenant context
@@ -82,7 +82,7 @@ class TenantContextMiddleware(MiddlewareMixin):
             request.membership = None
             request.scopes = set()
             # Don't set request.user for admin paths - let Django's session auth handle it
-            if not request.path.startswith('/admin/'):
+            if not request.path.startswith('/admin'):
                 request.user = None
             return None
         

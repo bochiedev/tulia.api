@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.db import transaction
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django_ratelimit.decorators import ratelimit
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
@@ -1440,3 +1441,449 @@ def business_settings_view(request):
             'message': 'Business settings updated successfully',
             'settings': business_settings
         }, status=status.HTTP_200_OK)
+
+
+
+@extend_schema(
+    tags=['Integrations'],
+    summary='Manage Together AI credentials',
+    description='''
+Manage Together AI integration credentials with optional validation.
+
+**GET**: Return configuration status
+**POST**: Update credentials with optional validation
+**DELETE**: Remove credentials
+
+**Required scope**: `integrations:manage`
+**Rate limit**: 60 requests/minute for POST/DELETE
+
+**Requirements**: 14.1, 14.2, 14.4
+    ''',
+    request='apps.tenants.serializers_settings.TogetherAICredentialsSerializer',
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Update Credentials',
+            value={
+                'api_key': 'together_api_key_here',
+                'test_connection': True
+            },
+            request_only=True
+        ),
+        OpenApiExample(
+            'Success Response',
+            value={
+                'message': 'Together AI credentials updated successfully',
+                'configured': True,
+                'available_models': 7
+            },
+            response_only=True
+        )
+    ]
+)
+@api_view(['GET', 'POST', 'DELETE'])
+@permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method=['POST', 'DELETE'])
+def together_ai_credentials_view(request):
+    """
+    Manage Together AI integration credentials.
+    
+    GET: Return configuration status
+    POST: Create/update credentials with optional validation
+    DELETE: Remove credentials
+    
+    Required scope: integrations:manage
+    """
+    if 'integrations:manage' not in request.scopes:
+        return Response(
+            {'detail': 'Missing required scope: integrations:manage'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    settings, created = TenantSettings.objects.get_or_create(
+        tenant=request.tenant
+    )
+    
+    if request.method == 'GET':
+        # Return configuration status
+        has_together = bool(settings.together_api_key)
+        
+        response_data = {
+            'configured': has_together,
+        }
+        
+        if has_together:
+            # Get available models
+            try:
+                from apps.bot.services.llm import TogetherAIProvider
+                provider = TogetherAIProvider(api_key=settings.together_api_key)
+                models = provider.get_available_models()
+                response_data['available_models'] = len(models)
+            except Exception as e:
+                logger.warning(f"Failed to get Together AI models: {e}")
+                response_data['available_models'] = 0
+        
+        return Response(response_data)
+    
+    elif request.method == 'POST':
+        from apps.tenants.serializers_settings import TogetherAICredentialsSerializer
+        
+        serializer = TogetherAICredentialsSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            with transaction.atomic():
+                settings.together_api_key = serializer.validated_data['api_key']
+                settings.update_integration_status('together_ai', {
+                    'configured': True,
+                    'configured_at': str(timezone.now())
+                })
+                settings.save()
+                
+                # Log to audit trail
+                from apps.rbac.models import AuditLog
+                AuditLog.log_action(
+                    action='together_ai_credentials_updated',
+                    user=request.user,
+                    tenant=request.tenant,
+                    target_type='TenantSettings',
+                    target_id=settings.id,
+                    metadata={}
+                )
+            
+            # Get available models count
+            try:
+                from apps.bot.services.llm import TogetherAIProvider
+                provider = TogetherAIProvider(api_key=settings.together_api_key)
+                models = provider.get_available_models()
+                available_models = len(models)
+            except Exception as e:
+                logger.warning(f"Failed to get Together AI models: {e}")
+                available_models = 0
+            
+            return Response({
+                'message': 'Together AI credentials updated successfully',
+                'configured': True,
+                'available_models': available_models
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error updating Together AI credentials: {e}", exc_info=True)
+            return Response({
+                'error': 'Failed to update Together AI credentials',
+                'code': 'CREDENTIAL_UPDATE_FAILED'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    elif request.method == 'DELETE':
+        # Remove Together AI credentials
+        with transaction.atomic():
+            settings.together_api_key = ''
+            settings.update_integration_status('together_ai', {'configured': False})
+            settings.save()
+            
+            # Log to audit trail
+            from apps.rbac.models import AuditLog
+            AuditLog.log_action(
+                action='together_ai_credentials_removed',
+                user=request.user,
+                tenant=request.tenant,
+                target_type='TenantSettings',
+                target_id=settings.id,
+                metadata={}
+            )
+        
+        return Response({
+            'message': 'Together AI credentials removed successfully'
+        }, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    tags=['Integrations'],
+    summary='Manage LLM configuration',
+    description='''
+Manage LLM provider selection and configuration for the AI agent.
+
+**GET**: Return current LLM configuration
+**PATCH**: Update LLM configuration
+
+**Required scope**: `integrations:manage`
+**Rate limit**: 60 requests/minute for PATCH
+
+**Requirements**: 14.1, 14.2, 14.4
+    ''',
+    request='apps.tenants.serializers_settings.LLMConfigurationSerializer',
+    responses={
+        200: OpenApiTypes.OBJECT,
+        400: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Update Configuration',
+            value={
+                'llm_provider': 'together',
+                'llm_timeout': 60.0,
+                'llm_max_retries': 3
+            },
+            request_only=True
+        ),
+        OpenApiExample(
+            'Success Response',
+            value={
+                'message': 'LLM configuration updated successfully',
+                'configuration': {
+                    'llm_provider': 'together',
+                    'llm_timeout': 60.0,
+                    'llm_max_retries': 3
+                }
+            },
+            response_only=True
+        )
+    ]
+)
+@api_view(['GET', 'PATCH'])
+@permission_classes([HasTenantScopes])
+@ratelimit(key='user_or_ip', rate='60/m', method=['PATCH'])
+def llm_configuration_view(request):
+    """
+    Manage LLM configuration for the AI agent.
+    
+    GET: Return current LLM configuration
+    PATCH: Update LLM configuration
+    
+    Required scope: integrations:manage
+    """
+    if 'integrations:manage' not in request.scopes:
+        return Response(
+            {'detail': 'Missing required scope: integrations:manage'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    settings, created = TenantSettings.objects.get_or_create(
+        tenant=request.tenant
+    )
+    
+    if request.method == 'GET':
+        # Return current configuration
+        return Response({
+            'llm_provider': settings.llm_provider or 'openai',
+            'llm_timeout': settings.llm_timeout,
+            'llm_max_retries': settings.llm_max_retries,
+        })
+    
+    elif request.method == 'PATCH':
+        from apps.tenants.serializers_settings import LLMConfigurationSerializer
+        
+        serializer = LLMConfigurationSerializer(
+            data=request.data,
+            context={'tenant': request.tenant}
+        )
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            with transaction.atomic():
+                updated_fields = []
+                
+                if 'llm_provider' in serializer.validated_data:
+                    settings.llm_provider = serializer.validated_data['llm_provider']
+                    updated_fields.append('llm_provider')
+                
+                if 'llm_timeout' in serializer.validated_data:
+                    settings.llm_timeout = serializer.validated_data['llm_timeout']
+                    updated_fields.append('llm_timeout')
+                
+                if 'llm_max_retries' in serializer.validated_data:
+                    settings.llm_max_retries = serializer.validated_data['llm_max_retries']
+                    updated_fields.append('llm_max_retries')
+                
+                if updated_fields:
+                    settings.save(update_fields=updated_fields + ['updated_at'])
+                
+                # Log to audit trail
+                from apps.rbac.models import AuditLog
+                AuditLog.log_action(
+                    action='llm_configuration_updated',
+                    user=request.user,
+                    tenant=request.tenant,
+                    target_type='TenantSettings',
+                    target_id=settings.id,
+                    metadata={
+                        'updated_fields': updated_fields,
+                        'llm_provider': settings.llm_provider
+                    }
+                )
+            
+            return Response({
+                'message': 'LLM configuration updated successfully',
+                'configuration': {
+                    'llm_provider': settings.llm_provider,
+                    'llm_timeout': settings.llm_timeout,
+                    'llm_max_retries': settings.llm_max_retries,
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error updating LLM configuration: {e}", exc_info=True)
+            return Response({
+                'error': 'Failed to update LLM configuration',
+                'code': 'CONFIGURATION_UPDATE_FAILED'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(
+    tags=['Integrations'],
+    summary='Get available LLM providers',
+    description='''
+Get list of available LLM providers and their configuration status.
+
+Returns information about each provider including:
+- Configuration status
+- Available models
+- Pricing information
+
+**Required scope**: `integrations:view`
+
+**Requirements**: 14.1, 14.2, 14.3
+    ''',
+    responses={
+        200: OpenApiTypes.OBJECT,
+        403: OpenApiTypes.OBJECT,
+    },
+    examples=[
+        OpenApiExample(
+            'Success Response',
+            value={
+                'providers': [
+                    {
+                        'provider': 'openai',
+                        'display_name': 'OpenAI',
+                        'is_configured': True,
+                        'available_models': [
+                            {
+                                'name': 'gpt-4o',
+                                'display_name': 'GPT-4o',
+                                'context_window': 128000,
+                                'input_cost_per_1k': '0.0025',
+                                'output_cost_per_1k': '0.01'
+                            }
+                        ]
+                    },
+                    {
+                        'provider': 'together',
+                        'display_name': 'Together AI',
+                        'is_configured': False,
+                        'available_models': []
+                    }
+                ]
+            },
+            response_only=True
+        )
+    ]
+)
+@api_view(['GET'])
+@permission_classes([HasTenantScopes])
+def llm_providers_view(request):
+    """
+    Get available LLM providers and their configuration status.
+    
+    Required scope: integrations:view
+    """
+    if 'integrations:view' not in request.scopes:
+        return Response(
+            {'detail': 'Missing required scope: integrations:view'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    settings, created = TenantSettings.objects.get_or_create(
+        tenant=request.tenant
+    )
+    
+    providers = []
+    
+    # OpenAI
+    openai_configured = bool(settings.openai_api_key)
+    openai_models = []
+    
+    if openai_configured:
+        try:
+            from apps.bot.services.llm import OpenAIProvider
+            provider = OpenAIProvider(api_key=settings.openai_api_key)
+            models = provider.get_available_models()
+            openai_models = [
+                {
+                    'name': m.name,
+                    'display_name': m.display_name,
+                    'provider': m.provider,
+                    'context_window': m.context_window,
+                    'input_cost_per_1k': str(m.input_cost_per_1k),
+                    'output_cost_per_1k': str(m.output_cost_per_1k),
+                    'capabilities': m.capabilities,
+                    'description': m.description
+                }
+                for m in models
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to get OpenAI models: {e}")
+    
+    providers.append({
+        'provider': 'openai',
+        'display_name': 'OpenAI',
+        'is_configured': openai_configured,
+        'available_models': openai_models
+    })
+    
+    # Together AI
+    together_configured = bool(settings.together_api_key)
+    together_models = []
+    
+    if together_configured:
+        try:
+            from apps.bot.services.llm import TogetherAIProvider
+            provider = TogetherAIProvider(api_key=settings.together_api_key)
+            models = provider.get_available_models()
+            together_models = [
+                {
+                    'name': m.name,
+                    'display_name': m.display_name,
+                    'provider': m.provider,
+                    'context_window': m.context_window,
+                    'input_cost_per_1k': str(m.input_cost_per_1k),
+                    'output_cost_per_1k': str(m.output_cost_per_1k),
+                    'capabilities': m.capabilities,
+                    'description': m.description
+                }
+                for m in models
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to get Together AI models: {e}")
+    
+    providers.append({
+        'provider': 'together',
+        'display_name': 'Together AI',
+        'is_configured': together_configured,
+        'available_models': together_models
+    })
+    
+    return Response({
+        'providers': providers,
+        'current_provider': settings.llm_provider or 'openai'
+    })
+
+
+def _mask_credential(value, prefix=''):
+    """Mask credential showing only last 4 characters."""
+    if not value:
+        return None
+    
+    if len(value) <= 4:
+        return '****'
+    
+    return f"{prefix}****{value[-4:]}"

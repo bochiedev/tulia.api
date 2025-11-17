@@ -91,6 +91,16 @@ class KnowledgeBaseService:
         Raises:
             ValidationError: If entry data is invalid
         """
+        # Import sanitizer
+        from apps.bot.security_audit import InputSanitizer
+        
+        # Sanitize title and content
+        title, content = InputSanitizer.sanitize_knowledge_content(title, content)
+        
+        # Validate metadata if provided
+        if metadata:
+            InputSanitizer.validate_json_field(metadata, 'metadata')
+        
         # Validate entry type
         valid_types = ['faq', 'policy', 'product_info', 'service_info', 'procedure', 'general']
         if entry_type not in valid_types:

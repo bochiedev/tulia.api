@@ -408,7 +408,7 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/2
 
 ENCRYPTION_KEY=dev-key-base64-encoded-32-bytes-here
 
-OPENAI_API_KEY=sk-your-dev-key
+OPENAI_API_KEY=your-dev-key
 
 SENTRY_DSN=
 SENTRY_ENVIRONMENT=development
