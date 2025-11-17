@@ -376,6 +376,229 @@ class FuzzyMatcherService:
         """Correct spelling using vocabulary."""
 ```
 
+### 9. Catalog Browser Service
+
+**Purpose:** Manages pagination and browsing of large product and service catalogs.
+
+**Key Responsibilities:**
+- Paginate catalog results (5 items per page)
+- Maintain browsing session state
+- Handle navigation (next, previous, search)
+- Track current position in catalog
+- Filter and sort results
+
+**Interface:**
+```python
+class CatalogBrowserService:
+    def start_browse_session(
+        self,
+        conversation: Conversation,
+        catalog_type: str,  # 'products' or 'services'
+        filters: Optional[Dict] = None
+    ) -> BrowseSession:
+        """Start new browsing session."""
+        
+    def get_page(
+        self,
+        session: BrowseSession,
+        page_number: int
+    ) -> CatalogPage:
+        """Get specific page of results."""
+        
+    def next_page(
+        self,
+        session: BrowseSession
+    ) -> CatalogPage:
+        """Get next page of results."""
+        
+    def previous_page(
+        self,
+        session: BrowseSession
+    ) -> CatalogPage:
+        """Get previous page of results."""
+        
+    def apply_filters(
+        self,
+        session: BrowseSession,
+        filters: Dict
+    ) -> BrowseSession:
+        """Apply filters to browsing session."""
+```
+
+### 10. Reference Context Manager
+
+**Purpose:** Maintains context of recently displayed lists to resolve positional references like "1" or "first".
+
+**Key Responsibilities:**
+- Store recently displayed lists with timestamps
+- Resolve numeric and ordinal references
+- Handle ambiguous references
+- Expire old contexts (5 minutes)
+- Support multiple list types (products, services, options)
+
+**Interface:**
+```python
+class ReferenceContextManager:
+    def store_list_context(
+        self,
+        conversation: Conversation,
+        items: List[Any],
+        list_type: str,
+        expires_in_seconds: int = 300
+    ) -> str:
+        """Store list context and return context ID."""
+        
+    def resolve_reference(
+        self,
+        conversation: Conversation,
+        reference: str  # "1", "first", "the second one", etc.
+    ) -> Optional[Any]:
+        """Resolve reference to actual item."""
+        
+    def get_current_list(
+        self,
+        conversation: Conversation
+    ) -> Optional[List[Any]]:
+        """Get most recent list context."""
+        
+    def clear_context(
+        self,
+        conversation: Conversation
+    ) -> None:
+        """Clear reference context."""
+```
+
+### 11. Product Intelligence Service
+
+**Purpose:** Uses AI to understand product/service characteristics and make intelligent recommendations.
+
+**Key Responsibilities:**
+- Analyze product descriptions with AI
+- Extract key features and characteristics
+- Match customer needs to products semantically
+- Generate product summaries
+- Identify distinguishing features
+
+**Interface:**
+```python
+class ProductIntelligenceService:
+    def analyze_product(
+        self,
+        product: Product
+    ) -> ProductAnalysis:
+        """Analyze product using AI to extract characteristics."""
+        
+    def match_need_to_products(
+        self,
+        customer_need: str,
+        tenant: Tenant,
+        limit: int = 5
+    ) -> List[Tuple[Product, str]]:
+        """Match customer need to products with explanations."""
+        
+    def generate_recommendation_explanation(
+        self,
+        product: Product,
+        customer_context: str
+    ) -> str:
+        """Generate explanation for why product matches need."""
+        
+    def extract_distinguishing_features(
+        self,
+        products: List[Product]
+    ) -> Dict[UUID, List[str]]:
+        """Extract features that distinguish products from each other."""
+```
+
+### 12. Discovery and Narrowing Service
+
+**Purpose:** Guides customers through discovery by asking clarifying questions and narrowing options.
+
+**Key Responsibilities:**
+- Identify when clarification is needed
+- Generate relevant clarifying questions
+- Filter catalog based on preferences
+- Track narrowing session state
+- Suggest alternatives when no matches
+
+**Interface:**
+```python
+class DiscoveryService:
+    def should_ask_clarifying_questions(
+        self,
+        query: str,
+        result_count: int
+    ) -> bool:
+        """Determine if clarification would help."""
+        
+    def generate_clarifying_questions(
+        self,
+        query: str,
+        catalog_items: List[Any]
+    ) -> List[str]:
+        """Generate relevant questions to narrow options."""
+        
+    def apply_preferences(
+        self,
+        items: List[Any],
+        preferences: Dict[str, Any]
+    ) -> List[Any]:
+        """Filter items based on stated preferences."""
+        
+    def suggest_alternatives(
+        self,
+        original_query: str,
+        tenant: Tenant
+    ) -> List[Tuple[Any, str]]:
+        """Suggest alternatives with difference explanations."""
+```
+
+### 13. Multi-Language Processor
+
+**Purpose:** Handles multi-language messages including English, Swahili, and Sheng code-switching.
+
+**Key Responsibilities:**
+- Detect languages in mixed messages
+- Translate Swahili/Sheng to English for processing
+- Maintain language preference per customer
+- Handle common Swahili/Sheng phrases
+- Generate responses in customer's preferred language
+
+**Interface:**
+```python
+class MultiLanguageProcessor:
+    def detect_languages(
+        self,
+        message: str
+    ) -> List[str]:
+        """Detect all languages in message."""
+        
+    def normalize_message(
+        self,
+        message: str
+    ) -> str:
+        """Normalize mixed-language message to English."""
+        
+    def translate_common_phrases(
+        self,
+        message: str
+    ) -> str:
+        """Translate common Swahili/Sheng phrases."""
+        
+    def get_customer_language_preference(
+        self,
+        conversation: Conversation
+    ) -> str:
+        """Determine customer's preferred language."""
+        
+    def format_response_in_language(
+        self,
+        response: str,
+        target_language: str
+    ) -> str:
+        """Format response in target language."""
+```
+
 ## Data Models
 
 ### AgentConfiguration Model
@@ -606,6 +829,331 @@ class MessageQueue(BaseModel):
         ]
 ```
 
+### BrowseSession Model
+
+```python
+class BrowseSession(BaseModel):
+    """Tracks catalog browsing sessions."""
+    
+    conversation = models.ForeignKey(
+        'messaging.Conversation',
+        on_delete=models.CASCADE,
+        related_name='browse_sessions'
+    )
+    
+    catalog_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('products', 'Products'),
+            ('services', 'Services')
+        ]
+    )
+    
+    # Pagination
+    current_page = models.IntegerField(default=1)
+    items_per_page = models.IntegerField(default=5)
+    total_items = models.IntegerField()
+    
+    # Filters
+    filters = models.JSONField(default=dict)
+    search_query = models.CharField(max_length=200, blank=True)
+    
+    # State
+    is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField()
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['conversation', 'is_active']),
+            models.Index(fields=['expires_at']),
+        ]
+```
+
+### ReferenceContext Model
+
+```python
+class ReferenceContext(BaseModel):
+    """Stores list context for positional references."""
+    
+    conversation = models.ForeignKey(
+        'messaging.Conversation',
+        on_delete=models.CASCADE,
+        related_name='reference_contexts'
+    )
+    
+    list_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('products', 'Products'),
+            ('services', 'Services'),
+            ('options', 'Options')
+        ]
+    )
+    
+    # List items stored as JSON with IDs and display text
+    items = models.JSONField()
+    
+    # Expiration
+    expires_at = models.DateTimeField()
+    
+    # Metadata
+    context_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['conversation', 'expires_at']),
+            models.Index(fields=['context_id']),
+        ]
+```
+
+### ProductAnalysis Model
+
+```python
+class ProductAnalysis(BaseModel):
+    """Caches AI analysis of products."""
+    
+    product = models.OneToOneField(
+        'catalog.Product',
+        on_delete=models.CASCADE,
+        related_name='ai_analysis'
+    )
+    
+    # AI-extracted characteristics
+    key_features = models.JSONField(default=list)
+    use_cases = models.JSONField(default=list)
+    target_audience = models.CharField(max_length=200, blank=True)
+    
+    # Semantic understanding
+    embedding = models.JSONField(null=True, blank=True)
+    summary = models.TextField(blank=True)
+    
+    # Categories and tags
+    ai_categories = models.JSONField(default=list)
+    ai_tags = models.JSONField(default=list)
+    
+    # Freshness
+    analyzed_at = models.DateTimeField(auto_now=True)
+    product_version = models.IntegerField(default=1)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['analyzed_at']),
+        ]
+```
+
+### LanguagePreference Model
+
+```python
+class LanguagePreference(BaseModel):
+    """Tracks customer language preferences."""
+    
+    conversation = models.OneToOneField(
+        'messaging.Conversation',
+        on_delete=models.CASCADE,
+        related_name='language_preference'
+    )
+    
+    # Detected languages
+    primary_language = models.CharField(
+        max_length=10,
+        choices=[
+            ('en', 'English'),
+            ('sw', 'Swahili'),
+            ('mixed', 'Mixed')
+        ],
+        default='en'
+    )
+    
+    # Language usage statistics
+    language_usage = models.JSONField(default=dict)
+    
+    # Common phrases used
+    common_phrases = models.JSONField(default=list)
+    
+    # Last updated
+    last_detected = models.DateTimeField(auto_now=True)
+```
+
+## Catalog Browsing Strategy
+
+### Pagination Approach
+
+For large catalogs (100+ items), implement smart pagination:
+
+1. **Initial Display** - Show first 5 items with category summary
+2. **Navigation Controls** - Provide "Next 5", "Previous 5", "Search" buttons
+3. **Position Indicator** - Show "Showing 1-5 of 247 products"
+4. **Quick Jump** - Allow jumping to categories or price ranges
+5. **Session Timeout** - Expire browsing sessions after 10 minutes
+
+### Interactive List Format
+
+Use WhatsApp interactive lists for better UX:
+
+```
+📦 *Browse Products* (Showing 1-5 of 247)
+
+1. Premium Perfume - Oud Collection
+   $45.00 | In Stock
+   
+2. Floral Essence - Rose Garden
+   $32.00 | In Stock
+   
+3. Citrus Burst - Summer Fresh
+   $28.00 | In Stock
+   
+4. Woody Notes - Forest Walk
+   $38.00 | In Stock
+   
+5. Oriental Spice - Midnight Mystery
+   $42.00 | In Stock
+
+[Next 5] [Search] [Categories]
+```
+
+### Reference Resolution
+
+When customer types "1" or "first":
+
+1. **Check Recent Context** - Look for lists sent in last 5 minutes
+2. **Resolve Position** - Map "1" → first item, "2" → second item
+3. **Handle Ordinals** - "first", "second", "third", "last"
+4. **Confirm Selection** - Show selected item for confirmation
+5. **Ambiguity Handling** - If multiple lists, ask which one
+
+### Smart Filtering
+
+When customer provides preferences:
+
+1. **Extract Criteria** - Price range, features, categories
+2. **Apply Filters** - Narrow catalog to matching items
+3. **Show Results** - Present filtered items with match reasons
+4. **Refine Options** - Offer additional filters if still too many
+5. **No Matches** - Suggest closest alternatives
+
+## Product Intelligence Strategy
+
+### AI-Powered Analysis
+
+For each product/service, analyze using LLM:
+
+1. **Feature Extraction** - Identify key features from description
+2. **Use Case Detection** - Determine what problem it solves
+3. **Target Audience** - Identify who would benefit
+4. **Semantic Embedding** - Create vector representation
+5. **Cache Results** - Store analysis for 24 hours
+
+### Recommendation Engine
+
+When customer describes a need:
+
+1. **Understand Intent** - Extract what customer is looking for
+2. **Semantic Search** - Match need to product embeddings
+3. **Rank Results** - Score by relevance and availability
+4. **Generate Explanations** - Explain why each matches
+5. **Present Top 3** - Show best matches with reasoning
+
+### Example Interaction
+
+```
+Customer: "I need something for a romantic dinner"
+
+Agent: "For a romantic dinner, I recommend:
+
+1. 🌹 *Oriental Spice - Midnight Mystery* ($42)
+   Perfect for evening occasions with warm, sensual notes
+   
+2. 🌸 *Floral Essence - Rose Garden* ($32)
+   Classic romantic scent with rose and jasmine
+   
+3. 🌲 *Woody Notes - Forest Walk* ($38)
+   Sophisticated and intimate with sandalwood base
+
+Which would you like to know more about?"
+```
+
+## Multi-Language Processing Strategy
+
+### Language Detection
+
+Detect and handle mixed languages:
+
+1. **Identify Languages** - Detect English, Swahili, Sheng in message
+2. **Extract Intent** - Understand meaning across languages
+3. **Normalize** - Convert to English for processing
+4. **Track Preference** - Remember customer's language mix
+5. **Match Response** - Reply in customer's preferred language
+
+### Common Swahili/Sheng Phrases
+
+Maintain dictionary of common phrases:
+
+- **nataka** → "I want"
+- **ninataka** → "I want"
+- **nipe** → "give me"
+- **bei gani** → "what price"
+- **iko** → "is it available"
+- **sawa** → "okay/fine"
+- **poa** → "cool/good"
+- **fiti** → "perfect"
+
+### Example Handling
+
+```
+Customer: "Nataka perfume ya romantic, bei gani?"
+
+Detected: Swahili + English mix
+Normalized: "I want romantic perfume, what price?"
+Intent: Browse perfumes, romantic occasion, price inquiry
+
+Agent: "For romantic perfumes, prices range from $28-$45.
+Ninazo hizi:
+1. Oriental Spice - $42
+2. Floral Essence - $32
+3. Woody Notes - $38
+
+Which one do you prefer?"
+```
+
+## Enhanced Handoff Strategy
+
+### Progressive Assistance
+
+Before offering handoff, try:
+
+1. **Clarifying Questions** - Ask 2-3 specific questions
+2. **Rephrase Request** - "Let me make sure I understand..."
+3. **Show Options** - Present possible interpretations
+4. **Partial Help** - Provide what you can, note limitations
+5. **Handoff Offer** - Only after genuine attempts
+
+### Handoff Triggers
+
+Offer handoff when:
+
+- **Low confidence** after 2 clarification attempts
+- **Complex request** beyond agent capabilities
+- **Explicit request** from customer
+- **Restricted topic** (complaints, refunds, custom orders)
+- **Technical issues** (payment failures, account problems)
+
+### Handoff Message Format
+
+```
+I've tried to help but I want to make sure you get the best assistance.
+
+What I understood: [summary of request]
+What I tried: [list of attempts]
+Why I'm suggesting human help: [specific reason]
+
+Would you like me to:
+1. Connect you with a team member now
+2. Try rephrasing your request
+3. Show you related options I can help with
+
+Reply with 1, 2, or 3.
+```
+
 ## Prompt Engineering Strategy
 
 ### System Prompt Structure
@@ -619,17 +1167,23 @@ The system prompt will be dynamically constructed with the following sections:
 5. **Behavioral Rules** - Restrictions and required disclaimers
 6. **Response Format** - Structure for responses including rich messages
 7. **Handoff Criteria** - When to escalate to humans
+8. **Language Handling** - How to process multi-language messages
+9. **Reference Resolution** - How to handle positional references
+10. **Pagination Instructions** - How to present large catalogs
 
 ### Context Assembly
 
 Context will be assembled in priority order:
 
 1. **Current Message** - The customer's latest message(s)
-2. **Immediate Context** - Last 3-5 messages for continuity
-3. **Relevant Knowledge** - Top 3-5 knowledge base entries
-4. **Catalog Context** - Relevant products/services
-5. **Customer History** - Previous orders, appointments, preferences
-6. **Conversation Summary** - Condensed history for older conversations
+2. **Reference Context** - Recently displayed lists for position resolution
+3. **Browse Session** - Active catalog browsing state
+4. **Immediate Context** - Last 3-5 messages for continuity
+5. **Relevant Knowledge** - Top 3-5 knowledge base entries
+6. **Catalog Context** - Relevant products/services with AI analysis
+7. **Customer History** - Previous orders, appointments, preferences
+8. **Language Preference** - Customer's language usage patterns
+9. **Conversation Summary** - Condensed history for older conversations
 
 ### Token Management
 
@@ -708,7 +1262,7 @@ To manage context window limits:
 
 ## Implementation Phases
 
-### Phase 1: Foundation (Core AI Agent)
+### Phase 1: Foundation (Core AI Agent) ✅ COMPLETE
 
 - Implement LLM provider abstraction
 - Create AI Agent Service with basic orchestration
@@ -717,7 +1271,7 @@ To manage context window limits:
 - Add support for GPT-4o, o1-preview, o1-mini
 - Create basic prompt engineering framework
 
-### Phase 2: Knowledge and Memory
+### Phase 2: Knowledge and Memory ✅ COMPLETE
 
 - Implement Knowledge Base Service
 - Create KnowledgeEntry model and CRUD APIs
@@ -726,7 +1280,7 @@ To manage context window limits:
 - Build conversation memory retrieval
 - Add context window management
 
-### Phase 3: Intelligence Features
+### Phase 3: Intelligence Features ✅ COMPLETE
 
 - Implement Fuzzy Matcher Service
 - Add spelling correction
@@ -735,7 +1289,7 @@ To manage context window limits:
 - Add proactive suggestions logic
 - Enhance handoff decision making
 
-### Phase 4: Rich Messaging
+### Phase 4: Rich Messaging ✅ COMPLETE
 
 - Implement Rich Message Builder
 - Add WhatsApp button message support
@@ -744,7 +1298,43 @@ To manage context window limits:
 - Add media attachment handling
 - Create campaign message builder
 
-### Phase 5: Analytics and Optimization
+### Phase 5: Smart Browsing and References (NEW)
+
+- Implement Catalog Browser Service
+- Create BrowseSession model and pagination logic
+- Implement Reference Context Manager
+- Add positional reference resolution ("1", "first", etc.)
+- Build smart filtering and narrowing
+- Add category-based navigation
+
+### Phase 6: Product Intelligence (NEW)
+
+- Implement Product Intelligence Service
+- Create ProductAnalysis model
+- Add AI-powered product analysis
+- Build semantic recommendation engine
+- Implement Discovery and Narrowing Service
+- Add intelligent clarifying questions
+
+### Phase 7: Multi-Language Support (NEW)
+
+- Implement Multi-Language Processor
+- Create LanguagePreference model
+- Add Swahili/Sheng phrase dictionary
+- Build language detection and normalization
+- Implement code-switching handling
+- Add language-matched responses
+
+### Phase 8: Enhanced UX and Handoff (NEW)
+
+- Enhance handoff logic with progressive assistance
+- Implement clarifying question generation
+- Add shortened purchase journey flows
+- Build direct action buttons (Buy Now, Book Now)
+- Improve error recovery and retry logic
+- Add handoff explanation messages
+
+### Phase 9: Analytics and Optimization
 
 - Implement AgentInteraction tracking
 - Build analytics dashboard

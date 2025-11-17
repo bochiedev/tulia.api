@@ -281,3 +281,99 @@ This specification defines the upgrade of the WabotIQ bot from a basic intent cl
 3. WHEN a customer asks a follow-up question hours later, THE System SHALL reference the previous conversation and confirm the context
 4. WHEN a customer says "Did you forget my request", THE System SHALL apologize and retrieve the last unanswered question
 5. WHEN context is lost due to time, THE System SHALL politely ask the customer to remind it rather than pretending to remember
+
+### Requirement 23: Smart Catalog Browsing and Pagination
+
+**User Story:** As a customer browsing a large catalog, I want to see products or services in manageable chunks with easy navigation so that I'm not overwhelmed with hundreds of messages.
+
+#### Acceptance Criteria
+
+1. WHEN a customer requests to browse products, THE System SHALL present a maximum of five items per message using WhatsApp interactive lists
+2. WHEN a catalog contains more than five items, THE System SHALL provide pagination controls using quick reply buttons including "Next", "Previous", and "Search"
+3. WHEN a customer selects "Next", THE System SHALL display the next five items while maintaining the browsing context
+4. WHEN a customer provides search criteria, THE System SHALL filter the catalog and present relevant items first
+5. WHEN presenting paginated results, THE System SHALL indicate the current position such as "Showing 6-10 of 247 products"
+
+### Requirement 24: Contextual Reference Understanding
+
+**User Story:** As a customer, I want the agent to understand when I reference items by number or position so that I can quickly select what I want without typing full names.
+
+#### Acceptance Criteria
+
+1. WHEN a customer types a number after viewing a list, THE System SHALL interpret the number as a reference to the item at that position in the most recent list
+2. WHEN a customer types "1" or "first" after viewing options, THE System SHALL select the first item from the previous message
+3. WHEN a customer types "the second one" or "2", THE System SHALL select the second item from the previous message
+4. WHEN a customer references an item by position but the context is ambiguous, THE System SHALL ask for clarification with the item names
+5. WHEN maintaining reference context, THE System SHALL preserve the list context for up to five minutes after display
+
+### Requirement 25: AI-Powered Product and Service Intelligence
+
+**User Story:** As a customer, I want the agent to understand what products and services are about and provide intelligent recommendations so that I can discover items that match my needs.
+
+#### Acceptance Criteria
+
+1. WHEN a customer asks for recommendations, THE System SHALL analyze product descriptions using AI to understand product characteristics and purposes
+2. WHEN a customer describes a need, THE System SHALL match the need to products or services based on semantic understanding of descriptions
+3. WHEN a customer asks about product features, THE System SHALL extract and present relevant information from product descriptions using AI
+4. WHEN products lack detailed descriptions, THE System SHALL acknowledge limitations and suggest contacting support for details
+5. WHEN making recommendations, THE System SHALL explain why a product or service matches the customer's stated needs
+
+### Requirement 26: Intelligent Narrowing and Discovery
+
+**User Story:** As a customer shopping in a specialized store, I want the agent to ask clarifying questions and narrow down options based on my preferences so that I find exactly what I need.
+
+#### Acceptance Criteria
+
+1. WHEN a customer requests a product category with many options, THE System SHALL ask clarifying questions about preferences such as price range, features, or use case
+2. WHEN a customer provides preference information, THE System SHALL filter the catalog and present items matching those preferences
+3. WHEN narrowing options, THE System SHALL use AI to identify distinguishing characteristics such as "scents with oud and aromatic notes" or "books about prayer"
+4. WHEN presenting narrowed results, THE System SHALL highlight the matching characteristics in the descriptions
+5. WHEN no items match the specified criteria, THE System SHALL suggest the closest alternatives with explanations of differences
+
+### Requirement 27: Enhanced Handoff Intelligence
+
+**User Story:** As a customer, I want the agent to try to help me before offering handoff so that I get quick answers when possible and human help only when truly needed.
+
+#### Acceptance Criteria
+
+1. WHEN the agent cannot understand a customer request, THE System SHALL ask clarifying questions before offering handoff
+2. WHEN the agent has low confidence after two attempts, THE System SHALL offer handoff as an option while also asking the customer to rephrase
+3. WHEN a customer request is ambiguous, THE System SHALL present possible interpretations and ask the customer to choose before offering handoff
+4. WHEN offering handoff, THE System SHALL explain what it tried and why it needs human assistance
+5. WHEN a customer explicitly requests human help, THE System SHALL immediately initiate handoff without additional questions
+
+### Requirement 28: Multi-Language and Code-Switching Support
+
+**User Story:** As a customer who speaks multiple languages, I want the agent to understand me when I mix English, Swahili, and Sheng so that I can communicate naturally.
+
+#### Acceptance Criteria
+
+1. WHEN a customer sends a message mixing English and Swahili, THE System SHALL detect and understand both languages in the same message
+2. WHEN a customer uses Swahili words like "nataka" (I want), THE System SHALL correctly interpret the intent
+3. WHEN a customer uses Sheng slang, THE System SHALL attempt to understand common terms and ask for clarification when uncertain
+4. WHEN responding to multi-language messages, THE System SHALL match the customer's primary language in the response
+5. WHEN language detection is uncertain, THE System SHALL default to English while acknowledging the customer's preferred language
+
+### Requirement 29: Rich Product and Service Presentation
+
+**User Story:** As a customer, I want to see products and services with images and action buttons so that I can quickly view details and make purchases without typing commands.
+
+#### Acceptance Criteria
+
+1. WHEN presenting a product, THE System SHALL include the product image if available, along with title, price, and availability
+2. WHEN presenting a product, THE System SHALL include action buttons for "Buy Now", "More Details", and "Add to Cart"
+3. WHEN presenting a service, THE System SHALL include the service image if available, along with description, duration, and price
+4. WHEN presenting a service, THE System SHALL include action buttons for "Book Now", "Check Availability", and "More Info"
+5. WHEN a customer clicks an action button, THE System SHALL immediately process the action without requiring additional text input
+
+### Requirement 30: Shortened Purchase Journey
+
+**User Story:** As a customer, I want to move quickly from inquiry to purchase so that I can complete transactions efficiently without unnecessary steps.
+
+#### Acceptance Criteria
+
+1. WHEN a customer views a product, THE System SHALL provide a direct "Buy Now" button that initiates checkout
+2. WHEN a customer clicks "Buy Now", THE System SHALL collect only essential information such as quantity and delivery details
+3. WHEN a customer views a service, THE System SHALL provide a direct "Book Now" button that shows available time slots
+4. WHEN a customer selects a time slot, THE System SHALL confirm the booking with minimal additional steps
+5. WHEN completing a transaction, THE System SHALL provide payment options with one-click selection

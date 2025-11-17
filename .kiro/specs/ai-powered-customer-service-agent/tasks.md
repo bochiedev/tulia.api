@@ -411,3 +411,300 @@ This implementation plan breaks down the AI-powered customer service agent into 
     - Monitoring setup
     - Rollback procedures
     - _Requirements: All_
+
+- [ ] 20. Implement smart catalog browsing and pagination
+  - [ ] 20.1 Create BrowseSession model for tracking pagination state
+    - Add fields for catalog_type, current_page, items_per_page, total_items
+    - Add fields for filters, search_query, is_active, expires_at
+    - Add tenant and conversation foreign keys
+    - Create database migration with indexes
+    - _Requirements: 23.1, 23.2, 23.3, 23.4, 23.5_
+  
+  - [ ] 20.2 Implement CatalogBrowserService for pagination
+    - Write `start_browse_session()` method to initiate browsing
+    - Write `get_page()` method to retrieve specific page
+    - Write `next_page()` and `previous_page()` methods for navigation
+    - Write `apply_filters()` method to filter results
+    - Implement session expiration (10 minutes)
+    - _Requirements: 23.1, 23.2, 23.3, 23.4, 23.5_
+  
+  - [ ] 20.3 Build pagination UI with WhatsApp interactive lists
+    - Format catalog items as interactive lists (max 5 items)
+    - Add navigation buttons (Next 5, Previous 5, Search)
+    - Show position indicator ("Showing 1-5 of 247")
+    - Handle button clicks for navigation
+    - _Requirements: 23.1, 23.2, 23.3, 23.5_
+  
+  - [ ] 20.4 Integrate pagination into agent response generation
+    - Detect when catalog results exceed 5 items
+    - Create browse session automatically
+    - Generate paginated responses with navigation
+    - Track pagination usage in analytics
+    - _Requirements: 23.1, 23.2, 23.3, 23.4, 23.5_
+
+- [ ] 21. Implement reference context and positional resolution
+  - [ ] 21.1 Create ReferenceContext model for storing list contexts
+    - Add fields for list_type, items (JSON), expires_at, context_id
+    - Add conversation foreign key with indexes
+    - Create database migration
+    - _Requirements: 24.1, 24.2, 24.3, 24.4, 24.5_
+  
+  - [ ] 21.2 Implement ReferenceContextManager service
+    - Write `store_list_context()` method to save displayed lists
+    - Write `resolve_reference()` method to map "1", "first", etc. to items
+    - Write `get_current_list()` method to retrieve active context
+    - Implement context expiration (5 minutes)
+    - Handle numeric references (1, 2, 3) and ordinals (first, second, last)
+    - _Requirements: 24.1, 24.2, 24.3, 24.4, 24.5_
+  
+  - [ ] 21.3 Integrate reference resolution into message processing
+    - Detect when customer message is a positional reference
+    - Resolve reference to actual item from recent context
+    - Confirm selection with customer
+    - Handle ambiguous references with clarification
+    - _Requirements: 24.1, 24.2, 24.3, 24.4, 24.5_
+  
+  - [ ] 21.4 Update rich message builder to store contexts
+    - Automatically store list context when sending lists
+    - Include context_id in message metadata
+    - Track context usage in analytics
+    - _Requirements: 24.1, 24.5_
+
+- [ ] 22. Build product intelligence and AI-powered recommendations
+  - [ ] 22.1 Create ProductAnalysis model for caching AI analysis
+    - Add fields for key_features, use_cases, target_audience
+    - Add fields for embedding, summary, ai_categories, ai_tags
+    - Add product foreign key and analyzed_at timestamp
+    - Create database migration with indexes
+    - _Requirements: 25.1, 25.2, 25.3, 25.4, 25.5_
+  
+  - [ ] 22.2 Implement ProductIntelligenceService
+    - Write `analyze_product()` method using LLM to extract characteristics
+    - Write `match_need_to_products()` method for semantic matching
+    - Write `generate_recommendation_explanation()` method
+    - Write `extract_distinguishing_features()` method
+    - Implement caching strategy (24 hour TTL)
+    - _Requirements: 25.1, 25.2, 25.3, 25.5_
+  
+  - [ ] 22.3 Add background task for product analysis
+    - Create Celery task to analyze products periodically
+    - Analyze new products automatically
+    - Re-analyze when product descriptions change
+    - Track analysis coverage and quality
+    - _Requirements: 25.1, 25.4_
+  
+  - [ ] 22.4 Integrate product intelligence into recommendations
+    - Use semantic search for need-based matching
+    - Generate explanations for recommendations
+    - Include AI analysis in product presentations
+    - Track recommendation acceptance rate
+    - _Requirements: 25.1, 25.2, 25.3, 25.5_
+
+- [ ] 23. Implement discovery and intelligent narrowing
+  - [ ] 23.1 Implement DiscoveryService for guided search
+    - Write `should_ask_clarifying_questions()` method
+    - Write `generate_clarifying_questions()` method using LLM
+    - Write `apply_preferences()` method to filter catalog
+    - Write `suggest_alternatives()` method with explanations
+    - _Requirements: 26.1, 26.2, 26.3, 26.4, 26.5_
+  
+  - [ ] 23.2 Build preference extraction logic
+    - Extract price range from customer messages
+    - Extract feature preferences (color, size, scent, etc.)
+    - Extract use case or occasion
+    - Store preferences in conversation context
+    - _Requirements: 26.1, 26.2_
+  
+  - [ ] 23.3 Integrate discovery into agent workflow
+    - Detect when clarification would help (>10 results)
+    - Ask relevant clarifying questions
+    - Apply filters based on responses
+    - Present narrowed results with match highlights
+    - _Requirements: 26.1, 26.2, 26.3, 26.4_
+  
+  - [ ] 23.4 Add alternative suggestion logic
+    - Detect when no items match criteria
+    - Find closest alternatives using semantic similarity
+    - Generate explanations of differences
+    - Present alternatives with reasoning
+    - _Requirements: 26.5_
+
+- [ ] 24. Add multi-language and code-switching support
+  - [ ] 24.1 Create LanguagePreference model
+    - Add fields for primary_language, language_usage, common_phrases
+    - Add conversation foreign key
+    - Create database migration
+    - _Requirements: 28.1, 28.2, 28.3, 28.4, 28.5_
+  
+  - [ ] 24.2 Implement MultiLanguageProcessor service
+    - Write `detect_languages()` method to identify English, Swahili, Sheng
+    - Write `normalize_message()` method to convert to English
+    - Write `translate_common_phrases()` method with phrase dictionary
+    - Write `get_customer_language_preference()` method
+    - Write `format_response_in_language()` method
+    - _Requirements: 28.1, 28.2, 28.3, 28.4, 28.5_
+  
+  - [ ] 24.3 Build Swahili/Sheng phrase dictionary
+    - Add common Swahili phrases (nataka, ninataka, nipe, bei gani, iko)
+    - Add common Sheng phrases (sawa, poa, fiti, doh, mbao)
+    - Add phrase variations and synonyms
+    - Support phrase expansion over time
+    - _Requirements: 28.2, 28.3_
+  
+  - [ ] 24.4 Integrate language processing into message flow
+    - Pre-process messages for language detection
+    - Normalize mixed-language messages
+    - Track language usage per customer
+    - Match response language to customer preference
+    - _Requirements: 28.1, 28.2, 28.3, 28.4, 28.5_
+  
+  - [ ] 24.5 Add language detection tests
+    - Test pure English messages
+    - Test pure Swahili messages
+    - Test mixed English-Swahili messages
+    - Test Sheng phrase recognition
+    - Test response language matching
+    - _Requirements: 28.1, 28.2, 28.3, 28.4, 28.5_
+
+- [ ] 25. Enhance handoff logic with progressive assistance
+  - [ ] 25.1 Update handoff decision logic
+    - Implement clarifying question attempts before handoff
+    - Track clarification attempt count (max 2)
+    - Generate specific clarifying questions using LLM
+    - Only offer handoff after genuine attempts
+    - _Requirements: 27.1, 27.2, 27.3, 27.4, 27.5_
+  
+  - [ ] 25.2 Build clarifying question generator
+    - Analyze customer message for ambiguities
+    - Generate 2-3 specific clarifying questions
+    - Present possible interpretations
+    - Track clarification success rate
+    - _Requirements: 27.1, 27.3_
+  
+  - [ ] 25.3 Implement handoff explanation messages
+    - Summarize what agent understood
+    - List what agent tried
+    - Explain why handoff is suggested
+    - Offer options (handoff, rephrase, alternatives)
+    - _Requirements: 27.2, 27.4_
+  
+  - [ ] 25.4 Add handoff triggers for specific scenarios
+    - Detect explicit handoff requests immediately
+    - Identify restricted topics (complaints, refunds, custom orders)
+    - Detect technical issues (payment failures, account problems)
+    - Track handoff reasons in analytics
+    - _Requirements: 27.5_
+
+- [ ] 26. Build shortened purchase journey with direct actions
+  - [ ] 26.1 Add direct action buttons to product cards
+    - Add "Buy Now" button to product presentations
+    - Add "Add to Cart" button for multi-item purchases
+    - Add "More Details" button for full information
+    - Handle button clicks to initiate actions
+    - _Requirements: 29.1, 29.2, 30.1, 30.2_
+  
+  - [ ] 26.2 Add direct action buttons to service cards
+    - Add "Book Now" button to service presentations
+    - Add "Check Availability" button for scheduling
+    - Add "More Info" button for details
+    - Handle button clicks to initiate booking flow
+    - _Requirements: 29.3, 29.4, 30.3, 30.4_
+  
+  - [ ] 26.3 Implement streamlined checkout flow
+    - Collect only essential information (quantity, delivery)
+    - Skip unnecessary confirmation steps
+    - Pre-fill customer information from history
+    - Provide one-click payment options
+    - _Requirements: 30.1, 30.2, 30.5_
+  
+  - [ ] 26.4 Implement streamlined booking flow
+    - Show available time slots immediately
+    - Allow one-click slot selection
+    - Minimize confirmation steps
+    - Send booking confirmation with details
+    - _Requirements: 30.3, 30.4_
+
+- [ ] 27. Update prompt engineering for new features
+  - [ ] 27.1 Enhance system prompt with new instructions
+    - Add language handling instructions
+    - Add reference resolution instructions
+    - Add pagination instructions
+    - Add clarifying question guidelines
+    - Add product intelligence usage
+    - _Requirements: All new requirements_
+  
+  - [ ] 27.2 Update context assembly for new data
+    - Include reference context in prompt
+    - Include browse session state
+    - Include language preference
+    - Include product AI analysis
+    - Prioritize context elements appropriately
+    - _Requirements: All new requirements_
+  
+  - [ ] 27.3 Add prompt templates for new scenarios
+    - Template for clarifying questions
+    - Template for product recommendations with explanations
+    - Template for pagination navigation
+    - Template for handoff explanations
+    - Template for multi-language responses
+    - _Requirements: All new requirements_
+
+- [ ] 28. Testing for new features
+  - [ ] 28.1 Write unit tests for new services
+    - Test CatalogBrowserService pagination logic
+    - Test ReferenceContextManager resolution
+    - Test ProductIntelligenceService analysis
+    - Test DiscoveryService clarifying questions
+    - Test MultiLanguageProcessor detection and normalization
+    - _Requirements: All new requirements_
+  
+  - [ ] 28.2 Write integration tests for new flows
+    - Test end-to-end browsing with pagination
+    - Test positional reference resolution in conversation
+    - Test AI-powered product recommendations
+    - Test multi-language message processing
+    - Test progressive handoff flow
+    - _Requirements: All new requirements_
+  
+  - [ ] 28.3 Write UX tests for interactive messages
+    - Test WhatsApp list message formatting
+    - Test button click handling
+    - Test navigation button functionality
+    - Test direct action buttons (Buy Now, Book Now)
+    - _Requirements: 23.1, 23.2, 23.3, 29.1, 29.2, 29.3, 29.4, 30.1, 30.3_
+  
+  - [ ] 28.4 Write performance tests for new features
+    - Test pagination performance with large catalogs (1000+ items)
+    - Test product analysis caching effectiveness
+    - Test language detection speed
+    - Test reference context lookup speed
+    - _Requirements: All new requirements_
+
+- [ ] 29. Documentation for new features
+  - [ ] 29.1 Document catalog browsing features
+    - Explain pagination strategy
+    - Document navigation controls
+    - Provide examples of browsing large catalogs
+    - Include best practices for catalog organization
+    - _Requirements: 23.1, 23.2, 23.3, 23.4, 23.5_
+  
+  - [ ] 29.2 Document product intelligence features
+    - Explain AI analysis capabilities
+    - Document recommendation engine
+    - Provide examples of intelligent suggestions
+    - Include guidelines for product descriptions
+    - _Requirements: 25.1, 25.2, 25.3, 25.4, 25.5_
+  
+  - [ ] 29.3 Document multi-language support
+    - List supported languages and phrases
+    - Explain code-switching handling
+    - Provide examples of mixed-language conversations
+    - Include guidelines for expanding phrase dictionary
+    - _Requirements: 28.1, 28.2, 28.3, 28.4, 28.5_
+  
+  - [ ] 29.4 Update tenant onboarding guide
+    - Add section on catalog organization for browsing
+    - Add section on writing AI-friendly product descriptions
+    - Add section on configuring handoff behavior
+    - Add section on language preferences
+    - _Requirements: All new requirements_
