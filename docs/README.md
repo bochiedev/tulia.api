@@ -14,8 +14,14 @@ Complete documentation for the Tulia AI WhatsApp Commerce Platform.
 - **[Tenant Onboarding Deployment](TENANT_ONBOARDING_DEPLOYMENT.md)** - Onboarding feature deployment guide
 - **[Deployment Checklist](DEPLOYMENT_CHECKLIST.md)** - Step-by-step deployment checklist
 - **[Environment Variables](ENVIRONMENT_VARIABLES.md)** - Complete environment variable reference
+- **[Startup Validation](STARTUP_VALIDATION.md)** - Security validation on startup
 - **[Database Migrations](DATABASE_MIGRATIONS.md)** - Migration procedures and best practices
 - **[Documentation Index](DEPLOYMENT_DOCS_INDEX.md)** - Complete documentation index
+
+## 🔄 CI/CD
+
+- **[CI/CD Setup Guide](CI_CD_SETUP.md)** - Complete CI/CD configuration for GitHub Actions and GitLab CI
+- **[CI/CD Quick Reference](CI_CD_QUICK_REFERENCE.md)** - Quick setup and troubleshooting guide
 
 ## 📊 Monitoring
 
@@ -39,6 +45,13 @@ Complete documentation for the Tulia AI WhatsApp Commerce Platform.
 - **[Tenant Onboarding Guide](guides/TENANT_ONBOARDING_GUIDE.md)** - Step-by-step onboarding for tenants
 - **[Demo Data Guide](guides/DEMO_DATA_GUIDE.md)** - Loading demo data
 - **[Quick Start](guides/QUICKSTART.md)** - Getting started guide
+
+## 🔒 Security
+
+- **[Rate Limiting Guide](RATE_LIMITING.md)** - Comprehensive rate limiting documentation
+- **[Redis Rate Limiting](REDIS_RATE_LIMITING.md)** - Redis configuration for rate limiting
+- **[Security Best Practices](SECURITY_BEST_PRACTICES.md)** - Security guidelines
+- **[Webhook Security](WEBHOOK_SECURITY_QUICK_REFERENCE.md)** - Webhook signature verification
 
 ## 🔧 Implementation Details
 
@@ -74,6 +87,7 @@ docs/
 ├── DEPLOYMENT_CHECKLIST.md            # Deployment checklist
 ├── DEPLOYMENT_DOCS_INDEX.md           # Complete index
 ├── ENVIRONMENT_VARIABLES.md           # Environment variables
+├── STARTUP_VALIDATION.md              # Security validation on startup
 ├── DATABASE_MIGRATIONS.md             # Database migrations
 ├── MONITORING_SETUP.md                # Monitoring setup
 ├── TWILIO_WEBHOOK_SETUP.md            # Twilio webhooks

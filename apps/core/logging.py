@@ -6,6 +6,8 @@ import logging
 import re
 import traceback
 from datetime import datetime
+from django.utils import timezone
+import sentry_sdk
 
 
 class PIIMasker:
@@ -171,3 +173,242 @@ class JSONFormatter(logging.Formatter):
                         log_data[key] = PIIMasker.mask_text(str(value))
         
         return json.dumps(log_data)
+
+
+
+class SecurityLogger:
+    """
+    Centralized security event logging for critical security events.
+    
+    Logs security-related events with structured data and sends critical
+    events to Sentry for alerting and monitoring.
+    
+    All security events are logged with:
+    - Event type
+    - Timestamp
+    - IP address
+    - User information (if available)
+    - Tenant information (if available)
+    - Additional context
+    
+    Critical events are also sent to Sentry for real-time alerting.
+    """
+    
+    # Define which event types are critical and should alert via Sentry
+    CRITICAL_EVENTS = {
+        'invalid_webhook_signature',
+        'four_eyes_violation',
+        'suspicious_activity',
+    }
+    
+    @staticmethod
+    def log_event(event_type: str, level: str = 'warning', **context):
+        """
+        Log a security event with structured data.
+        
+        Args:
+            event_type: Type of security event (e.g., 'failed_login', 'invalid_webhook_signature')
+            level: Log level ('info', 'warning', 'error', 'critical')
+            **context: Additional context data (ip_address, user_email, tenant_id, etc.)
+            
+        Example:
+            >>> SecurityLogger.log_event(
+            ...     'invalid_webhook_signature',
+            ...     ip_address='192.168.1.1',
+            ...     tenant_id='123',
+            ...     provider='twilio'
+            ... )
+        """
+        logger = logging.getLogger('security')
+        
+        # Build structured log data
+        log_data = {
+            'event_type': event_type,
+            'timestamp': timezone.now().isoformat(),
+        }
+        
+        # Add all context data
+        log_data.update(context)
+        
+        # Mask sensitive data
+        log_data = PIIMasker.mask_dict(log_data)
+        
+        # Log at appropriate level
+        log_method = getattr(logger, level, logger.warning)
+        log_method(
+            f"Security event: {event_type}",
+            extra=log_data
+        )
+        
+        # Send critical events to Sentry
+        if event_type in SecurityLogger.CRITICAL_EVENTS:
+            sentry_sdk.capture_message(
+                f"Critical security event: {event_type}",
+                level='error',
+                extras=log_data
+            )
+    
+    @staticmethod
+    def log_failed_login(email: str, ip_address: str, user_agent: str = None, reason: str = None):
+        """
+        Log a failed login attempt.
+        
+        Args:
+            email: Email address used in login attempt
+            ip_address: IP address of the request
+            user_agent: User agent string (optional)
+            reason: Reason for failure (optional)
+        """
+        SecurityLogger.log_event(
+            'failed_login',
+            level='warning',
+            email=email,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            reason=reason
+        )
+    
+    @staticmethod
+    def log_permission_denied(user, tenant, required_scopes: set, ip_address: str):
+        """
+        Log a permission denial.
+        
+        Args:
+            user: User instance
+            tenant: Tenant instance
+            required_scopes: Set of required scopes that were missing
+            ip_address: IP address of the request
+        """
+        SecurityLogger.log_event(
+            'permission_denied',
+            level='warning',
+            user_email=user.email if user else None,
+            user_id=str(user.id) if user else None,
+            tenant_id=str(tenant.id) if tenant else None,
+            tenant_slug=tenant.slug if tenant else None,
+            required_scopes=list(required_scopes),
+            ip_address=ip_address
+        )
+    
+    @staticmethod
+    def log_invalid_webhook_signature(
+        provider: str,
+        tenant_id: str = None,
+        ip_address: str = None,
+        url: str = None,
+        user_agent: str = None
+    ):
+        """
+        Log an invalid webhook signature attempt.
+        
+        This is a critical security event as it indicates either:
+        - An attacker attempting to spoof webhooks
+        - Misconfigured webhook credentials
+        - Man-in-the-middle attack
+        
+        Args:
+            provider: Webhook provider (e.g., 'twilio', 'woocommerce', 'shopify')
+            tenant_id: Tenant ID (if resolved)
+            ip_address: IP address of the request
+            url: Webhook URL that was called
+            user_agent: User agent string
+        """
+        SecurityLogger.log_event(
+            'invalid_webhook_signature',
+            level='error',
+            provider=provider,
+            tenant_id=tenant_id,
+            ip_address=ip_address,
+            url=url,
+            user_agent=user_agent
+        )
+    
+    @staticmethod
+    def log_rate_limit_exceeded(
+        endpoint: str,
+        ip_address: str,
+        user_email: str = None,
+        tenant_id: str = None,
+        limit: str = None
+    ):
+        """
+        Log a rate limit violation.
+        
+        Args:
+            endpoint: API endpoint that was rate limited
+            ip_address: IP address of the request
+            user_email: Email of the user (if authenticated)
+            tenant_id: Tenant ID (if applicable)
+            limit: Rate limit that was exceeded (e.g., '5/min')
+        """
+        SecurityLogger.log_event(
+            'rate_limit_exceeded',
+            level='warning',
+            endpoint=endpoint,
+            ip_address=ip_address,
+            user_email=user_email,
+            tenant_id=tenant_id,
+            limit=limit
+        )
+    
+    @staticmethod
+    def log_four_eyes_violation(
+        initiator_user_id: str,
+        approver_user_id: str,
+        tenant_id: str,
+        operation: str,
+        ip_address: str = None
+    ):
+        """
+        Log a four-eyes principle violation attempt.
+        
+        This occurs when the same user attempts to both initiate and approve
+        a sensitive operation (e.g., withdrawal).
+        
+        Args:
+            initiator_user_id: User ID of the initiator
+            approver_user_id: User ID of the approver (same as initiator)
+            tenant_id: Tenant ID
+            operation: Operation being attempted (e.g., 'withdrawal_approval')
+            ip_address: IP address of the request
+        """
+        SecurityLogger.log_event(
+            'four_eyes_violation',
+            level='error',
+            initiator_user_id=initiator_user_id,
+            approver_user_id=approver_user_id,
+            tenant_id=tenant_id,
+            operation=operation,
+            ip_address=ip_address
+        )
+    
+    @staticmethod
+    def log_suspicious_activity(
+        activity_type: str,
+        description: str,
+        ip_address: str = None,
+        user_email: str = None,
+        tenant_id: str = None,
+        **additional_context
+    ):
+        """
+        Log suspicious activity that doesn't fit other categories.
+        
+        Args:
+            activity_type: Type of suspicious activity
+            description: Human-readable description
+            ip_address: IP address of the request
+            user_email: Email of the user (if known)
+            tenant_id: Tenant ID (if applicable)
+            **additional_context: Any additional context data
+        """
+        SecurityLogger.log_event(
+            'suspicious_activity',
+            level='error',
+            activity_type=activity_type,
+            description=description,
+            ip_address=ip_address,
+            user_email=user_email,
+            tenant_id=tenant_id,
+            **additional_context
+        )

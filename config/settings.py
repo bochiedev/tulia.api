@@ -192,6 +192,22 @@ All API requests require JWT authentication:
 
 **Note:** Webhooks are public endpoints verified by signature, not by JWT tokens.
 
+## Rate Limiting
+
+Authentication endpoints are rate limited to prevent abuse:
+
+| Endpoint | Rate Limit | Key Type |
+|----------|-----------|----------|
+| `POST /v1/auth/register` | 3/hour | IP address |
+| `POST /v1/auth/login` | 5/min per IP, 10/hour per email | IP + Email |
+| `POST /v1/auth/verify-email` | 10/hour | IP address |
+| `POST /v1/auth/forgot-password` | 3/hour | IP address |
+| `POST /v1/auth/reset-password` | 5/hour | IP address |
+
+When rate limit is exceeded, the API returns `429 Too Many Requests` with a `Retry-After` header.
+
+See the [Rate Limiting Guide](/docs/RATE_LIMITING.md) for complete documentation.
+
 ## Authorization (RBAC)
 
 The platform implements Role-Based Access Control (RBAC) with the following components:
@@ -519,6 +535,14 @@ ENCRYPTION_KEY = env('ENCRYPTION_KEY', default=None)
 # Rate Limiting
 RATE_LIMIT_ENABLED = env('RATE_LIMIT_ENABLED')
 
+# Django-ratelimit configuration
+# Use Redis cache for distributed rate limiting
+RATELIMIT_USE_CACHE = 'default'  # Use the default Redis cache
+RATELIMIT_ENABLE = RATE_LIMIT_ENABLED  # Enable/disable rate limiting
+
+# Use custom view for rate limit responses (returns 429 instead of 403)
+RATELIMIT_VIEW = 'apps.core.exceptions.ratelimit_view'
+
 # Logging Configuration
 LOG_LEVEL = env('LOG_LEVEL')
 JSON_LOGS = env('JSON_LOGS')
@@ -637,7 +661,69 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@tulia.ai')
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:3000')
 
 # JWT Authentication Configuration
-JWT_SECRET_KEY = env('JWT_SECRET_KEY', default=SECRET_KEY)
+# SECURITY: JWT_SECRET_KEY must be set explicitly and must differ from SECRET_KEY
+JWT_SECRET_KEY = env('JWT_SECRET_KEY')  # No default - must be set explicitly
+
+# Validate JWT_SECRET_KEY length (must be at least 32 characters)
+if len(JWT_SECRET_KEY) < 32:
+    raise environ.ImproperlyConfigured(
+        "JWT_SECRET_KEY must be at least 32 characters long for security. "
+        "Current length: {}. Generate a strong key with: "
+        "python -c \"import secrets; print(secrets.token_urlsafe(32))\"".format(len(JWT_SECRET_KEY))
+    )
+
+# Validate JWT_SECRET_KEY is different from SECRET_KEY
+if JWT_SECRET_KEY == SECRET_KEY:
+    raise environ.ImproperlyConfigured(
+        "JWT_SECRET_KEY must be different from SECRET_KEY for security. "
+        "Using the same key for both purposes weakens security. "
+        "Generate a separate JWT key with: "
+        "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    )
+
+# Validate JWT_SECRET_KEY entropy (must have sufficient randomness)
+def _validate_jwt_key_entropy(key: str) -> None:
+    """
+    Validate that JWT_SECRET_KEY has sufficient entropy.
+    
+    Checks:
+    - At least 16 unique characters (50% of minimum length)
+    - Not all same character
+    - Not simple repeating patterns
+    """
+    unique_chars = len(set(key))
+    
+    # Must have at least 16 unique characters for 32+ char key
+    if unique_chars < 16:
+        raise environ.ImproperlyConfigured(
+            f"JWT_SECRET_KEY has insufficient entropy. "
+            f"Found only {unique_chars} unique characters, need at least 16. "
+            f"Generate a strong key with: "
+            f"python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+    
+    # Check for simple repeating patterns (e.g., "aaaaaaa", "abababa")
+    if len(key) >= 4:
+        # Check if key is just one character repeated
+        if key == key[0] * len(key):
+            raise environ.ImproperlyConfigured(
+                "JWT_SECRET_KEY is a repeating character pattern. "
+                "Generate a strong key with: "
+                "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+            )
+        
+        # Check for simple 2-character patterns (e.g., "ababab")
+        if len(key) >= 6:
+            pattern = key[:2]
+            if key == pattern * (len(key) // len(pattern)) + pattern[:len(key) % len(pattern)]:
+                raise environ.ImproperlyConfigured(
+                    "JWT_SECRET_KEY is a simple repeating pattern. "
+                    "Generate a strong key with: "
+                    "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+                )
+
+_validate_jwt_key_entropy(JWT_SECRET_KEY)
+
 JWT_ALGORITHM = env('JWT_ALGORITHM', default='HS256')
 JWT_EXPIRATION_HOURS = env.int('JWT_EXPIRATION_HOURS', default=24)
 

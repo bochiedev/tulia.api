@@ -1,0 +1,170 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [ develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging Environment
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=staging-
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Deploy to staging server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_PORT }}
+          script: |
+            cd /opt/tulia-ai
+            
+            # Pull latest image
+            docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:staging-${{ github.sha }}
+            
+            # Update environment variables from secrets
+            cat > .env << EOF
+            # Django Settings
+            SECRET_KEY=${{ secrets.STAGING_SECRET_KEY }}
+            DEBUG=False
+            ALLOWED_HOSTS=${{ secrets.STAGING_ALLOWED_HOSTS }}
+            
+            # Database
+            DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }}
+            DB_CONN_MAX_AGE=600
+            
+            # Redis
+            REDIS_URL=${{ secrets.STAGING_REDIS_URL }}
+            CELERY_BROKER_URL=${{ secrets.STAGING_CELERY_BROKER_URL }}
+            CELERY_RESULT_BACKEND=${{ secrets.STAGING_CELERY_RESULT_BACKEND }}
+            
+            # JWT Authentication
+            JWT_SECRET_KEY=${{ secrets.STAGING_JWT_SECRET_KEY }}
+            JWT_ALGORITHM=HS256
+            JWT_EXPIRATION_HOURS=24
+            JWT_REFRESH_EXPIRATION_DAYS=7
+            
+            # Encryption
+            ENCRYPTION_KEY=${{ secrets.STAGING_ENCRYPTION_KEY }}
+            
+            # OpenAI
+            OPENAI_API_KEY=${{ secrets.STAGING_OPENAI_API_KEY }}
+            OPENAI_MODEL=gpt-4o-mini
+            
+            # Sentry
+            SENTRY_DSN=${{ secrets.STAGING_SENTRY_DSN }}
+            SENTRY_ENVIRONMENT=staging
+            
+            # Rate Limiting
+            RATE_LIMIT_ENABLED=True
+            
+            # Logging
+            LOG_LEVEL=INFO
+            JSON_LOGS=True
+            
+            # Email
+            EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+            EMAIL_HOST=${{ secrets.STAGING_EMAIL_HOST }}
+            EMAIL_PORT=${{ secrets.STAGING_EMAIL_PORT }}
+            EMAIL_USE_TLS=True
+            EMAIL_HOST_USER=${{ secrets.STAGING_EMAIL_HOST_USER }}
+            EMAIL_HOST_PASSWORD=${{ secrets.STAGING_EMAIL_HOST_PASSWORD }}
+            DEFAULT_FROM_EMAIL=noreply@staging.tulia.ai
+            
+            # Frontend
+            FRONTEND_URL=${{ secrets.STAGING_FRONTEND_URL }}
+            
+            # Subscription
+            DEFAULT_TRIAL_DAYS=14
+            
+            # Payment Providers (Staging/Test Keys)
+            STRIPE_SECRET_KEY=${{ secrets.STAGING_STRIPE_SECRET_KEY }}
+            STRIPE_PUBLISHABLE_KEY=${{ secrets.STAGING_STRIPE_PUBLISHABLE_KEY }}
+            STRIPE_WEBHOOK_SECRET=${{ secrets.STAGING_STRIPE_WEBHOOK_SECRET }}
+            
+            PAYSTACK_SECRET_KEY=${{ secrets.STAGING_PAYSTACK_SECRET_KEY }}
+            PAYSTACK_PUBLIC_KEY=${{ secrets.STAGING_PAYSTACK_PUBLIC_KEY }}
+            
+            PESAPAL_CONSUMER_KEY=${{ secrets.STAGING_PESAPAL_CONSUMER_KEY }}
+            PESAPAL_CONSUMER_SECRET=${{ secrets.STAGING_PESAPAL_CONSUMER_SECRET }}
+            PESAPAL_IPN_ID=${{ secrets.STAGING_PESAPAL_IPN_ID }}
+            PESAPAL_API_URL=https://cybqa.pesapal.com/pesapalv3
+            
+            MPESA_CONSUMER_KEY=${{ secrets.STAGING_MPESA_CONSUMER_KEY }}
+            MPESA_CONSUMER_SECRET=${{ secrets.STAGING_MPESA_CONSUMER_SECRET }}
+            MPESA_SHORTCODE=${{ secrets.STAGING_MPESA_SHORTCODE }}
+            MPESA_PASSKEY=${{ secrets.STAGING_MPESA_PASSKEY }}
+            MPESA_INITIATOR_NAME=${{ secrets.STAGING_MPESA_INITIATOR_NAME }}
+            MPESA_INITIATOR_PASSWORD=${{ secrets.STAGING_MPESA_INITIATOR_PASSWORD }}
+            MPESA_ENVIRONMENT=sandbox
+            MPESA_API_URL=https://sandbox.safaricom.co.ke
+            MPESA_B2C_SHORTCODE=${{ secrets.STAGING_MPESA_B2C_SHORTCODE }}
+            MPESA_B2C_SECURITY_CREDENTIAL=${{ secrets.STAGING_MPESA_B2C_SECURITY_CREDENTIAL }}
+            EOF
+            
+            # Stop existing containers
+            docker-compose -f docker-compose.prod.yml down
+            
+            # Start new containers
+            docker-compose -f docker-compose.prod.yml up -d
+            
+            # Run migrations
+            docker-compose -f docker-compose.prod.yml exec -T web python manage.py migrate --noinput
+            
+            # Collect static files
+            docker-compose -f docker-compose.prod.yml exec -T web python manage.py collectstatic --noinput
+            
+            # Health check
+            sleep 10
+            curl -f http://localhost:8000/v1/health || exit 1
+      
+      - name: Notify deployment status
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Staging deployment ${{ job.status }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

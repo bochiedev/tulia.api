@@ -41,3 +41,6 @@ pytz==2024.1
 twilio==9.0.4
 openai==1.51.0
 httpx<0.28  # Required for openai compatibility
+
+# Input Validation
+jsonschema==4.23.0

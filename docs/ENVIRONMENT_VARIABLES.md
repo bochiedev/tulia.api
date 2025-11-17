@@ -143,6 +143,38 @@ Queue configuration:
 
 ## Security and Encryption
 
+### SECRET_KEY
+- **Required**: Yes
+- **Type**: String
+- **Description**: Django secret key for cryptographic signing (sessions, CSRF, cookies)
+- **Example**: `django-insecure-your-secret-key-here`
+- **Generate**: `python -c "import secrets; print(secrets.token_urlsafe(50))"`
+- **Alternative**: `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`
+- **Security Requirements**:
+  - **Minimum length**: 50 characters recommended
+  - **High entropy**: Must be random and unpredictable
+  - **Unique per environment**: Different for dev, staging, production
+- **Production**: MUST be unique, random, and kept secret
+- **Warning**: Never commit to version control
+
+### JWT_SECRET_KEY
+- **Required**: Yes (CRITICAL SECURITY REQUIREMENT)
+- **Type**: String
+- **Default**: None (no default - must be explicitly set)
+- **Description**: Secret key for JWT token signing (tenant onboarding authentication)
+- **Example**: `your-jwt-secret-key-here-must-be-at-least-32-chars`
+- **Generate**: `python -c "import secrets; print(secrets.token_urlsafe(50))"`
+- **Alternative**: `openssl rand -base64 50`
+- **Security Requirements**:
+  - **Minimum length**: 32 characters (enforced on startup)
+  - **Must differ from SECRET_KEY**: Using the same key weakens security (enforced on startup)
+  - **High entropy**: Must have at least 16 unique characters (enforced on startup)
+  - **No weak patterns**: Cannot be repeating characters or simple patterns (enforced on startup)
+- **Production**: MUST be unique, random, and kept secret
+- **Validation**: Application will fail to start if key doesn't meet security requirements
+- **Note**: Changing this key will invalidate all existing JWT tokens
+- **Storage**: Store securely in secrets management system (AWS Secrets Manager, HashiCorp Vault, etc.)
+
 ### ENCRYPTION_KEY
 - **Required**: Yes
 - **Type**: Base64-encoded string (32 bytes)
@@ -311,13 +343,22 @@ Queue configuration:
 - **Range**: `1` to `365`
 
 ### JWT_SECRET_KEY
-- **Required**: No
+- **Required**: Yes (CRITICAL SECURITY REQUIREMENT)
 - **Type**: String
-- **Default**: Uses `SECRET_KEY` if not set
+- **Default**: None (no default - must be explicitly set)
 - **Description**: Secret key for JWT token signing (tenant onboarding authentication)
-- **Example**: Leave empty to use Django's SECRET_KEY
-- **Production**: Recommended to use same as SECRET_KEY for simplicity
-- **Note**: If set, must be kept secret and never changed (invalidates all tokens)
+- **Example**: `your-jwt-secret-key-here-must-be-at-least-32-chars`
+- **Generate**: `python -c "import secrets; print(secrets.token_urlsafe(50))"`
+- **Alternative**: `openssl rand -base64 50`
+- **Security Requirements**:
+  - **Minimum length**: 32 characters (enforced on startup)
+  - **Must differ from SECRET_KEY**: Using the same key weakens security (enforced on startup)
+  - **High entropy**: Must have at least 16 unique characters (enforced on startup)
+  - **No weak patterns**: Cannot be repeating characters or simple patterns (enforced on startup)
+- **Production**: MUST be unique, random, and kept secret
+- **Validation**: Application will fail to start if key doesn't meet security requirements
+- **Note**: Changing this key will invalidate all existing JWT tokens
+- **Storage**: Store securely in secrets management system (AWS Secrets Manager, HashiCorp Vault, etc.)
 
 ### JWT_ALGORITHM
 - **Required**: No
@@ -395,7 +436,9 @@ The following credentials are **NOT** stored in environment variables. They are 
 ### Development (.env)
 
 ```bash
-SECRET_KEY=django-insecure-dev-key-change-me
+# SECURITY: Even in development, use strong keys
+# Generate with: python scripts/generate_secrets.py
+SECRET_KEY=django-insecure-dev-key-change-me-use-strong-key
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 
@@ -407,6 +450,13 @@ CELERY_BROKER_URL=redis://localhost:6379/1
 CELERY_RESULT_BACKEND=redis://localhost:6379/2
 
 ENCRYPTION_KEY=dev-key-base64-encoded-32-bytes-here
+
+# JWT Authentication (REQUIRED - must be at least 32 chars and different from SECRET_KEY)
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(50))"
+JWT_SECRET_KEY=dev-jwt-secret-key-at-least-32-chars-different-from-secret-key
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_HOURS=24
+JWT_REFRESH_EXPIRATION_DAYS=7
 
 OPENAI_API_KEY=your-dev-key
 
@@ -424,12 +474,6 @@ FRONTEND_URL=http://localhost:3000
 
 DEFAULT_TRIAL_DAYS=14
 
-# JWT Authentication (Tenant Onboarding)
-JWT_SECRET_KEY=
-JWT_ALGORITHM=HS256
-JWT_EXPIRATION_HOURS=24
-JWT_REFRESH_EXPIRATION_DAYS=7
-
 # Stripe (Optional - for payment methods)
 STRIPE_SECRET_KEY=sk_test_your_key_here
 STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
@@ -438,7 +482,9 @@ STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
 ### Staging (.env)
 
 ```bash
-SECRET_KEY=your-unique-staging-secret-key
+# SECURITY: Use strong, unique keys for staging
+# Generate with: python scripts/generate_secrets.py
+SECRET_KEY=your-unique-staging-secret-key-at-least-50-chars-high-entropy
 DEBUG=False
 ALLOWED_HOSTS=staging-api.yourdomain.com
 
@@ -450,6 +496,13 @@ CELERY_BROKER_URL=redis://staging-redis.internal:6379/1
 CELERY_RESULT_BACKEND=redis://staging-redis.internal:6379/2
 
 ENCRYPTION_KEY=staging-unique-base64-encoded-32-bytes
+
+# JWT Authentication (REQUIRED - must be at least 32 chars and different from SECRET_KEY)
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(50))"
+JWT_SECRET_KEY=staging-jwt-secret-key-at-least-32-chars-different-from-secret-key
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_HOURS=24
+JWT_REFRESH_EXPIRATION_DAYS=7
 
 OPENAI_API_KEY=sk-your-staging-key
 
@@ -474,12 +527,6 @@ FRONTEND_URL=https://staging-app.yourdomain.com
 
 DEFAULT_TRIAL_DAYS=14
 
-# JWT Authentication
-JWT_SECRET_KEY=
-JWT_ALGORITHM=HS256
-JWT_EXPIRATION_HOURS=24
-JWT_REFRESH_EXPIRATION_DAYS=7
-
 # Stripe
 STRIPE_SECRET_KEY=sk_test_your_key_here
 STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
@@ -490,7 +537,10 @@ CORS_ALLOWED_ORIGINS=https://staging-app.yourdomain.com
 ### Production (.env)
 
 ```bash
-SECRET_KEY=your-unique-production-secret-key-keep-secret
+# SECURITY: Use strong, unique keys for production - NEVER commit to version control
+# Generate with: python scripts/generate_secrets.py
+# Store in secrets management system (AWS Secrets Manager, HashiCorp Vault, etc.)
+SECRET_KEY=your-unique-production-secret-key-at-least-50-chars-keep-secret
 DEBUG=False
 ALLOWED_HOSTS=api.yourdomain.com,yourdomain.com
 
@@ -502,6 +552,14 @@ CELERY_BROKER_URL=redis://:redis_password@prod-redis.internal:6379/1
 CELERY_RESULT_BACKEND=redis://:redis_password@prod-redis.internal:6379/2
 
 ENCRYPTION_KEY=production-unique-base64-encoded-32-bytes-keep-secret
+
+# JWT Authentication (REQUIRED - must be at least 32 chars and different from SECRET_KEY)
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(50))"
+# CRITICAL: Store securely and NEVER commit to version control
+JWT_SECRET_KEY=production-jwt-secret-key-at-least-32-chars-different-from-secret-key
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_HOURS=24
+JWT_REFRESH_EXPIRATION_DAYS=7
 
 OPENAI_API_KEY=sk-your-production-key
 
@@ -526,12 +584,6 @@ FRONTEND_URL=https://app.yourdomain.com
 
 DEFAULT_TRIAL_DAYS=14
 
-# JWT Authentication
-JWT_SECRET_KEY=
-JWT_ALGORITHM=HS256
-JWT_EXPIRATION_HOURS=24
-JWT_REFRESH_EXPIRATION_DAYS=7
-
 # Stripe
 STRIPE_SECRET_KEY=sk_live_your_key_here
 STRIPE_PUBLISHABLE_KEY=pk_live_your_key_here
@@ -554,12 +606,69 @@ CORS_ALLOWED_ORIGINS=https://app.yourdomain.com,https://admin.yourdomain.com
 
 ---
 
-## Validation
+## Startup Validation
+
+The application performs automatic validation of critical security settings on startup. If any validation fails, the application will **refuse to start** and display a clear error message.
+
+### Validated Settings
+
+1. **JWT_SECRET_KEY**:
+   - Must be set (no default)
+   - Minimum length: 32 characters
+   - Must differ from SECRET_KEY
+   - Must have high entropy (at least 16 unique characters)
+   - Cannot be simple repeating patterns
+
+2. **ENCRYPTION_KEY**:
+   - Must be exactly 32 bytes (base64-encoded)
+   - Must be valid base64
+
+### Validation Errors
+
+If validation fails, you'll see errors like:
+
+```
+django.core.exceptions.ImproperlyConfigured: JWT_SECRET_KEY must be at least 32 characters long for security.
+Current length: 20. Generate a strong key with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+```
+django.core.exceptions.ImproperlyConfigured: JWT_SECRET_KEY must be different from SECRET_KEY for security.
+Using the same key for both purposes weakens security. Generate a separate JWT key with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+```
+django.core.exceptions.ImproperlyConfigured: JWT_SECRET_KEY has insufficient entropy.
+Found only 8 unique characters, need at least 16. Generate a strong key with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+### Generating Secure Keys
+
+Use the provided script to generate all required keys at once:
+
+```bash
+python scripts/generate_secrets.py
+```
+
+Or generate individual keys:
+
+```bash
+# SECRET_KEY (50+ characters recommended)
+python -c "import secrets; print(secrets.token_urlsafe(50))"
+
+# JWT_SECRET_KEY (32+ characters required)
+python -c "import secrets; print(secrets.token_urlsafe(50))"
+
+# ENCRYPTION_KEY (32 bytes, base64-encoded)
+python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode('utf-8'))"
+```
+
+## Manual Validation
 
 To validate your environment configuration:
 
 ```bash
-# Check for missing required variables
+# Check for missing required variables and run startup validation
 python manage.py check
 
 # Test database connection

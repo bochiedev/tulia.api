@@ -1,0 +1,377 @@
+# GitLab CI/CD Pipeline for Tulia AI
+# This file provides an alternative to GitHub Actions for teams using GitLab
+
+variables:
+  PYTHON_VERSION: "3.11"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+# Define stages
+stages:
+  - test
+  - security
+  - build
+  - deploy
+
+# Cache configuration
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+# Test job
+test:
+  stage: test
+  image: python:${PYTHON_VERSION}
+  
+  services:
+    - postgres:15-alpine
+    - redis:7-alpine
+  
+  variables:
+    POSTGRES_DB: tulia_test_db
+    POSTGRES_USER: tulia_test_user
+    POSTGRES_PASSWORD: tulia_test_pass
+    POSTGRES_HOST_AUTH_METHOD: trust
+    
+    # Django settings
+    SECRET_KEY: $CI_SECRET_KEY
+    DEBUG: "False"
+    ALLOWED_HOSTS: "localhost,127.0.0.1"
+    
+    # Database
+    DATABASE_URL: "postgresql://tulia_test_user:tulia_test_pass@postgres:5432/tulia_test_db"
+    DB_CONN_MAX_AGE: "600"
+    
+    # Redis
+    REDIS_URL: "redis://redis:6379/0"
+    CELERY_BROKER_URL: "redis://redis:6379/1"
+    CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+    
+    # JWT Authentication
+    JWT_SECRET_KEY: $CI_JWT_SECRET_KEY
+    JWT_ALGORITHM: "HS256"
+    JWT_EXPIRATION_HOURS: "24"
+    JWT_REFRESH_EXPIRATION_DAYS: "7"
+    
+    # Encryption
+    ENCRYPTION_KEY: $CI_ENCRYPTION_KEY
+    
+    # OpenAI
+    OPENAI_API_KEY: $CI_OPENAI_API_KEY
+    OPENAI_MODEL: "gpt-4o-mini"
+    
+    # Rate limiting
+    RATE_LIMIT_ENABLED: "True"
+    
+    # Logging
+    LOG_LEVEL: "INFO"
+    JSON_LOGS: "False"
+    
+    # Email
+    EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
+    DEFAULT_FROM_EMAIL: "noreply@tulia.ai"
+    
+    # Frontend
+    FRONTEND_URL: "http://localhost:3000"
+    
+    # Subscription
+    DEFAULT_TRIAL_DAYS: "14"
+    
+    # Sentry
+    SENTRY_DSN: ""
+    SENTRY_ENVIRONMENT: "test"
+  
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install -r requirements.txt
+  
+  script:
+    - pytest --cov=apps --cov-report=xml --cov-report=term --cov-report=html
+  
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - htmlcov/
+    expire_in: 7 days
+  
+  only:
+    - branches
+    - merge_requests
+
+# Code quality job
+lint:
+  stage: test
+  image: python:${PYTHON_VERSION}
+  
+  before_script:
+    - pip install flake8 black isort bandit safety
+  
+  script:
+    - flake8 apps config --max-line-length=120 --exclude=migrations || true
+    - black --check apps config || true
+    - isort --check-only apps config || true
+    - bandit -r apps config -ll -f json -o bandit-report.json || true
+    - safety check --json || true
+  
+  artifacts:
+    paths:
+      - bandit-report.json
+    expire_in: 30 days
+  
+  allow_failure: true
+  
+  only:
+    - branches
+    - merge_requests
+
+# Security scanning
+security-scan:
+  stage: security
+  image: aquasec/trivy:latest
+  
+  script:
+    - trivy fs --exit-code 0 --no-progress --format json --output trivy-report.json .
+  
+  artifacts:
+    paths:
+      - trivy-report.json
+    expire_in: 30 days
+  
+  allow_failure: true
+  
+  only:
+    - branches
+    - merge_requests
+
+# Docker build test
+docker-build:
+  stage: build
+  image: docker:latest
+  
+  services:
+    - docker:dind
+  
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA -f Dockerfile .
+    - docker build -t $CI_REGISTRY_IMAGE:prod-$CI_COMMIT_SHA -f Dockerfile.prod .
+  
+  only:
+    - branches
+    - merge_requests
+
+# Deploy to staging
+deploy-staging:
+  stage: deploy
+  image: alpine:latest
+  
+  before_script:
+    - apk add --no-cache openssh-client bash curl
+    - eval $(ssh-agent -s)
+    - echo "$STAGING_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $STAGING_HOST >> ~/.ssh/known_hosts
+  
+  script:
+    - |
+      ssh $STAGING_USER@$STAGING_HOST << 'EOF'
+        cd /opt/tulia-ai
+        
+        # Pull latest image
+        docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+        
+        # Update environment variables
+        cat > .env << ENVEOF
+        # Django Settings
+        SECRET_KEY=$STAGING_SECRET_KEY
+        DEBUG=False
+        ALLOWED_HOSTS=$STAGING_ALLOWED_HOSTS
+        
+        # Database
+        DATABASE_URL=$STAGING_DATABASE_URL
+        DB_CONN_MAX_AGE=600
+        
+        # Redis
+        REDIS_URL=$STAGING_REDIS_URL
+        CELERY_BROKER_URL=$STAGING_CELERY_BROKER_URL
+        CELERY_RESULT_BACKEND=$STAGING_CELERY_RESULT_BACKEND
+        
+        # JWT Authentication
+        JWT_SECRET_KEY=$STAGING_JWT_SECRET_KEY
+        JWT_ALGORITHM=HS256
+        JWT_EXPIRATION_HOURS=24
+        JWT_REFRESH_EXPIRATION_DAYS=7
+        
+        # Encryption
+        ENCRYPTION_KEY=$STAGING_ENCRYPTION_KEY
+        
+        # OpenAI
+        OPENAI_API_KEY=$STAGING_OPENAI_API_KEY
+        OPENAI_MODEL=gpt-4o-mini
+        
+        # Sentry
+        SENTRY_DSN=$STAGING_SENTRY_DSN
+        SENTRY_ENVIRONMENT=staging
+        
+        # Rate Limiting
+        RATE_LIMIT_ENABLED=True
+        
+        # Logging
+        LOG_LEVEL=INFO
+        JSON_LOGS=True
+        
+        # Email
+        EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+        EMAIL_HOST=$STAGING_EMAIL_HOST
+        EMAIL_PORT=$STAGING_EMAIL_PORT
+        EMAIL_USE_TLS=True
+        EMAIL_HOST_USER=$STAGING_EMAIL_HOST_USER
+        EMAIL_HOST_PASSWORD=$STAGING_EMAIL_HOST_PASSWORD
+        DEFAULT_FROM_EMAIL=noreply@staging.tulia.ai
+        
+        # Frontend
+        FRONTEND_URL=$STAGING_FRONTEND_URL
+        
+        # Subscription
+        DEFAULT_TRIAL_DAYS=14
+        ENVEOF
+        
+        # Deploy
+        docker-compose -f docker-compose.prod.yml down
+        docker-compose -f docker-compose.prod.yml up -d
+        docker-compose -f docker-compose.prod.yml exec -T web python manage.py migrate --noinput
+        docker-compose -f docker-compose.prod.yml exec -T web python manage.py collectstatic --noinput
+        
+        # Health check
+        sleep 10
+        curl -f http://localhost:8000/v1/health || exit 1
+      EOF
+  
+  environment:
+    name: staging
+    url: https://staging.tulia.ai
+  
+  only:
+    - develop
+
+# Deploy to production
+deploy-production:
+  stage: deploy
+  image: alpine:latest
+  
+  before_script:
+    - apk add --no-cache openssh-client bash curl
+    - eval $(ssh-agent -s)
+    - echo "$PRODUCTION_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $PRODUCTION_HOST >> ~/.ssh/known_hosts
+  
+  script:
+    - |
+      ssh $PRODUCTION_USER@$PRODUCTION_HOST << 'EOF'
+        cd /opt/tulia-ai
+        
+        # Backup database
+        docker-compose -f docker-compose.prod.yml exec -T db pg_dump -U $PRODUCTION_DB_USER $PRODUCTION_DB_NAME > backups/backup_$(date +%Y%m%d_%H%M%S).sql
+        cd backups && ls -t | tail -n +8 | xargs -r rm
+        cd ..
+        
+        # Pull latest image
+        docker pull $CI_REGISTRY_IMAGE:prod-$CI_COMMIT_SHA
+        
+        # Update environment variables
+        cat > .env << ENVEOF
+        # Django Settings
+        SECRET_KEY=$PRODUCTION_SECRET_KEY
+        DEBUG=False
+        ALLOWED_HOSTS=$PRODUCTION_ALLOWED_HOSTS
+        
+        # Database
+        DATABASE_URL=$PRODUCTION_DATABASE_URL
+        DB_CONN_MAX_AGE=600
+        
+        # Redis
+        REDIS_URL=$PRODUCTION_REDIS_URL
+        CELERY_BROKER_URL=$PRODUCTION_CELERY_BROKER_URL
+        CELERY_RESULT_BACKEND=$PRODUCTION_CELERY_RESULT_BACKEND
+        
+        # JWT Authentication
+        JWT_SECRET_KEY=$PRODUCTION_JWT_SECRET_KEY
+        JWT_ALGORITHM=HS256
+        JWT_EXPIRATION_HOURS=24
+        JWT_REFRESH_EXPIRATION_DAYS=7
+        
+        # Encryption
+        ENCRYPTION_KEY=$PRODUCTION_ENCRYPTION_KEY
+        
+        # OpenAI
+        OPENAI_API_KEY=$PRODUCTION_OPENAI_API_KEY
+        OPENAI_MODEL=gpt-4o-mini
+        
+        # Sentry
+        SENTRY_DSN=$PRODUCTION_SENTRY_DSN
+        SENTRY_ENVIRONMENT=production
+        SENTRY_RELEASE=$CI_COMMIT_SHA
+        
+        # Rate Limiting
+        RATE_LIMIT_ENABLED=True
+        
+        # Logging
+        LOG_LEVEL=WARNING
+        JSON_LOGS=True
+        
+        # Email
+        EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+        EMAIL_HOST=$PRODUCTION_EMAIL_HOST
+        EMAIL_PORT=$PRODUCTION_EMAIL_PORT
+        EMAIL_USE_TLS=True
+        EMAIL_HOST_USER=$PRODUCTION_EMAIL_HOST_USER
+        EMAIL_HOST_PASSWORD=$PRODUCTION_EMAIL_HOST_PASSWORD
+        DEFAULT_FROM_EMAIL=noreply@tulia.ai
+        
+        # Frontend
+        FRONTEND_URL=$PRODUCTION_FRONTEND_URL
+        
+        # Subscription
+        DEFAULT_TRIAL_DAYS=14
+        ENVEOF
+        
+        # Deploy
+        docker-compose -f docker-compose.prod.yml down --timeout 30
+        docker-compose -f docker-compose.prod.yml up -d
+        docker-compose -f docker-compose.prod.yml exec -T web python manage.py migrate --noinput
+        docker-compose -f docker-compose.prod.yml exec -T web python manage.py collectstatic --noinput
+        
+        # Health check with retries
+        for i in {1..10}; do
+          if curl -f http://localhost:8000/v1/health; then
+            echo "Health check passed"
+            exit 0
+          fi
+          echo "Health check attempt $i failed, retrying..."
+          sleep 5
+        done
+        echo "Health check failed after 10 attempts"
+        exit 1
+      EOF
+  
+  environment:
+    name: production
+    url: https://tulia.ai
+  
+  when: manual
+  
+  only:
+    - main
+    - tags

@@ -162,9 +162,12 @@ def my_view(request):
 
 ## Your Credentials
 
-**Token (valid for 24 hours):**
-```
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOGU0ZTU5NGYtODZjZC00NTVhLTg2MzktMTg1NWMyZjA3ZTNlIiwiZW1haWwiOiJvd25lckBzdGFydGVyLmRlbW8iLCJleHAiOjE3NjMxODc5ODQsImlhdCI6MTc2MzEwMTU4NH0.KNc2y6uUd2GSvIxQq-Hm5mAYASyI7CpAXnGaZmdwsAo
+**Obtain Token (valid for 24 hours):**
+```bash
+# Login to get a fresh token
+curl -X POST http://localhost:8000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "owner@starter.demo", "password": "your-password"}'
 ```
 
 **User:** owner@starter.demo  

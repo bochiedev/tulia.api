@@ -17,6 +17,30 @@ WabotIQ uses **JWT (JSON Web Token) authentication** for all user operations. Th
 3. **Token Validation**: Middleware validates token and extracts user identity
 4. **RBAC Resolution**: System resolves user's permissions based on tenant membership
 
+#### Password Security
+
+**WabotIQ uses industry-standard password hashing:**
+
+- **Algorithm**: PBKDF2 (Password-Based Key Derivation Function 2)
+- **Iterations**: 260,000 (Django 4.2 default)
+- **Salt**: Unique per password
+- **Hash Length**: 256 bits
+
+This provides strong protection against:
+- Rainbow table attacks
+- Brute force attacks
+- Dictionary attacks
+
+**Implementation:**
+```python
+# Secure password hashing during registration
+user = User(email=email, first_name=first_name, last_name=last_name)
+user.set_password(password)  # Uses PBKDF2 with 260,000 iterations
+user.save()
+```
+
+**Note**: Passwords are NEVER stored in plaintext or with weak hashing algorithms (MD5, SHA-256, etc.)
+
 #### Token Format
 
 ```
@@ -44,21 +68,54 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 **Webhooks are public endpoints that don't require JWT tokens.**
 
-Webhooks from external services (Twilio, WooCommerce, Shopify) are verified using:
-- **Signature verification**: Each provider signs requests with a secret
-- **Timestamp validation**: Reject old requests to prevent replay attacks
-- **IP whitelisting** (optional): Restrict to known provider IPs
+Webhooks from external services (Twilio, WooCommerce, Shopify) are verified using cryptographic signature verification instead of JWT authentication. This ensures that only legitimate requests from the service providers are processed.
+
+#### Signature Verification Methods
+
+**Twilio (HMAC-SHA1)**:
+- Uses `X-Twilio-Signature` header
+- HMAC-SHA1 with Auth Token as secret key
+- Concatenates URL + sorted POST parameters
+- Base64-encoded signature
+- **Status**: ✅ Implemented and enforced
+
+**WooCommerce (HMAC-SHA256)**:
+- Uses `X-WC-Webhook-Signature` header
+- HMAC-SHA256 with webhook secret
+- **Status**: ⚠️ To be implemented
+
+**Shopify (HMAC-SHA256)**:
+- Uses `X-Shopify-Hmac-Sha256` header
+- HMAC-SHA256 with shared secret
+- **Status**: ⚠️ To be implemented
+
+#### Security Features
+
+- **Constant-time comparison**: Prevents timing attacks
+- **Fail-secure**: Returns 403 on any verification failure
+- **Security logging**: All failed verifications logged to Sentry
+- **Audit trail**: WebhookLog records all attempts with status
+- **No replay protection**: Timestamp validation (future enhancement)
 
 #### Public Webhook Paths
 
 ```python
 PUBLIC_PATHS = [
-    '/v1/webhooks/twilio',
-    '/v1/webhooks/woocommerce',
-    '/v1/webhooks/shopify',
-    '/v1/health',
+    '/v1/webhooks/twilio',        # ✅ Signature verified
+    '/v1/webhooks/woocommerce',   # ⚠️ To be implemented
+    '/v1/webhooks/shopify',       # ⚠️ To be implemented
+    '/v1/health',                 # No auth required
 ]
 ```
+
+#### Response Codes
+
+- `200 OK` - Webhook processed successfully
+- `403 Forbidden` - Invalid signature (security violation)
+- `404 Not Found` - Tenant not found
+- `503 Service Unavailable` - Service temporarily unavailable
+
+For detailed Twilio webhook setup and signature verification, see [Twilio Webhook Setup Guide](TWILIO_WEBHOOK_SETUP.md).
 
 ## Authentication Flow
 
@@ -94,6 +151,8 @@ Response:
 }
 ```
 
+**Rate Limit**: 3 requests per hour per IP address
+
 ### User Login
 
 ```bash
@@ -116,6 +175,10 @@ Response:
   }
 }
 ```
+
+**Rate Limits**: 
+- 5 requests per minute per IP address
+- 10 requests per hour per email address
 
 ### Making Authenticated Requests
 
@@ -217,6 +280,54 @@ class ProductListView(APIView):
         # ...
 ```
 
+## Rate Limiting
+
+All authentication endpoints are protected by rate limiting to prevent abuse and brute force attacks.
+
+### Authentication Endpoint Rate Limits
+
+| Endpoint | Rate Limit | Key Type | Purpose |
+|----------|-----------|----------|---------|
+| `/v1/auth/register` | 3/hour | IP address | Prevent account creation spam |
+| `/v1/auth/login` | 5/min per IP<br>10/hour per email | IP + Email | Prevent brute force attacks |
+| `/v1/auth/verify-email` | 10/hour | IP address | Prevent verification abuse |
+| `/v1/auth/forgot-password` | 3/hour | IP address | Prevent password reset spam |
+| `/v1/auth/reset-password` | 5/hour | IP address | Prevent reset token abuse |
+
+### Rate Limit Response
+
+When rate limit is exceeded, the API returns:
+
+```json
+HTTP/1.1 429 Too Many Requests
+Retry-After: 3600
+
+{
+  "error": "Rate limit exceeded. Please try again later.",
+  "code": "RATE_LIMIT_EXCEEDED",
+  "retry_after": 3600
+}
+```
+
+### Rate Limit Headers
+
+Rate limit information is included in response headers:
+
+- `Retry-After`: Seconds until rate limit resets
+- `X-RateLimit-Limit`: Maximum requests allowed
+- `X-RateLimit-Remaining`: Requests remaining in current window
+- `X-RateLimit-Reset`: Unix timestamp when limit resets
+
+### Implementation Details
+
+- **Storage**: Redis-backed for distributed rate limiting
+- **Algorithm**: Sliding window for accurate rate limiting
+- **Scope**: Per-IP and per-email for login attempts
+- **Automatic Cleanup**: Redis TTL ensures old data is removed
+- **Security Logging**: All rate limit violations are logged
+
+See [Redis Rate Limiting Configuration](REDIS_RATE_LIMITING.md) for detailed configuration.
+
 ## Security Considerations
 
 ### Token Security
@@ -225,6 +336,14 @@ class ProductListView(APIView):
 2. **Secure Storage**: Store tokens securely (httpOnly cookies or secure storage)
 3. **Short Expiration**: 24-hour expiration limits exposure window
 4. **No Sensitive Data**: Tokens contain only user_id and email
+
+### Rate Limiting Security
+
+1. **Brute Force Protection**: Login rate limits prevent password guessing
+2. **Account Enumeration**: Registration limits prevent email enumeration
+3. **DoS Protection**: Rate limits prevent denial of service attacks
+4. **Distributed**: Works across multiple application instances
+5. **Automatic Recovery**: Rate limits reset automatically after time window
 
 ### Token Validation
 
@@ -242,10 +361,65 @@ class ProductListView(APIView):
 
 ### Webhook Security
 
-1. **Signature Verification**: Validate webhook signatures
-2. **Timestamp Validation**: Reject old requests
-3. **Idempotency**: Handle duplicate webhooks gracefully
-4. **Rate Limiting**: Prevent webhook flooding
+1. **Signature Verification**: ✅ Implemented for Twilio (HMAC-SHA1)
+   - Validates X-Twilio-Signature header
+   - Uses constant-time comparison to prevent timing attacks
+   - Fails securely (403 Forbidden on any error)
+   - Logs all verification failures to Sentry
+
+2. **Timestamp Validation**: ⚠️ Future enhancement
+   - Will reject requests older than 5 minutes
+   - Prevents replay attacks
+
+3. **Idempotency**: ✅ Implemented
+   - MessageSid tracking prevents duplicate processing
+   - WebhookLog records all attempts
+
+4. **Rate Limiting**: ⚠️ Future enhancement
+   - Will prevent webhook flooding
+   - Per-tenant and per-IP limits
+
+5. **Security Logging**: ✅ Implemented
+   - All webhook attempts logged in WebhookLog
+   - Failed verifications sent to Sentry
+   - Structured security event logging
+
+**Implementation Details**:
+
+```python
+# Twilio signature verification (apps/integrations/views.py)
+def verify_twilio_signature(url, params, signature, auth_token):
+    """
+    Verify Twilio webhook signature using HMAC-SHA1.
+    
+    Returns:
+        bool: True if signature is valid, False otherwise
+    """
+    # Concatenate URL with sorted parameters
+    sorted_params = sorted(params.items())
+    data = url + ''.join(f'{k}{v}' for k, v in sorted_params)
+    
+    # Compute HMAC-SHA1 signature
+    computed = hmac.new(
+        auth_token.encode('utf-8'),
+        data.encode('utf-8'),
+        hashlib.sha1
+    ).digest()
+    
+    # Base64 encode and compare using constant-time comparison
+    computed_b64 = base64.b64encode(computed).decode('utf-8')
+    return hmac.compare_digest(computed_b64, signature)
+```
+
+**Security Events**:
+
+Failed signature verifications trigger critical security events:
+- Logged to application logs with full context
+- Sent to Sentry for real-time alerting
+- Recorded in WebhookLog with status='unauthorized'
+- Includes IP address, user agent, and tenant information
+
+See [Twilio Webhook Setup Guide](TWILIO_WEBHOOK_SETUP.md) for complete documentation.
 
 ## Error Responses
 

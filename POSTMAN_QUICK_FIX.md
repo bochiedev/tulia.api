@@ -66,10 +66,9 @@ Make sure "TuliaAI Development" is selected in the dropdown (top right).
 ### Check 3: Token in Environment
 
 1. Click eye icon
-2. If `access_token` is empty, manually paste:
-   ```
-   eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOGU0ZTU5NGYtODZjZC00NTVhLTg2MzktMTg1NWMyZjA3ZTNlIiwiZW1haWwiOiJvd25lckBzdGFydGVyLmRlbW8iLCJleHAiOjE3NjMxODc5ODQsImlhdCI6MTc2MzEwMTU4NH0.KNc2y6uUd2GSvIxQq-Hm5mAYASyI7CpAXnGaZmdwsAo
-   ```
+2. If `access_token` is empty, you need to obtain a new token by:
+   - Using the "Login" request in the Authentication folder
+   - The token will be automatically saved to the environment variable
 
 ## Manual Token Setting (Alternative)
 
@@ -78,11 +77,9 @@ If re-importing doesn't work:
 1. Click **eye icon** (top right)
 2. Click **Edit** on "TuliaAI Development"
 3. Find `access_token` variable
-4. Paste this value:
-   ```
-   eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOGU0ZTU5NGYtODZjZC00NTVhLTg2MzktMTg1NWMyZjA3ZTNlIiwiZW1haWwiOiJvd25lckBzdGFydGVyLmRlbW8iLCJleHAiOjE3NjMxODc5ODQsImlhdCI6MTc2MzEwMTU4NH0.KNc2y6uUd2GSvIxQq-Hm5mAYASyI7CpAXnGaZmdwsAo
-   ```
-5. Click **Save**
+4. Obtain a fresh token by using the "Login" request in Postman
+5. The token will be automatically saved to the environment variable
+6. Click **Save**
 
 ## Celery Issue - No Logs
 
@@ -166,7 +163,7 @@ The response will include a new token that's automatically saved.
 source venv/bin/activate
 python manage.py shell -c "
 from apps.rbac.services import AuthService
-token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOGU0ZTU5NGYtODZjZC00NTVhLTg2MzktMTg1NWMyZjA3ZTNlIiwiZW1haWwiOiJvd25lckBzdGFydGVyLmRlbW8iLCJleHAiOjE3NjMxODc5ODQsImlhdCI6MTc2MzEwMTU4NH0.KNc2y6uUd2GSvIxQq-Hm5mAYASyI7CpAXnGaZmdwsAo'
+token = 'YOUR_JWT_TOKEN_HERE'  # Replace with actual token from login
 user = AuthService.get_user_from_jwt(token)
 print('Valid!' if user else 'Invalid/Expired')
 "
@@ -174,8 +171,14 @@ print('Valid!' if user else 'Invalid/Expired')
 
 ### Test with curl
 ```bash
+# First, login to get a token
+curl -X POST http://localhost:8000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "owner@starter.demo", "password": "your-password"}'
+
+# Then use the token from the response
 curl -X GET http://localhost:8000/v1/auth/me \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOGU0ZTU5NGYtODZjZC00NTVhLTg2MzktMTg1NWMyZjA3ZTNlIiwiZW1haWwiOiJvd25lckBzdGFydGVyLmRlbW8iLCJleHAiOjE3NjMxODc5ODQsImlhdCI6MTc2MzEwMTU4NH0.KNc2y6uUd2GSvIxQq-Hm5mAYASyI7CpAXnGaZmdwsAo"
+  -H "Authorization: Bearer YOUR_JWT_TOKEN_HERE"
 ```
 
 Should return your user profile.

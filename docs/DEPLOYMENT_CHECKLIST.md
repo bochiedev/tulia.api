@@ -26,8 +26,10 @@ Use this checklist for production deployments to ensure nothing is missed.
 - [ ] Production environment variables configured
 - [ ] Secrets rotated (if needed)
 - [ ] `DEBUG=False` in production
-- [ ] `SECRET_KEY` is unique and secure
-- [ ] `ENCRYPTION_KEY` generated and stored securely
+- [ ] `SECRET_KEY` is unique and secure (at least 50 characters, high entropy)
+- [ ] `JWT_SECRET_KEY` is set and different from `SECRET_KEY` (at least 32 characters, high entropy)
+- [ ] `ENCRYPTION_KEY` generated and stored securely (32 bytes, base64-encoded)
+- [ ] All secret keys validated on startup (application will fail to start with weak keys)
 - [ ] `ALLOWED_HOSTS` configured correctly
 - [ ] CORS origins configured
 - [ ] Email service configured and tested

@@ -6,8 +6,84 @@ from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
 from django_ratelimit.exceptions import Ratelimited
+from django.http import JsonResponse
 
 logger = logging.getLogger(__name__)
+
+
+def ratelimit_view(request, exception):
+    """
+    Custom view for django-ratelimit to return 429 instead of 403.
+    
+    This is called when rate limit is exceeded with block=True.
+    Returns 429 with Retry-After header indicating when to retry.
+    """
+    from apps.core.logging import SecurityLogger
+    
+    # Get client IP and email (if available)
+    ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+    email = None
+    tenant_id = None
+    
+    # Try to get email from request data
+    if hasattr(request, 'data') and isinstance(request.data, dict):
+        email = request.data.get('email')
+    elif request.method == 'POST' and request.POST:
+        email = request.POST.get('email')
+    elif request.method == 'POST' and request.body:
+        try:
+            import json
+            data = json.loads(request.body)
+            email = data.get('email')
+        except:
+            pass
+    
+    # Try to get tenant_id from request
+    if hasattr(request, 'tenant') and request.tenant:
+        tenant_id = str(request.tenant.id)
+    
+    # Determine retry-after time based on endpoint
+    retry_after = 60  # Default: 1 minute
+    if '/auth/register' in request.path or '/auth/forgot-password' in request.path:
+        retry_after = 3600  # 1 hour for registration and password reset
+    elif '/auth/login' in request.path:
+        retry_after = 60  # 1 minute for login
+    elif '/auth/verify-email' in request.path or '/auth/reset-password' in request.path:
+        retry_after = 3600  # 1 hour for verification and reset
+    
+    # Log security event
+    SecurityLogger.log_rate_limit_exceeded(
+        endpoint=request.path,
+        ip_address=ip_address,
+        user_email=email,
+        tenant_id=tenant_id,
+        limit='Rate limit exceeded'
+    )
+    
+    logger.warning(
+        f"Rate limit exceeded",
+        extra={
+            'request_id': getattr(request, 'request_id', None),
+            'path': request.path,
+            'method': request.method,
+            'ip': ip_address,
+            'retry_after': retry_after,
+        }
+    )
+    
+    response = JsonResponse(
+        {
+            'error': 'Rate limit exceeded. Please try again later.',
+            'code': 'RATE_LIMIT_EXCEEDED',
+            'retry_after': retry_after,
+        },
+        status=429
+    )
+    
+    # Add Retry-After header (RFC 6585)
+    response['Retry-After'] = str(retry_after)
+    
+    return response
 
 
 def custom_exception_handler(exc, context):
@@ -16,8 +92,43 @@ def custom_exception_handler(exc, context):
     """
     # Handle django-ratelimit exceptions
     if isinstance(exc, Ratelimited):
+        from apps.core.logging import SecurityLogger
+        
         request = context.get('request')
         request_id = getattr(request, 'request_id', None) if request else None
+        
+        # Get client IP and email (if available)
+        ip_address = request.META.get('REMOTE_ADDR', 'unknown') if request else 'unknown'
+        email = None
+        tenant_id = None
+        
+        if request:
+            # Try to get email from request data
+            if hasattr(request, 'data') and isinstance(request.data, dict):
+                email = request.data.get('email')
+            
+            # Try to get tenant_id from request
+            if hasattr(request, 'tenant') and request.tenant:
+                tenant_id = str(request.tenant.id)
+        
+        # Determine retry-after time based on endpoint
+        retry_after = 60  # Default: 1 minute
+        if request and request.path:
+            if '/auth/register' in request.path or '/auth/forgot-password' in request.path:
+                retry_after = 3600  # 1 hour for registration and password reset
+            elif '/auth/login' in request.path:
+                retry_after = 60  # 1 minute for login
+            elif '/auth/verify-email' in request.path or '/auth/reset-password' in request.path:
+                retry_after = 3600  # 1 hour for verification and reset
+        
+        # Log security event
+        SecurityLogger.log_rate_limit_exceeded(
+            endpoint=request.path if request else 'unknown',
+            ip_address=ip_address,
+            user_email=email,
+            tenant_id=tenant_id,
+            limit='Rate limit exceeded'
+        )
         
         logger.warning(
             f"Rate limit exceeded",
@@ -25,18 +136,25 @@ def custom_exception_handler(exc, context):
                 'request_id': request_id,
                 'path': request.path if request else None,
                 'method': request.method if request else None,
-                'ip': request.META.get('REMOTE_ADDR') if request else None,
+                'ip': ip_address,
+                'retry_after': retry_after,
             }
         )
         
-        return Response(
+        response = Response(
             {
                 'error': 'Rate limit exceeded. Please try again later.',
                 'code': 'RATE_LIMIT_EXCEEDED',
                 'request_id': request_id,
+                'retry_after': retry_after,
             },
             status=status.HTTP_429_TOO_MANY_REQUESTS
         )
+        
+        # Add Retry-After header (RFC 6585)
+        response['Retry-After'] = str(retry_after)
+        
+        return response
     
     # Call DRF's default exception handler first
     response = exception_handler(exc, context)

@@ -45,6 +45,69 @@ class TestRegistrationEndpoint:
         assert tenant.name == 'Acme Corp'
         assert tenant.status == 'trial'
     
+    def test_register_user_password_hashing(self):
+        """Test that password is hashed using PBKDF2 and not stored in plain text."""
+        client = APIClient()
+        
+        password = 'SecurePass123!'
+        data = {
+            'email': 'hashtest@example.com',
+            'password': password,
+            'first_name': 'Hash',
+            'last_name': 'Test',
+            'business_name': 'Hash Test Corp'
+        }
+        
+        response = client.post('/v1/auth/register', data, format='json')
+        
+        assert response.status_code == status.HTTP_201_CREATED
+        
+        # Verify user was created
+        user = User.objects.get(email='hashtest@example.com')
+        
+        # Verify password is hashed using PBKDF2
+        assert user.password_hash.startswith('pbkdf2_sha256$')
+        
+        # Verify password is not stored in plain text
+        assert password not in user.password_hash
+        
+        # Verify password cannot be retrieved (only hash is stored)
+        assert user.password_hash != password
+        
+        # Verify password can be verified using check_password
+        assert user.check_password(password) is True
+        assert user.check_password('wrongpassword') is False
+    
+    def test_register_user_no_insecure_hash(self):
+        """Test that no insecure SHA-256 hash is created during registration."""
+        import hashlib
+        client = APIClient()
+        
+        password = 'SecurePass123!'
+        data = {
+            'email': 'nohash@example.com',
+            'password': password,
+            'first_name': 'No',
+            'last_name': 'Hash',
+            'business_name': 'No Hash Corp'
+        }
+        
+        response = client.post('/v1/auth/register', data, format='json')
+        
+        assert response.status_code == status.HTTP_201_CREATED
+        
+        # Verify user was created
+        user = User.objects.get(email='nohash@example.com')
+        
+        # Calculate what the insecure SHA-256 hash would be
+        insecure_hash = hashlib.sha256(password.encode()).hexdigest()
+        
+        # Verify the insecure hash is NOT in the password_hash field
+        assert insecure_hash not in user.password_hash
+        
+        # Verify only PBKDF2 hash is used
+        assert user.password_hash.startswith('pbkdf2_sha256$')
+    
     def test_register_duplicate_email(self):
         """Test registration with existing email fails."""
         # Create existing user

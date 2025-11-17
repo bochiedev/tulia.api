@@ -14,6 +14,19 @@ X-TENANT-API-KEY: your-api-key
 
 ## Common Endpoints
 
+### Authentication (Public - Rate Limited)
+```http
+POST /v1/auth/register             # Register new user (3/hour per IP)
+POST /v1/auth/login                # Login user (5/min per IP, 10/hour per email)
+POST /v1/auth/verify-email         # Verify email (10/hour per IP)
+POST /v1/auth/forgot-password      # Request password reset (3/hour per IP)
+POST /v1/auth/reset-password       # Reset password (5/hour per IP)
+GET  /v1/auth/me                   # Get current user profile (authenticated)
+PUT  /v1/auth/me                   # Update user profile (authenticated)
+POST /v1/auth/logout               # Logout user (authenticated)
+POST /v1/auth/refresh-token        # Refresh JWT token (authenticated)
+```
+
 ### Health & Status
 ```http
 GET /v1/health/                    # System health check (no auth)
@@ -166,13 +179,38 @@ POST   /v1/webhooks/twilio/                     # Twilio webhook (signature veri
 | 500 | Internal Server Error | Server error |
 | 503 | Service Unavailable | Dependency down |
 
-## Rate Limits (per tenant)
+## Rate Limits
+
+### Authentication Endpoints (Public)
+
+| Endpoint | Rate Limit | Key Type |
+|----------|-----------|----------|
+| `POST /v1/auth/register` | 3/hour | IP address |
+| `POST /v1/auth/login` | 5/min per IP<br>10/hour per email | IP + Email |
+| `POST /v1/auth/verify-email` | 10/hour | IP address |
+| `POST /v1/auth/forgot-password` | 3/hour | IP address |
+| `POST /v1/auth/reset-password` | 5/hour | IP address |
+
+### Tenant-Scoped Endpoints
 
 | Tier | Requests/Hour | Messages/Day |
 |------|---------------|--------------|
 | Starter | 1,000 | 1,000 |
 | Growth | 10,000 | 10,000 |
 | Enterprise | Unlimited | Unlimited |
+
+### Rate Limit Response
+
+```json
+HTTP/1.1 429 Too Many Requests
+Retry-After: 3600
+
+{
+  "error": "Rate limit exceeded. Please try again later.",
+  "code": "RATE_LIMIT_EXCEEDED",
+  "retry_after": 3600
+}
+```
 
 ## Pagination
 

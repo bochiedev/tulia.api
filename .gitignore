@@ -37,6 +37,12 @@ db.sqlite3-journal
 # Environment variables
 .env
 .env.local
+.env.*.local
+.env.production
+.env.staging
+.env.development
+*.env
+!.env.example
 
 # IDE
 .vscode/
@@ -66,3 +72,126 @@ Thumbs.db
 
 # Documentation
 docs/_build/
+
+# Secrets and Credentials (SECURITY)
+# Prevent committing any files with common secret patterns
+*secret*
+*SECRET*
+*credentials*
+*CREDENTIALS*
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*.der
+*.csr
+*.jks
+*.keystore
+*.truststore
+
+# API Keys and Tokens
+*apikey*
+*api_key*
+*api-key*
+*APIKEY*
+*API_KEY*
+*API-KEY*
+*token*
+*TOKEN*
+*jwt*
+*JWT*
+*bearer*
+*BEARER*
+
+# Cloud Provider Credentials
+.aws/
+.azure/
+.gcloud/
+*gcp-key*.json
+*service-account*.json
+*firebase-adminsdk*.json
+
+# Database Credentials
+*database.yml
+*database.yaml
+*db-config*
+*db_config*
+
+# Backup files that might contain secrets
+*.backup
+*.bak
+*.old
+*.orig
+*.save
+*.swp
+*.tmp
+
+# Test files with real credentials (common mistake)
+*_real_*
+*_prod_*
+*_production_*
+*_live_*
+test_credentials.py
+test_secrets.py
+real_*.py
+prod_*.py
+
+# Postman collections with secrets
+*postman_collection*.json
+*postman_environment*.json
+!postman/TuliaAI.postman_collection.json
+!postman/TuliaAI.postman_environment.json
+!postman_collection.json
+!postman_environment_template.json
+
+# Private keys and certificates
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+*.ppk
+
+# Configuration files that might contain secrets
+config.local.*
+config.prod.*
+config.production.*
+secrets.yml
+secrets.yaml
+secrets.json
+vault.yml
+vault.yaml
+
+# Terraform state files (often contain secrets)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Kubernetes secrets
+*secret*.yaml
+*secret*.yml
+!*secret-template*.yaml
+!*secret-template*.yml
+
+# Docker secrets
+docker-compose.override.yml
+docker-compose.prod.yml
+!docker-compose.prod.yml
+
+# Ansible vault files
+vault_pass.txt
+.vault_pass
+
+# Private notes and TODO files that might contain credentials
+PRIVATE*.md
+TODO_PRIVATE*.md
+NOTES_PRIVATE*.md
+
+# CI/CD Secrets Files
+ci_secrets_*.txt
+ci_secrets_*.env
+.ci_secrets
+deployment_secrets.txt
+github_secrets.txt
+gitlab_secrets.txt

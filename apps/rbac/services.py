@@ -6,7 +6,6 @@ Implements:
 - AuthService: JWT authentication, user registration, email verification
 """
 import secrets
-import hashlib
 from typing import Set, Optional, Dict, Any
 from datetime import datetime, timedelta
 from django.conf import settings
@@ -496,18 +495,18 @@ class AuthService:
         # Generate email verification token
         verification_token = secrets.token_urlsafe(32)
         
-        # Create user
-        user = User.objects.create(
+        # Create user without saving to database yet
+        user = User(
             email=email,
-            password_hash=hashlib.sha256(password.encode()).hexdigest(),  # Temporary, will use proper hashing
             first_name=first_name,
             last_name=last_name,
             email_verified=False,
             email_verification_token=verification_token,
             email_verification_sent_at=timezone.now(),
         )
-        user.set_password(password)  # Properly hash password
-        user.save(update_fields=['password_hash'])
+        # Set password BEFORE saving to ensure proper hashing
+        user.set_password(password)  # Properly hash password using Django's PBKDF2
+        user.save()  # Now save with properly hashed password
         
         # Create tenant
         tenant_slug = slugify(business_name)

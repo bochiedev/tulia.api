@@ -10,6 +10,7 @@ import json
 
 from apps.integrations.services.payment_service import PaymentService, PaymentProcessingError
 from apps.integrations.models import WebhookLog
+from apps.core.logging import SecurityLogger
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +195,15 @@ class PaystackWebhookView(APIView):
         try:
             # Verify webhook signature
             if not PaystackService.verify_webhook_signature(raw_payload, signature):
+                # Log as critical security event
+                SecurityLogger.log_invalid_webhook_signature(
+                    provider='paystack',
+                    tenant_id=None,  # Tenant not resolved yet for Paystack webhooks
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                    url=request.build_absolute_uri(),
+                    user_agent=request.META.get('HTTP_USER_AGENT')
+                )
+                
                 logger.warning(
                     "Invalid Paystack webhook signature",
                     extra={'webhook_id': str(webhook_log.id)}

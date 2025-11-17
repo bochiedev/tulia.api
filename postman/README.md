@@ -40,6 +40,12 @@ Update these variables in the environment:
 - `access_token` - JWT access token (set automatically after login)
 - `refresh_token` - JWT refresh token (set automatically after login)
 
+**⚠️ SECURITY NOTE:**
+- Never commit tokens to version control
+- Tokens expire after 24 hours by default
+- If you see a hardcoded token in the environment file, delete it and login again
+- After JWT secret rotation, all tokens are invalidated and you must re-login
+
 ### 4. Authenticate (REQUIRED)
 
 **All user endpoints now require JWT authentication.**

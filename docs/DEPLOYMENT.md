@@ -84,6 +84,14 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/2
 # Generate with: python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode('utf-8'))"
 ENCRYPTION_KEY=your-base64-encoded-32-byte-key-here
 
+# JWT Secret Key (REQUIRED - Must be different from SECRET_KEY)
+# SECURITY REQUIREMENTS:
+# - At least 32 characters long
+# - High entropy (random, unpredictable)
+# - Different from SECRET_KEY
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(50))"
+JWT_SECRET_KEY=your-jwt-secret-key-here-must-be-at-least-32-chars
+
 # Rate Limiting
 RATE_LIMIT_ENABLED=True
 ```
@@ -330,8 +338,10 @@ docker-compose exec -T db psql -U tulia_user tulia_db < backup_20250112_120000.s
 
 - [ ] All environment variables configured correctly
 - [ ] `DEBUG=False` in production
-- [ ] `SECRET_KEY` is unique and secure
-- [ ] `ENCRYPTION_KEY` is generated and stored securely
+- [ ] `SECRET_KEY` is unique and secure (at least 50 characters)
+- [ ] `JWT_SECRET_KEY` is set and different from `SECRET_KEY` (at least 32 characters)
+- [ ] `ENCRYPTION_KEY` is generated and stored securely (32 bytes, base64-encoded)
+- [ ] All secret keys have high entropy (validated on startup)
 - [ ] Database backups configured
 - [ ] SSL/TLS certificates installed
 - [ ] Sentry DSN configured
@@ -969,16 +979,43 @@ redis-cli info stats | grep keyspace
 
 ## Security Considerations
 
+### Startup Security Validation
+
+The application performs automatic validation of critical security settings on startup. **The application will refuse to start** if any security requirements are not met:
+
+1. **JWT_SECRET_KEY Validation**:
+   - Must be explicitly set (no default fallback)
+   - Minimum length: 32 characters
+   - Must be different from SECRET_KEY
+   - Must have high entropy (at least 16 unique characters)
+   - Cannot be simple repeating patterns
+
+2. **ENCRYPTION_KEY Validation**:
+   - Must be exactly 32 bytes (base64-encoded)
+   - Must be valid base64 format
+
+**Example validation error**:
+```
+django.core.exceptions.ImproperlyConfigured: JWT_SECRET_KEY must be at least 32 characters long for security.
+Current length: 20. Generate a strong key with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+This fail-fast approach ensures that weak or missing security configurations are caught immediately, preventing deployment with insecure settings.
+
+### General Security Best Practices
+
 1. **Never commit secrets** to version control
-2. **Rotate credentials** regularly (every 90 days)
-3. **Use strong passwords** for database and Redis
-4. **Enable SSL/TLS** for all external connections
-5. **Keep dependencies updated** for security patches
-6. **Monitor access logs** for suspicious activity
-7. **Implement rate limiting** to prevent abuse
-8. **Use firewall rules** to restrict access
-9. **Enable audit logging** for sensitive operations
-10. **Regular security audits** and penetration testing
+2. **Use the provided key generation script**: `python scripts/generate_secrets.py`
+3. **Rotate credentials** regularly (every 90 days)
+4. **Use strong passwords** for database and Redis
+5. **Enable SSL/TLS** for all external connections
+6. **Keep dependencies updated** for security patches
+7. **Monitor access logs** for suspicious activity
+8. **Implement rate limiting** to prevent abuse (enabled by default)
+9. **Use firewall rules** to restrict access
+10. **Enable audit logging** for sensitive operations
+11. **Regular security audits** and penetration testing
+12. **Store secrets in secrets management systems** (AWS Secrets Manager, HashiCorp Vault, etc.)
 
 ---
 

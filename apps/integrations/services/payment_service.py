@@ -23,6 +23,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.core.exceptions import TuliaException
+from apps.core.logging import SecurityLogger
 from apps.tenants.models import Tenant, Transaction
 from apps.tenants.services.wallet_service import WalletService
 from apps.orders.models import Order
@@ -510,6 +511,14 @@ class PaymentService:
                         json.dumps(payload), signature, webhook_secret
                     )
                 except stripe.error.SignatureVerificationError:
+                    # Log as critical security event
+                    SecurityLogger.log_invalid_webhook_signature(
+                        provider='stripe',
+                        tenant_id=None,  # Tenant not resolved yet for Stripe webhooks
+                        ip_address=None,  # Not available in service layer
+                        url=None,  # Not available in service layer
+                        user_agent=None
+                    )
                     raise PaymentProcessingError(
                         "Invalid Stripe webhook signature",
                         details={'signature_valid': False}

@@ -427,6 +427,70 @@ class TestRoleManagement:
 
 
 @pytest.mark.django_db
+class TestPasswordHashing:
+    """Test secure password hashing."""
+    
+    def test_register_user_uses_pbkdf2_hashing(self, subscription_tier):
+        """Test that register_user uses PBKDF2 password hashing."""
+        from apps.rbac.services import AuthService
+        
+        email = 'newuser@example.com'
+        password = 'SecurePassword123!'
+        business_name = 'New Business'
+        
+        # Register user
+        result = AuthService.register_user(
+            email=email,
+            password=password,
+            business_name=business_name,
+            first_name='John',
+            last_name='Doe'
+        )
+        
+        user = result['user']
+        
+        # Verify password is hashed (not plaintext)
+        assert user.password != password
+        
+        # Verify password uses PBKDF2 algorithm (Django default)
+        # PBKDF2 hashes start with 'pbkdf2_sha256$'
+        assert user.password.startswith('pbkdf2_sha256$')
+        
+        # Verify password can be checked correctly
+        assert user.check_password(password) is True
+        assert user.check_password('WrongPassword') is False
+    
+    def test_register_user_password_not_retrievable(self, subscription_tier):
+        """Test that password cannot be retrieved from hash."""
+        from apps.rbac.services import AuthService
+        
+        email = 'testuser@example.com'
+        password = 'MySecretPassword456!'
+        business_name = 'Test Business'
+        
+        # Register user
+        result = AuthService.register_user(
+            email=email,
+            password=password,
+            business_name=business_name
+        )
+        
+        user = result['user']
+        
+        # Verify password hash doesn't contain the plaintext password
+        assert password not in user.password
+        
+        # Verify hash is sufficiently long (PBKDF2 hashes are ~80+ chars)
+        assert len(user.password) > 70
+        
+        # Verify hash contains salt (PBKDF2 format: algorithm$iterations$salt$hash)
+        parts = user.password.split('$')
+        assert len(parts) == 4  # algorithm, iterations, salt, hash
+        assert parts[0] == 'pbkdf2_sha256'
+        assert int(parts[1]) >= 260000  # Django 4.2+ uses 260,000 iterations
+
+
+@pytest.mark.django_db
 class TestFourEyesValidation:
     """Test four-eyes approval validation."""
     

@@ -25,6 +25,10 @@ cp .env.example .env
 python3 -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode('utf-8'))"
 # Copy the output and set ENCRYPTION_KEY in .env
 
+# Generate JWT secret key (REQUIRED - must be different from SECRET_KEY)
+python3 -c "import secrets; print(secrets.token_urlsafe(50))"
+# Copy the output and set JWT_SECRET_KEY in .env
+
 # Set your OpenAI API key in .env
 # OPENAI_API_KEY=sk-your-key-here
 ```

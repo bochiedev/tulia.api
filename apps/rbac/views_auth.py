@@ -45,7 +45,7 @@ Returns JWT token for immediate login and tenant information.
 
 **No authentication required** - this is a public endpoint.
 
-**Rate limit**: 10 requests/minute per IP
+**Rate limit**: 3 requests/hour per IP
     ''',
     request=RegistrationSerializer,
     responses={
@@ -108,7 +108,7 @@ Returns JWT token for immediate login and tenant information.
         )
     ]
 )
-@method_decorator(ratelimit(key='ip', rate='10/m', method='POST', block=True), name='dispatch')
+@method_decorator(ratelimit(key='ip', rate='3/h', method='POST', block=False), name='dispatch')
 class RegistrationView(APIView):
     """
     POST /v1/auth/register
@@ -116,13 +116,39 @@ class RegistrationView(APIView):
     Register new user with first tenant.
     
     No authentication required.
-    Rate limited to 10 requests per minute per IP.
+    Rate limited to 3 requests per hour per IP.
     """
     authentication_classes = []
     permission_classes = []
     
     def post(self, request):
         """Register new user."""
+        from apps.core.logging import SecurityLogger
+        
+        # Check if rate limited
+        if getattr(request, 'limited', False):
+            # Get client IP
+            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+            
+            # Log rate limit violation
+            SecurityLogger.log_rate_limit_exceeded(
+                endpoint='/v1/auth/register',
+                ip_address=ip_address,
+                limit='3/hour per IP'
+            )
+            
+            retry_after = 3600  # 1 hour
+            response = Response(
+                {
+                    'error': 'Rate limit exceeded. Please try again later.',
+                    'code': 'RATE_LIMIT_EXCEEDED',
+                    'retry_after': retry_after
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+            response['Retry-After'] = str(retry_after)
+            return response
+        
         serializer = RegistrationSerializer(data=request.data)
         
         if not serializer.is_valid():
@@ -231,7 +257,9 @@ Returns JWT token for API authentication and user information.
 
 **No authentication required** - this is a public endpoint.
 
-**Rate limit**: 10 requests/minute per IP
+**Rate limits**:
+- 5 requests/minute per IP address
+- 10 requests/hour per email address
     ''',
     request=LoginSerializer,
     responses={
@@ -275,14 +303,16 @@ Returns JWT token for API authentication and user information.
         OpenApiExample(
             'Rate Limit Exceeded',
             value={
-                'error': 'Rate limit exceeded. Please try again later.'
+                'error': 'Rate limit exceeded. Please try again later.',
+                'code': 'RATE_LIMIT_EXCEEDED'
             },
             response_only=True,
             status_codes=['429']
         )
     ]
 )
-@method_decorator(ratelimit(key='ip', rate='10/m', method='POST', block=True), name='dispatch')
+@method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=False), name='dispatch')
+@method_decorator(ratelimit(key='post:email', rate='10/h', method='POST', block=False), name='dispatch')
 class LoginView(APIView):
     """
     POST /v1/auth/login
@@ -290,13 +320,43 @@ class LoginView(APIView):
     Authenticate user and return JWT token.
     
     No authentication required.
-    Rate limited to 10 requests per minute per IP.
+    Rate limited to:
+    - 5 requests per minute per IP address
+    - 10 requests per hour per email address
     """
     authentication_classes = []
     permission_classes = []
     
     def post(self, request):
         """Login user."""
+        from apps.core.logging import SecurityLogger
+        
+        # Check if rate limited
+        if getattr(request, 'limited', False):
+            # Get client IP and email
+            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+            email = request.data.get('email', 'unknown') if hasattr(request, 'data') else 'unknown'
+            
+            # Log rate limit violation
+            SecurityLogger.log_rate_limit_exceeded(
+                endpoint='/v1/auth/login',
+                ip_address=ip_address,
+                user_email=email,
+                limit='5/min per IP or 10/hour per email'
+            )
+            
+            retry_after = 60  # 1 minute
+            response = Response(
+                {
+                    'error': 'Rate limit exceeded. Please try again later.',
+                    'code': 'RATE_LIMIT_EXCEEDED',
+                    'retry_after': retry_after
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+            response['Retry-After'] = str(retry_after)
+            return response
+        
         serializer = LoginSerializer(data=request.data)
         
         if not serializer.is_valid():
@@ -315,6 +375,17 @@ class LoginView(APIView):
         )
         
         if not result:
+            # Log failed login attempt
+            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+            user_agent = request.META.get('HTTP_USER_AGENT', 'unknown')
+            
+            SecurityLogger.log_failed_login(
+                email=serializer.validated_data['email'],
+                ip_address=ip_address,
+                user_agent=user_agent,
+                reason='Invalid credentials'
+            )
+            
             return Response(
                 {
                     'error': 'Invalid email or password'
@@ -351,11 +422,14 @@ Verify user email address with verification token.
 Token is sent via email during registration and is valid for 24 hours.
 
 **No authentication required** - this is a public endpoint.
+
+**Rate limit**: 10 requests/hour per IP
     ''',
     request=EmailVerificationSerializer,
     responses={
         200: OpenApiTypes.OBJECT,
         400: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
     },
     examples=[
         OpenApiExample(
@@ -379,9 +453,19 @@ Token is sent via email during registration and is valid for 24 hours.
             },
             response_only=True,
             status_codes=['400']
+        ),
+        OpenApiExample(
+            'Rate Limit Exceeded',
+            value={
+                'error': 'Rate limit exceeded. Please try again later.',
+                'code': 'RATE_LIMIT_EXCEEDED'
+            },
+            response_only=True,
+            status_codes=['429']
         )
     ]
 )
+@method_decorator(ratelimit(key='ip', rate='10/h', method='POST', block=False), name='dispatch')
 class EmailVerificationView(APIView):
     """
     POST /v1/auth/verify-email
@@ -389,12 +473,39 @@ class EmailVerificationView(APIView):
     Verify user email with token.
     
     No authentication required.
+    Rate limited to 10 requests per hour per IP.
     """
     authentication_classes = []
     permission_classes = []
     
     def post(self, request):
         """Verify email."""
+        from apps.core.logging import SecurityLogger
+        
+        # Check if rate limited
+        if getattr(request, 'limited', False):
+            # Get client IP
+            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+            
+            # Log rate limit violation
+            SecurityLogger.log_rate_limit_exceeded(
+                endpoint='/v1/auth/verify-email',
+                ip_address=ip_address,
+                limit='10/hour per IP'
+            )
+            
+            retry_after = 3600  # 1 hour
+            response = Response(
+                {
+                    'error': 'Rate limit exceeded. Please try again later.',
+                    'code': 'RATE_LIMIT_EXCEEDED',
+                    'retry_after': retry_after
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+            response['Retry-After'] = str(retry_after)
+            return response
+        
         serializer = EmailVerificationSerializer(data=request.data)
         
         if not serializer.is_valid():
@@ -437,7 +548,7 @@ Sends password reset email with token valid for 24 hours.
 
 **No authentication required** - this is a public endpoint.
 
-**Rate limit**: 5 requests/minute per IP
+**Rate limit**: 3 requests/hour per IP
     ''',
     request=PasswordResetRequestSerializer,
     responses={
@@ -469,7 +580,7 @@ Sends password reset email with token valid for 24 hours.
         )
     ]
 )
-@method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=True), name='dispatch')
+@method_decorator(ratelimit(key='ip', rate='3/h', method='POST', block=False), name='dispatch')
 class ForgotPasswordView(APIView):
     """
     POST /v1/auth/forgot-password
@@ -477,13 +588,39 @@ class ForgotPasswordView(APIView):
     Request password reset.
     
     No authentication required.
-    Rate limited to 5 requests per minute per IP.
+    Rate limited to 3 requests per hour per IP.
     """
     authentication_classes = []
     permission_classes = []
     
     def post(self, request):
         """Request password reset."""
+        from apps.core.logging import SecurityLogger
+        
+        # Check if rate limited
+        if getattr(request, 'limited', False):
+            # Get client IP
+            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+            
+            # Log rate limit violation
+            SecurityLogger.log_rate_limit_exceeded(
+                endpoint='/v1/auth/forgot-password',
+                ip_address=ip_address,
+                limit='3/hour per IP'
+            )
+            
+            retry_after = 3600  # 1 hour
+            response = Response(
+                {
+                    'error': 'Rate limit exceeded. Please try again later.',
+                    'code': 'RATE_LIMIT_EXCEEDED',
+                    'retry_after': retry_after
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+            response['Retry-After'] = str(retry_after)
+            return response
+        
         serializer = PasswordResetRequestSerializer(data=request.data)
         
         if not serializer.is_valid():
@@ -548,11 +685,14 @@ Reset user password with reset token.
 Token is sent via email and is valid for 24 hours.
 
 **No authentication required** - this is a public endpoint.
+
+**Rate limit**: 5 requests/hour per IP
     ''',
     request=PasswordResetSerializer,
     responses={
         200: OpenApiTypes.OBJECT,
         400: OpenApiTypes.OBJECT,
+        429: OpenApiTypes.OBJECT,
     },
     examples=[
         OpenApiExample(
@@ -577,9 +717,19 @@ Token is sent via email and is valid for 24 hours.
             },
             response_only=True,
             status_codes=['400']
+        ),
+        OpenApiExample(
+            'Rate Limit Exceeded',
+            value={
+                'error': 'Rate limit exceeded. Please try again later.',
+                'code': 'RATE_LIMIT_EXCEEDED'
+            },
+            response_only=True,
+            status_codes=['429']
         )
     ]
 )
+@method_decorator(ratelimit(key='ip', rate='5/h', method='POST', block=False), name='dispatch')
 class ResetPasswordView(APIView):
     """
     POST /v1/auth/reset-password
@@ -587,12 +737,39 @@ class ResetPasswordView(APIView):
     Reset password with token.
     
     No authentication required.
+    Rate limited to 5 requests per hour per IP.
     """
     authentication_classes = []
     permission_classes = []
     
     def post(self, request):
         """Reset password."""
+        from apps.core.logging import SecurityLogger
+        
+        # Check if rate limited
+        if getattr(request, 'limited', False):
+            # Get client IP
+            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+            
+            # Log rate limit violation
+            SecurityLogger.log_rate_limit_exceeded(
+                endpoint='/v1/auth/reset-password',
+                ip_address=ip_address,
+                limit='5/hour per IP'
+            )
+            
+            retry_after = 3600  # 1 hour
+            response = Response(
+                {
+                    'error': 'Rate limit exceeded. Please try again later.',
+                    'code': 'RATE_LIMIT_EXCEEDED',
+                    'retry_after': retry_after
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+            response['Retry-After'] = str(retry_after)
+            return response
+        
         serializer = PasswordResetSerializer(data=request.data)
         
         if not serializer.is_valid():

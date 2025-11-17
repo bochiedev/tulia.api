@@ -151,9 +151,12 @@ python test_all_auth.py
 
 ## Token Information
 
-**Current Token (owner@starter.demo):**
-```
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOGU0ZTU5NGYtODZjZC00NTVhLTg2MzktMTg1NWMyZjA3ZTNlIiwiZW1haWwiOiJvd25lckBzdGFydGVyLmRlbW8iLCJleHAiOjE3NjMxODc5ODQsImlhdCI6MTc2MzEwMTU4NH0.KNc2y6uUd2GSvIxQq-Hm5mAYASyI7CpAXnGaZmdwsAo
+**Obtain Token (owner@starter.demo):**
+```bash
+# Login to get a fresh token
+curl -X POST http://localhost:8000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "owner@starter.demo", "password": "your-password"}'
 ```
 
 **Expires:** Nov 15, 2025 at ~8:30 AM (24 hours)

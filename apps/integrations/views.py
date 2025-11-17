@@ -5,6 +5,9 @@ Handles incoming webhooks from Twilio, WooCommerce, Shopify, etc.
 """
 import logging
 import traceback
+import hashlib
+import hmac
+import base64
 from typing import Optional, Dict, Any
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -16,8 +19,88 @@ from apps.tenants.models import Tenant, Customer
 from apps.messaging.models import Conversation, Message
 from apps.integrations.models import WebhookLog
 from apps.integrations.services import TwilioService
+from apps.core.logging import SecurityLogger
 
 logger = logging.getLogger(__name__)
+
+
+def verify_twilio_signature(
+    url: str,
+    params: Dict[str, Any],
+    signature: str,
+    auth_token: str
+) -> bool:
+    """
+    Verify Twilio webhook signature for security.
+    
+    Validates that the webhook request came from Twilio by comparing
+    the X-Twilio-Signature header with a computed HMAC-SHA1 signature.
+    
+    This is a critical security measure to prevent webhook spoofing and
+    unauthorized message injection.
+    
+    Args:
+        url: Full webhook URL including protocol, domain, and path
+        params: POST parameters from the webhook request as a dict
+        signature: X-Twilio-Signature header value from the request
+        auth_token: Twilio Auth Token for the tenant
+        
+    Returns:
+        bool: True if signature is valid, False otherwise
+        
+    Security Notes:
+        - Uses HMAC-SHA1 with the auth token as the secret key
+        - Compares signatures using constant-time comparison to prevent timing attacks
+        - Returns False on any exception to fail securely
+        
+    Example:
+        >>> url = request.build_absolute_uri()
+        >>> params = dict(request.POST.items())
+        >>> signature = request.META.get('HTTP_X_TWILIO_SIGNATURE', '')
+        >>> is_valid = verify_twilio_signature(url, params, signature, tenant.twilio_token)
+        >>> if not is_valid:
+        ...     return HttpResponse('Unauthorized', status=403)
+    """
+    try:
+        # Sort parameters alphabetically and concatenate with URL
+        # Format: URL + key1value1 + key2value2 + ...
+        sorted_params = sorted(params.items())
+        data = url + ''.join(f'{k}{v}' for k, v in sorted_params)
+        
+        # Compute HMAC-SHA1 signature using auth token as key
+        computed_signature = hmac.new(
+            auth_token.encode('utf-8'),
+            data.encode('utf-8'),
+            hashlib.sha1
+        ).digest()
+        
+        # Base64 encode the computed signature
+        computed_signature_b64 = base64.b64encode(computed_signature).decode('utf-8')
+        
+        # Use constant-time comparison to prevent timing attacks
+        is_valid = hmac.compare_digest(computed_signature_b64, signature)
+        
+        if not is_valid:
+            logger.warning(
+                "Twilio signature verification failed",
+                extra={
+                    'url': url,
+                    'expected_signature': signature[:10] + '...',  # Log only prefix for security
+                    'computed_signature': computed_signature_b64[:10] + '...'
+                }
+            )
+            # Log as security event (will be logged separately with more context by caller)
+        
+        return is_valid
+        
+    except Exception as e:
+        logger.error(
+            "Error verifying Twilio signature",
+            extra={'url': url, 'error': str(e)},
+            exc_info=True
+        )
+        # Fail securely - return False on any exception
+        return False
 
 
 def resolve_tenant_from_twilio(payload: Dict[str, Any]) -> Optional[Tenant]:
@@ -226,21 +309,31 @@ def twilio_webhook(request):
             twilio_sid = tenant.twilio_sid
             twilio_token = tenant.twilio_token
         
+        # Verify signature using the helper function
+        if not verify_twilio_signature(full_url, payload, signature, twilio_token):
+            webhook_log.mark_unauthorized('Twilio signature verification failed')
+            
+            # Log as critical security event
+            SecurityLogger.log_invalid_webhook_signature(
+                provider='twilio',
+                tenant_id=str(tenant.id),
+                ip_address=request.META.get('REMOTE_ADDR'),
+                url=full_url,
+                user_agent=request.META.get('HTTP_USER_AGENT')
+            )
+            
+            logger.warning(
+                "Twilio signature verification failed",
+                extra={'tenant_id': str(tenant.id), 'url': full_url}
+            )
+            return HttpResponse('Unauthorized', status=403)
+        
+        # Create TwilioService instance for sending messages
         twilio_service = TwilioService(
             account_sid=twilio_sid,
             auth_token=twilio_token,
             from_number=tenant.whatsapp_number
         )
-        
-        # Verify signature using auth_token (not webhook_secret)
-        # Pass None to use the auth_token from the TwilioService instance
-        if not twilio_service.verify_signature(full_url, payload, signature):
-            webhook_log.mark_unauthorized('Twilio signature verification failed')
-            logger.warning(
-                f"Twilio signature verification failed",
-                extra={'tenant_id': str(tenant.id), 'url': full_url}
-            )
-            return HttpResponse('Unauthorized', status=401)
         
         # Step 4: Check subscription status
         if not tenant.is_active():
@@ -336,6 +429,10 @@ def twilio_status_callback(request):
     - read: Message read by recipient (if supported)
     - failed: Message delivery failed
     - undelivered: Message could not be delivered
+    
+    Security:
+    - Verifies Twilio signature to prevent spoofing
+    - Returns 403 for invalid signatures
     """
     try:
         payload = dict(request.POST.items())
@@ -350,20 +447,68 @@ def twilio_status_callback(request):
             }
         )
         
-        # Find message by provider_msg_id
+        # Find message by provider_msg_id to get tenant for signature verification
         try:
-            message = Message.objects.get(provider_msg_id=message_sid)
+            message = Message.objects.select_related(
+                'conversation__tenant',
+                'conversation__tenant__settings'
+            ).get(provider_msg_id=message_sid)
+            
+            tenant = message.conversation.tenant
+            
+            # Verify Twilio signature
+            signature = request.META.get('HTTP_X_TWILIO_SIGNATURE', '')
+            full_url = request.build_absolute_uri()
+            
+            # Get Twilio credentials from TenantSettings (preferred) or Tenant model (fallback)
+            try:
+                settings = tenant.settings
+                if settings.has_twilio_configured():
+                    twilio_token = settings.twilio_token
+                else:
+                    # Fallback to Tenant model
+                    twilio_token = tenant.twilio_token
+            except AttributeError:
+                # Fallback to Tenant model
+                twilio_token = tenant.twilio_token
+            
+            # Verify signature using the helper function
+            if not verify_twilio_signature(full_url, payload, signature, twilio_token):
+                # Log as critical security event
+                SecurityLogger.log_invalid_webhook_signature(
+                    provider='twilio',
+                    tenant_id=str(tenant.id),
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                    url=full_url,
+                    user_agent=request.META.get('HTTP_USER_AGENT')
+                )
+                
+                logger.warning(
+                    "Twilio status callback signature verification failed",
+                    extra={
+                        'tenant_id': str(tenant.id),
+                        'message_sid': message_sid,
+                        'url': full_url
+                    }
+                )
+                return HttpResponse('Unauthorized', status=403)
             
             # Update message status
             message.provider_status = message_status
             
             if message_status == 'delivered':
                 message.mark_delivered()
+                message.provider_status = message_status
+                message.save(update_fields=['provider_status'])
             elif message_status == 'read':
                 message.mark_read()
+                message.provider_status = message_status
+                message.save(update_fields=['provider_status'])
             elif message_status in ['failed', 'undelivered']:
                 error_message = payload.get('ErrorMessage', 'Delivery failed')
                 message.mark_failed(error_message)
+                message.provider_status = message_status
+                message.save(update_fields=['provider_status'])
             else:
                 message.save(update_fields=['provider_status'])
             
@@ -380,6 +525,8 @@ def twilio_status_callback(request):
                 f"Message not found for status callback",
                 extra={'message_sid': message_sid}
             )
+            # Return 404 for unknown messages to prevent information disclosure
+            return HttpResponse('Message not found', status=404)
         
         return HttpResponse('OK', status=200)
     
