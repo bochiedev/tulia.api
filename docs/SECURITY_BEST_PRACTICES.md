@@ -735,35 +735,159 @@ query = f"SELECT * FROM products WHERE name = '{search_term}'"  # VULNERABLE!
 
 ### Encryption Key Requirements
 
+**Status**: ✅ Implemented with comprehensive validation
+
+All encryption keys must meet strict security requirements to ensure data protection. The platform validates encryption keys on startup and rejects weak keys.
+
+#### Key Generation
+
+**Generate a secure encryption key:**
+
+```bash
+# Method 1: Using Python (Recommended)
+python scripts/generate_encryption_key.py
+
+# Method 2: Using Python one-liner
+python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
+
+# Method 3: Using OpenSSL
+openssl rand -base64 32
+```
+
+**Add to .env file:**
+
+```bash
+ENCRYPTION_KEY=<generated_key_here>
+```
+
+#### Key Validation
+
+**Implementation** (apps/core/encryption.py):
+
 ```python
 import base64
-import secrets
+import os
 
-def generate_encryption_key():
-    """Generate secure 256-bit encryption key."""
-    key = secrets.token_bytes(32)  # 32 bytes = 256 bits
-    return base64.b64encode(key).decode('utf-8')
-
-def validate_encryption_key(key_b64):
-    """Validate encryption key strength."""
+def validate_encryption_key(key_b64: str) -> bytes:
+    """
+    Validate encryption key strength and return decoded key.
+    
+    Performs comprehensive validation to ensure the encryption key meets
+    security requirements:
+    - Must be valid base64
+    - Must be exactly 32 bytes (256 bits) when decoded
+    - Must have sufficient entropy (at least 16 unique bytes)
+    - Must not be a weak key (all zeros, simple patterns)
+    
+    Args:
+        key_b64: Base64-encoded encryption key string
+        
+    Returns:
+        bytes: Decoded 32-byte encryption key
+        
+    Raises:
+        ValueError: If key validation fails with specific reason
+    """
+    if not key_b64:
+        raise ValueError(
+            "Encryption key is required. "
+            "Generate with: python scripts/generate_encryption_key.py"
+        )
+    
+    # Decode base64
     try:
         key = base64.b64decode(key_b64)
-    except Exception:
-        raise ValueError("Key must be valid base64")
+    except Exception as e:
+        raise ValueError(
+            f"Encryption key must be valid base64: {str(e)}. "
+            f"Generate with: python scripts/generate_encryption_key.py"
+        )
     
-    # Length check
+    # Length check - must be exactly 32 bytes for AES-256
     if len(key) != 32:
-        raise ValueError("Key must be 32 bytes (256 bits)")
+        raise ValueError(
+            f"Encryption key must be exactly 32 bytes (256 bits). "
+            f"Current length: {len(key)} bytes. "
+            f"Generate with: python scripts/generate_encryption_key.py"
+        )
     
-    # Entropy check
-    if len(set(key)) < 16:
-        raise ValueError("Key has insufficient entropy")
+    # Entropy check - must have at least 16 unique bytes (50% of key length)
+    unique_bytes = len(set(key))
+    if unique_bytes < 16:
+        raise ValueError(
+            f"Encryption key has insufficient entropy. "
+            f"Found only {unique_bytes} unique bytes, need at least 16. "
+            f"Generate with: python scripts/generate_encryption_key.py"
+        )
     
-    # Weak key check
+    # Weak key check - all zeros
     if key == b'\x00' * 32:
-        raise ValueError("Key is all zeros")
+        raise ValueError(
+            "Encryption key is all zeros (weak key). "
+            "Generate with: python scripts/generate_encryption_key.py"
+        )
+    
+    # Weak key check - all same byte
+    if key == bytes([key[0]]) * 32:
+        raise ValueError(
+            f"Encryption key is repeating byte pattern (weak key). "
+            f"Generate with: python scripts/generate_encryption_key.py"
+        )
+    
+    # Check for simple repeating patterns (e.g., "abababab...")
+    for pattern_len in [2, 4, 8]:
+        pattern = key[:pattern_len]
+        expected = pattern * (32 // pattern_len)
+        if key == expected:
+            raise ValueError(
+                f"Encryption key is a simple {pattern_len}-byte repeating pattern (weak key). "
+                f"Generate with: python scripts/generate_encryption_key.py"
+            )
     
     return key
+```
+
+#### Validation Rules
+
+The platform enforces these validation rules:
+
+1. **Required**: Key must be provided (no default)
+2. **Format**: Must be valid base64-encoded string
+3. **Length**: Must be exactly 32 bytes (256 bits) when decoded
+4. **Entropy**: Must have at least 16 unique bytes (50% of key length)
+5. **Not All Zeros**: Key cannot be all zero bytes
+6. **Not Repeating**: Key cannot be a single byte repeated
+7. **Not Simple Pattern**: Key cannot be simple 2/4/8-byte repeating patterns
+
+#### Weak Keys (Rejected)
+
+These keys will be rejected on startup:
+
+```python
+# ❌ Too short (16 bytes)
+ENCRYPTION_KEY=dGVzdGtleTE2Ynl0ZXM=
+
+# ❌ All zeros
+ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+# ❌ Repeating single byte
+ENCRYPTION_KEY=QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=
+
+# ❌ Simple 2-byte pattern
+ENCRYPTION_KEY=YWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYg==
+
+# ❌ Low entropy (only 10 unique bytes)
+ENCRYPTION_KEY=AAECAwQFBgcICQABAgMEBQYHCAkAAQIDBAUGBw==
+```
+
+#### Strong Keys (Accepted)
+
+```python
+# ✅ Cryptographically secure random key
+ENCRYPTION_KEY=3q2+7w5k8x/A4B5C6D7E8F9G0H1I2J3K4L5M6N7O8P==
+
+# ✅ Generated with os.urandom(32)
+ENCRYPTION_KEY=xK8vN2mP5qR9sT3wU7yV1zA4bC6dE8fG0hI2jK4lM6n=
 ```
 
 ### Key Rotation

@@ -174,19 +174,34 @@ class Conversation(BaseModel):
         self.save(update_fields=['status', 'low_confidence_count'])
     
     def increment_low_confidence(self):
-        """Increment low confidence counter."""
-        self.low_confidence_count += 1
+        """
+        Increment low confidence counter atomically.
+        
+        Uses F() expression to prevent race conditions where multiple
+        concurrent requests could lose count updates.
+        """
+        from django.db.models import F
+        
+        # Atomically increment the counter
+        Conversation.objects.filter(id=self.id).update(
+            low_confidence_count=F('low_confidence_count') + 1
+        )
+        
+        # Refresh from database to get updated value
+        self.refresh_from_db(fields=['low_confidence_count'])
         
         # Auto-handoff after 2 consecutive low confidence intents
         if self.low_confidence_count >= 2:
             self.mark_handoff()
-        else:
-            self.save(update_fields=['low_confidence_count'])
     
     def reset_low_confidence(self):
-        """Reset low confidence counter after successful intent."""
+        """
+        Reset low confidence counter after successful intent.
+        
+        Uses atomic update to prevent race conditions.
+        """
+        Conversation.objects.filter(id=self.id).update(low_confidence_count=0)
         self.low_confidence_count = 0
-        self.save(update_fields=['low_confidence_count'])
 
 
 class MessageManager(models.Manager):
@@ -259,7 +274,8 @@ class Message(BaseModel):
     
     # Content
     text = models.TextField(
-        help_text="Message text content"
+        max_length=10000,
+        help_text="Message text content (max 10,000 characters)"
     )
     payload = models.JSONField(
         default=dict,
@@ -392,7 +408,8 @@ class MessageTemplate(BaseModel):
         help_text="Template name for identification"
     )
     content = models.TextField(
-        help_text="Template content with {{placeholder}} syntax"
+        max_length=5000,
+        help_text="Template content with {{placeholder}} syntax (max 5,000 characters)"
     )
     message_type = models.CharField(
         max_length=20,
@@ -428,9 +445,17 @@ class MessageTemplate(BaseModel):
         return f"{self.name} ({self.tenant.slug})"
     
     def increment_usage(self):
-        """Increment usage counter."""
-        self.usage_count += 1
-        self.save(update_fields=['usage_count'])
+        """
+        Increment usage counter atomically.
+        
+        Uses F() expression to prevent race conditions when multiple
+        messages use the same template concurrently.
+        """
+        from django.db.models import F
+        MessageTemplate.objects.filter(id=self.id).update(
+            usage_count=F('usage_count') + 1
+        )
+        self.refresh_from_db(fields=['usage_count'])
 
 
 class CustomerPreferencesManager(models.Manager):
@@ -503,8 +528,9 @@ class CustomerPreferences(BaseModel):
         help_text="Source of last update (customer, tenant, system)"
     )
     notes = models.TextField(
+        max_length=5000,
         blank=True,
-        help_text="Additional notes about preference changes"
+        help_text="Additional notes about preference changes (max 5,000 characters)"
     )
     
     # Custom manager
@@ -736,7 +762,8 @@ class ScheduledMessage(BaseModel):
     
     # Content
     content = models.TextField(
-        help_text="Message content to send"
+        max_length=10000,
+        help_text="Message content to send (max 10,000 characters)"
     )
     template = models.ForeignKey(
         MessageTemplate,
@@ -937,7 +964,8 @@ class MessageCampaign(BaseModel):
     
     # Message Content
     message_content = models.TextField(
-        help_text="Default message content to send"
+        max_length=10000,
+        help_text="Default message content to send (max 10,000 characters)"
     )
     template = models.ForeignKey(
         MessageTemplate,
@@ -1130,34 +1158,76 @@ class MessageCampaign(BaseModel):
         return False
     
     def increment_delivery(self):
-        """Increment delivery count."""
-        self.delivery_count += 1
-        self.save(update_fields=['delivery_count'])
+        """
+        Increment delivery count atomically.
+        
+        Uses F() expression to prevent race conditions in concurrent campaign sends.
+        """
+        from django.db.models import F
+        MessageCampaign.objects.filter(id=self.id).update(
+            delivery_count=F('delivery_count') + 1
+        )
+        self.refresh_from_db(fields=['delivery_count'])
     
     def increment_delivered(self):
-        """Increment delivered count."""
-        self.delivered_count += 1
-        self.save(update_fields=['delivered_count'])
+        """
+        Increment delivered count atomically.
+        
+        Uses F() expression to prevent race conditions in concurrent deliveries.
+        """
+        from django.db.models import F
+        MessageCampaign.objects.filter(id=self.id).update(
+            delivered_count=F('delivered_count') + 1
+        )
+        self.refresh_from_db(fields=['delivered_count'])
     
     def increment_failed(self):
-        """Increment failed count."""
-        self.failed_count += 1
-        self.save(update_fields=['failed_count'])
+        """
+        Increment failed count atomically.
+        
+        Uses F() expression to prevent race conditions in concurrent failures.
+        """
+        from django.db.models import F
+        MessageCampaign.objects.filter(id=self.id).update(
+            failed_count=F('failed_count') + 1
+        )
+        self.refresh_from_db(fields=['failed_count'])
     
     def increment_read(self):
-        """Increment read count."""
-        self.read_count += 1
-        self.save(update_fields=['read_count'])
+        """
+        Increment read count atomically.
+        
+        Uses F() expression to prevent race conditions in concurrent read receipts.
+        """
+        from django.db.models import F
+        MessageCampaign.objects.filter(id=self.id).update(
+            read_count=F('read_count') + 1
+        )
+        self.refresh_from_db(fields=['read_count'])
     
     def increment_response(self):
-        """Increment response count."""
-        self.response_count += 1
-        self.save(update_fields=['response_count'])
+        """
+        Increment response count atomically.
+        
+        Uses F() expression to prevent race conditions in concurrent responses.
+        """
+        from django.db.models import F
+        MessageCampaign.objects.filter(id=self.id).update(
+            response_count=F('response_count') + 1
+        )
+        self.refresh_from_db(fields=['response_count'])
     
     def increment_conversion(self):
-        """Increment conversion count."""
-        self.conversion_count += 1
-        self.save(update_fields=['conversion_count'])
+        """
+        Increment conversion count atomically.
+        
+        Uses F() expression to prevent race conditions in concurrent conversions.
+        """
+        from django.db.models import F
+        MessageCampaign.objects.filter(id=self.id).update(
+            conversion_count=F('conversion_count') + 1
+        )
+        self.refresh_from_db(fields=['conversion_count'])
     
     def validate_buttons(self):
         """

@@ -28,6 +28,33 @@ class RBACService:
     SCOPE_CACHE_TTL = 300  # 5 minutes
     
     @classmethod
+    def _get_cache_version(cls, tenant_user: TenantUser) -> int:
+        """
+        Get current cache version for a tenant user.
+        
+        Cache versioning prevents race conditions where:
+        1. Thread A reads scopes from DB
+        2. Thread B invalidates cache
+        3. Thread A writes stale scopes to cache
+        
+        By using versions, Thread A's write will use an old version key
+        that won't be read by subsequent requests.
+        """
+        version_key = f"scopes:version:tenant_user:{tenant_user.id}"
+        version = cache.get(version_key)
+        if version is None:
+            version = 1
+            cache.set(version_key, version, cls.SCOPE_CACHE_TTL * 2)  # Version lives longer
+        return version
+    
+    @classmethod
+    def _increment_cache_version(cls, tenant_user: TenantUser):
+        """Increment cache version to invalidate all cached scopes."""
+        version_key = f"scopes:version:tenant_user:{tenant_user.id}"
+        version = cache.get(version_key, 0)
+        cache.set(version_key, version + 1, cls.SCOPE_CACHE_TTL * 2)
+    
+    @classmethod
     def resolve_scopes(cls, tenant_user: TenantUser) -> Set[str]:
         """
         Resolve all permission scopes for a tenant user.
@@ -37,7 +64,7 @@ class RBACService:
         2. User-level permission overrides (grants)
         3. User-level permission denials (denies win over grants)
         
-        Results are cached for 5 minutes.
+        Results are cached for 5 minutes with versioning to prevent race conditions.
         
         Args:
             tenant_user: TenantUser instance
@@ -45,9 +72,11 @@ class RBACService:
         Returns:
             Set of permission codes (e.g., {'catalog:view', 'orders:edit'})
         """
-        cache_key = f"scopes:tenant_user:{tenant_user.id}"
-        cached_scopes = cache.get(cache_key)
+        # Get current cache version
+        version = cls._get_cache_version(tenant_user)
+        cache_key = f"scopes:tenant_user:{tenant_user.id}:v{version}"
         
+        cached_scopes = cache.get(cache_key)
         if cached_scopes is not None:
             return set(cached_scopes)
         
@@ -81,16 +110,23 @@ class RBACService:
             # Remove from scopes (deny wins)
             scopes.discard(deny.permission.code)
         
-        # Cache the result
+        # Cache the result with current version
+        # If version was incremented during our DB query, this write will use
+        # an old version key that won't be read by subsequent requests
         cache.set(cache_key, list(scopes), cls.SCOPE_CACHE_TTL)
         
         return scopes
     
     @classmethod
     def invalidate_scope_cache(cls, tenant_user: TenantUser):
-        """Invalidate cached scopes for a tenant user."""
-        cache_key = f"scopes:tenant_user:{tenant_user.id}"
-        cache.delete(cache_key)
+        """
+        Invalidate cached scopes for a tenant user.
+        
+        Uses cache versioning to prevent race conditions. Instead of deleting
+        the cache key, we increment the version number, making all old cached
+        values inaccessible.
+        """
+        cls._increment_cache_version(tenant_user)
     
     @classmethod
     def has_scope(cls, tenant_user: TenantUser, scope: str) -> bool:
@@ -355,30 +391,48 @@ class RBACService:
         return False
     
     @classmethod
-    def validate_four_eyes(cls, initiator=None, approver=None, initiator_user_id=None, approver_user_id=None):
+    def validate_four_eyes(cls, initiator_user_id, approver_user_id):
         """
         Validate four-eyes principle: initiator and approver must be different users.
         
+        This validation ensures that financial transactions and other sensitive operations
+        require approval from a different user than the one who initiated the action.
+        
         Args:
-            initiator: User instance or user ID (UUID) - deprecated, use initiator_user_id
-            approver: User instance or user ID (UUID) - deprecated, use approver_user_id
-            initiator_user_id: User ID (UUID) of the initiator
-            approver_user_id: User ID (UUID) of the approver
+            initiator_user_id: User ID (UUID) of the initiator (required)
+            approver_user_id: User ID (UUID) of the approver (required)
             
         Returns:
             bool: True if validation passes
             
         Raises:
-            ValueError: If initiator and approver are the same user
+            ValueError: If either user ID is None, or if they are the same user,
+                       or if either user doesn't exist or is inactive
         """
-        # Support both old and new parameter names for backward compatibility
+        # Validate both user IDs are provided
         if initiator_user_id is None:
-            initiator_user_id = initiator.id if hasattr(initiator, 'id') else initiator
+            raise ValueError("Four-eyes validation failed: initiator_user_id is required")
         if approver_user_id is None:
-            approver_user_id = approver.id if hasattr(approver, 'id') else approver
+            raise ValueError("Four-eyes validation failed: approver_user_id is required")
         
+        # Validate users are different
         if initiator_user_id == approver_user_id:
             raise ValueError("Four-eyes validation failed: initiator and approver must be different users")
+        
+        # Validate both users exist and are active
+        try:
+            initiator = User.objects.get(id=initiator_user_id)
+            if not initiator.is_active:
+                raise ValueError("Four-eyes validation failed: initiator user is inactive")
+        except User.DoesNotExist:
+            raise ValueError("Four-eyes validation failed: initiator user does not exist")
+        
+        try:
+            approver = User.objects.get(id=approver_user_id)
+            if not approver.is_active:
+                raise ValueError("Four-eyes validation failed: approver user is inactive")
+        except User.DoesNotExist:
+            raise ValueError("Four-eyes validation failed: approver user does not exist")
         
         return True
 

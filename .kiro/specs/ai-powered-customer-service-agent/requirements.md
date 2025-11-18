@@ -377,3 +377,125 @@ This specification defines the upgrade of the WabotIQ bot from a basic intent cl
 3. WHEN a customer views a service, THE System SHALL provide a direct "Book Now" button that shows available time slots
 4. WHEN a customer selects a time slot, THE System SHALL confirm the booking with minimal additional steps
 5. WHEN completing a transaction, THE System SHALL provide payment options with one-click selection
+
+
+### Requirement 31: Document-Based Knowledge Retrieval (RAG)
+
+**User Story:** As a tenant owner, I want to upload PDF documents and text files containing business information so that my agent can answer questions based on this content accurately.
+
+#### Acceptance Criteria
+
+1. WHEN a tenant uploads a PDF document, THE System SHALL extract text content and store it for retrieval
+2. WHEN a tenant uploads a text file, THE System SHALL parse and store the content for retrieval
+3. WHEN a document is uploaded, THE System SHALL split content into optimal chunks of three hundred to five hundred tokens
+4. WHEN a document is uploaded, THE System SHALL generate embeddings for each chunk using an embedding model
+5. WHEN the AI Agent processes a customer message, THE System SHALL retrieve relevant document chunks using semantic search
+
+### Requirement 32: Vector Store Integration for Semantic Search
+
+**User Story:** As a platform operator, I want to use a vector database for efficient semantic search so that the agent can quickly find relevant information from large document collections.
+
+#### Acceptance Criteria
+
+1. WHEN the system initializes, THE System SHALL support integration with vector databases including Pinecone, Weaviate, or Qdrant
+2. WHEN storing document chunks, THE System SHALL index embeddings in the vector store with tenant isolation
+3. WHEN searching for information, THE System SHALL query the vector store using semantic similarity
+4. WHEN retrieving results, THE System SHALL return the top five most relevant chunks with similarity scores
+5. WHEN managing vector data, THE System SHALL support deletion and updates of document embeddings
+
+### Requirement 33: Database Content as Real-Time Knowledge Source
+
+**User Story:** As a customer, I want the agent to provide accurate information about products, services, and appointments from the actual database so that I receive current and reliable information.
+
+#### Acceptance Criteria
+
+1. WHEN a customer asks about products, THE System SHALL retrieve current product data including name, description, price, stock, and variants from the database
+2. WHEN a customer asks about services, THE System SHALL retrieve current service data including description, duration, pricing, and availability windows from the database
+3. WHEN a customer asks about appointments, THE System SHALL retrieve available time slots from the database in real-time
+4. WHEN product or service descriptions are minimal, THE System SHALL flag items for internet enrichment
+5. WHEN database content changes, THE System SHALL reflect updates in agent responses within five seconds without caching
+
+### Requirement 34: Internet Search for Product Enrichment
+
+**User Story:** As a customer, I want detailed information about products even when the catalog description is brief so that I can make informed purchasing decisions.
+
+#### Acceptance Criteria
+
+1. WHEN a product has minimal description, THE System SHALL search the internet for product information using the product name
+2. WHEN internet search returns results, THE System SHALL extract relevant product details including features, specifications, and use cases
+3. WHEN presenting enriched information, THE System SHALL clearly indicate that details are from external sources
+4. WHEN internet information conflicts with catalog data, THE System SHALL prioritize catalog data for pricing and availability
+5. WHEN internet search fails or returns no results, THE System SHALL acknowledge limitations and offer to connect with support
+
+### Requirement 35: Hybrid Search Strategy
+
+**User Story:** As a platform operator, I want the system to use both semantic and keyword search so that retrieval is accurate for both conceptual and specific queries.
+
+#### Acceptance Criteria
+
+1. WHEN searching for information, THE System SHALL perform semantic search using embeddings
+2. WHEN searching for information, THE System SHALL perform keyword search using exact and fuzzy matching
+3. WHEN combining results, THE System SHALL merge and rank results from both search methods
+4. WHEN a query contains specific terms, THE System SHALL weight keyword matches higher
+5. WHEN a query is conceptual, THE System SHALL weight semantic matches higher
+
+### Requirement 36: Source Attribution and Citations
+
+**User Story:** As a customer, I want to know where the agent's information comes from so that I can trust the responses and verify details if needed.
+
+#### Acceptance Criteria
+
+1. WHEN the agent provides information from documents, THE System SHALL cite the document name and section
+2. WHEN the agent provides information from the database, THE System SHALL indicate the source as "our catalog" or "our records"
+3. WHEN the agent provides information from the internet, THE System SHALL indicate the source as "external product information"
+4. WHEN multiple sources are used, THE System SHALL list all sources at the end of the response
+5. WHEN no sources are found, THE System SHALL explicitly state that information is not available and offer alternatives
+6. WHERE a tenant disables source attribution, THE System SHALL omit source citations from responses while still using retrieved information
+
+### Requirement 37: Multi-Source Response Generation
+
+**User Story:** As a customer, I want comprehensive answers that combine information from all available sources so that I get complete information in one response.
+
+#### Acceptance Criteria
+
+1. WHEN generating responses, THE System SHALL synthesize information from documents, database, and internet sources
+2. WHEN information is contradictory, THE System SHALL prioritize tenant-provided sources and note discrepancies
+3. WHEN information is incomplete, THE System SHALL acknowledge gaps and suggest contacting support
+4. WHEN presenting information, THE System SHALL organize content logically with clear source attribution
+5. WHEN multiple sources provide similar information, THE System SHALL consolidate to avoid repetition
+
+### Requirement 38: Agent Behavioral Instructions
+
+**User Story:** As a tenant owner, I want to provide text instructions for what my agent can and cannot do so that it behaves according to my business policies.
+
+#### Acceptance Criteria
+
+1. WHEN a tenant configures their agent, THE System SHALL allow providing text instructions for what the agent can do
+2. WHEN a tenant configures their agent, THE System SHALL allow providing text instructions for what the agent cannot do
+3. WHEN the agent generates responses, THE System SHALL follow the tenant-defined behavioral instructions consistently
+4. WHEN behavioral instructions conflict with a customer request, THE System SHALL politely explain the limitation
+5. WHEN behavioral instructions are updated, THE System SHALL apply changes to new conversations immediately
+
+### Requirement 39: RAG Performance and Optimization
+
+**User Story:** As a platform operator, I want fast retrieval from all sources so that agent responses remain quick even with large knowledge bases.
+
+#### Acceptance Criteria
+
+1. WHEN retrieving from vector store, THE System SHALL return results within three hundred milliseconds for ninety-five percent of queries
+2. WHEN querying multiple sources, THE System SHALL execute queries in parallel
+3. WHEN caching is applicable, THE System SHALL cache frequent queries for five minutes
+4. WHEN vector store queries are slow, THE System SHALL implement query optimization and indexing strategies
+5. WHEN retrieval exceeds time limits, THE System SHALL return partial results rather than timing out
+
+### Requirement 40: RAG Tenant Isolation and Security
+
+**User Story:** As a platform operator, I want strict tenant isolation for all RAG data so that tenants cannot access each other's documents or information.
+
+#### Acceptance Criteria
+
+1. WHEN storing documents, THE System SHALL tag all chunks with tenant identifiers
+2. WHEN querying vector store, THE System SHALL filter results to only the requesting tenant
+3. WHEN retrieving database content, THE System SHALL filter results to only the requesting tenant
+4. WHEN performing internet searches, THE System SHALL not expose tenant-specific information in queries
+5. WHEN storing embeddings, THE System SHALL use tenant-specific namespaces or collections

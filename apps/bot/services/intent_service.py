@@ -7,6 +7,7 @@ entities/slots for downstream processing.
 import logging
 import time
 import json
+import hashlib
 from typing import Dict, Any, Optional, Tuple
 from django.conf import settings
 from django.utils import timezone
@@ -34,6 +35,66 @@ except ImportError:
 class IntentServiceError(Exception):
     """Base exception for intent service errors."""
     pass
+
+
+# Global cache for OpenAI clients (singleton pattern)
+_openai_clients = {}
+_client_lock = None
+
+
+def get_openai_client(api_key: str) -> 'openai.OpenAI':
+    """
+    Get or create OpenAI client (singleton pattern).
+    
+    Caches clients by API key to prevent memory leaks from creating
+    multiple client instances.
+    
+    Args:
+        api_key: OpenAI API key
+        
+    Returns:
+        OpenAI client instance
+    """
+    global _openai_clients, _client_lock
+    
+    # Initialize lock on first use
+    if _client_lock is None:
+        import threading
+        _client_lock = threading.Lock()
+    
+    # Create cache key from API key hash (don't store raw key)
+    cache_key = hashlib.sha256(api_key.encode()).hexdigest()[:16]
+    
+    # Check if client exists in cache
+    if cache_key in _openai_clients:
+        return _openai_clients[cache_key]
+    
+    # Create new client with lock to prevent race conditions
+    with _client_lock:
+        # Double-check after acquiring lock
+        if cache_key in _openai_clients:
+            return _openai_clients[cache_key]
+        
+        # Create new client
+        client = openai.OpenAI(api_key=api_key)
+        _openai_clients[cache_key] = client
+        
+        logger.info(
+            f"Created new OpenAI client (total clients: {len(_openai_clients)})"
+        )
+        
+        return client
+
+
+def clear_openai_clients():
+    """
+    Clear all cached OpenAI clients.
+    
+    Useful for testing or when API keys are rotated.
+    """
+    global _openai_clients
+    _openai_clients.clear()
+    logger.info("Cleared all cached OpenAI clients")
 
 
 class IntentService:
@@ -146,12 +207,14 @@ class IntentService:
         
         # Use provided model, or from settings, or default to gpt-4o-mini
         self.model = model or getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
-        self.client = openai.OpenAI(api_key=self.api_key)
+        
+        # Get cached client (singleton pattern to prevent memory leaks)
+        self.client = get_openai_client(self.api_key)
         
         # Check if model supports JSON mode
         self.supports_json_mode = self._check_json_mode_support()
         
-        logger.info(
+        logger.debug(
             f"IntentService initialized with model: {self.model} (JSON mode: {self.supports_json_mode})"
         )
     

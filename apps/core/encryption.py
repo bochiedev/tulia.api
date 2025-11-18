@@ -6,30 +6,139 @@ API keys, and credentials.
 """
 import base64
 import os
+from typing import List
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.backends import default_backend
 from django.conf import settings
 
 
+def validate_encryption_key(key_b64: str) -> bytes:
+    """
+    Validate encryption key strength and return decoded key.
+    
+    Performs comprehensive validation to ensure the encryption key meets
+    security requirements:
+    - Must be valid base64
+    - Must be exactly 32 bytes (256 bits) when decoded
+    - Must have sufficient entropy (at least 16 unique bytes)
+    - Must not be a weak key (all zeros, simple patterns)
+    
+    Args:
+        key_b64: Base64-encoded encryption key string
+        
+    Returns:
+        bytes: Decoded 32-byte encryption key
+        
+    Raises:
+        ValueError: If key validation fails with specific reason
+        
+    Examples:
+        >>> key = validate_encryption_key("base64_encoded_key_here")
+        >>> len(key)
+        32
+    """
+    if not key_b64:
+        raise ValueError(
+            "Encryption key is required. "
+            "Generate with: python -c \"import os, base64; print(base64.b64encode(os.urandom(32)).decode())\""
+        )
+    
+    # Decode base64
+    try:
+        key = base64.b64decode(key_b64)
+    except Exception as e:
+        raise ValueError(
+            f"Encryption key must be valid base64: {str(e)}. "
+            f"Generate with: python -c \"import os, base64; print(base64.b64encode(os.urandom(32)).decode())\""
+        )
+    
+    # Length check - must be exactly 32 bytes for AES-256
+    if len(key) != 32:
+        raise ValueError(
+            f"Encryption key must be exactly 32 bytes (256 bits). "
+            f"Current length: {len(key)} bytes. "
+            f"Generate with: python -c \"import os, base64; print(base64.b64encode(os.urandom(32)).decode())\""
+        )
+    
+    # Weak key check - all zeros (check before entropy for better error message)
+    if key == b'\x00' * 32:
+        raise ValueError(
+            "Encryption key is all zeros (weak key). "
+            "Generate with: python -c \"import os, base64; print(base64.b64encode(os.urandom(32)).decode())\""
+        )
+    
+    # Weak key check - all same byte (check before entropy for better error message)
+    if key == bytes([key[0]]) * 32:
+        raise ValueError(
+            f"Encryption key is repeating byte pattern (weak key). "
+            f"Generate with: python -c \"import os, base64; print(base64.b64encode(os.urandom(32)).decode())\""
+        )
+    
+    # Check for simple repeating patterns (e.g., "abababab...")
+    # Check 2-byte, 4-byte, and 8-byte patterns (before entropy for better error messages)
+    for pattern_len in [2, 4, 8]:
+        pattern = key[:pattern_len]
+        expected = pattern * (32 // pattern_len)
+        if key == expected:
+            raise ValueError(
+                f"Encryption key is a simple {pattern_len}-byte repeating pattern (weak key). "
+                f"Generate with: python -c \"import os, base64; print(base64.b64encode(os.urandom(32)).decode())\""
+            )
+    
+    # Entropy check - must have at least 16 unique bytes (50% of key length)
+    # This catches other weak keys that don't match the specific patterns above
+    unique_bytes = len(set(key))
+    if unique_bytes < 16:
+        raise ValueError(
+            f"Encryption key has insufficient entropy. "
+            f"Found only {unique_bytes} unique bytes, need at least 16. "
+            f"Generate with: python -c \"import os, base64; print(base64.b64encode(os.urandom(32)).decode())\""
+        )
+    
+    return key
+
+
 class EncryptionService:
-    """Service for encrypting and decrypting sensitive data."""
+    """
+    Service for encrypting and decrypting sensitive data.
+    
+    Supports key rotation by maintaining multiple keys:
+    - Current key (ENCRYPTION_KEY): Used for all new encryptions
+    - Old keys (ENCRYPTION_OLD_KEYS): Used for decryption only
+    
+    This allows seamless key rotation without data loss.
+    """
     
     def __init__(self):
-        """Initialize encryption service with key from settings."""
+        """Initialize encryption service with key(s) from settings."""
+        # Validate and load current encryption key
         encryption_key = settings.ENCRYPTION_KEY
         if not encryption_key:
-            raise ValueError("ENCRYPTION_KEY must be set in settings")
+            raise ValueError(
+                "ENCRYPTION_KEY must be set in settings. "
+                "Generate with: python -c \"import os, base64; print(base64.b64encode(os.urandom(32)).decode())\""
+            )
         
-        # Decode base64 key
-        try:
-            self.key = base64.b64decode(encryption_key)
-        except Exception:
-            raise ValueError("ENCRYPTION_KEY must be a valid base64-encoded 32-byte key")
-        
-        if len(self.key) != 32:
-            raise ValueError("ENCRYPTION_KEY must be 32 bytes (256 bits)")
-        
+        # Validate current key
+        self.key = validate_encryption_key(encryption_key)
         self.cipher = AESGCM(self.key)
+        
+        # Load old keys for rotation support (optional)
+        self.old_keys: List[bytes] = []
+        self.old_ciphers: List[AESGCM] = []
+        
+        old_keys_setting = getattr(settings, 'ENCRYPTION_OLD_KEYS', [])
+        if old_keys_setting:
+            for i, old_key_b64 in enumerate(old_keys_setting):
+                try:
+                    old_key = validate_encryption_key(old_key_b64)
+                    self.old_keys.append(old_key)
+                    self.old_ciphers.append(AESGCM(old_key))
+                except ValueError as e:
+                    # Log warning but don't fail - old keys are for decryption only
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Invalid old encryption key at index {i}: {e}")
     
     def encrypt(self, plaintext: str) -> str:
         """
@@ -58,11 +167,17 @@ class EncryptionService:
         """
         Decrypt encrypted string.
         
+        Supports key rotation by trying current key first, then old keys.
+        This allows decryption of data encrypted with previous keys.
+        
         Args:
             encrypted_data: Base64-encoded encrypted data with nonce
             
         Returns:
             Decrypted plaintext string
+            
+        Raises:
+            ValueError: If decryption fails with all available keys
         """
         if not encrypted_data:
             return encrypted_data
@@ -75,9 +190,22 @@ class EncryptionService:
             nonce = data[:12]
             ciphertext = data[12:]
             
-            # Decrypt
-            plaintext = self.cipher.decrypt(nonce, ciphertext, None)
-            return plaintext.decode('utf-8')
+            # Try current key first
+            try:
+                plaintext = self.cipher.decrypt(nonce, ciphertext, None)
+                return plaintext.decode('utf-8')
+            except Exception:
+                # Current key failed, try old keys for rotation support
+                for old_cipher in self.old_ciphers:
+                    try:
+                        plaintext = old_cipher.decrypt(nonce, ciphertext, None)
+                        return plaintext.decode('utf-8')
+                    except Exception:
+                        continue
+                
+                # All keys failed
+                raise ValueError("Decryption failed with all available keys")
+                
         except Exception as e:
             raise ValueError(f"Decryption failed: {str(e)}")
 

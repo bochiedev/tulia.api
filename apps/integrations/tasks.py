@@ -6,6 +6,7 @@ Handles scheduled product synchronization from external sources
 """
 import logging
 from celery import shared_task
+from django.db import transaction
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -84,8 +85,9 @@ def sync_woocommerce_products(self, tenant_id: str):
                 'tenant_id': tenant_id
             }
         
-        # Sync products
-        result = woo_service.sync_products(tenant)
+        # Sync products within transaction
+        with transaction.atomic():
+            result = woo_service.sync_products(tenant)
         
         # Calculate total duration
         end_time = timezone.now()
@@ -197,8 +199,9 @@ def sync_shopify_products(self, tenant_id: str):
                 'tenant_id': tenant_id
             }
         
-        # Sync products
-        result = shopify_service.sync_products(tenant)
+        # Sync products within transaction
+        with transaction.atomic():
+            result = shopify_service.sync_products(tenant)
         
         # Calculate total duration
         end_time = timezone.now()

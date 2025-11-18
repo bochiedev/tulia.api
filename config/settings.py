@@ -423,9 +423,83 @@ curl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve
     ],
 }
 
-# CORS
-CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
+# ============================================================================
+# SECURITY SETTINGS
+# ============================================================================
+
+# HTTPS Enforcement (Production Only)
+if not DEBUG:
+    # Redirect all HTTP requests to HTTPS
+    SECURE_SSL_REDIRECT = True
+    
+    # HSTS (HTTP Strict Transport Security)
+    # Tells browsers to only access site via HTTPS for 1 year
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    
+    # Secure Cookies
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    CSRF_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_SAMESITE = 'Lax'
+else:
+    # Development settings - no HTTPS enforcement
+    SECURE_SSL_REDIRECT = False
+    SECURE_HSTS_SECONDS = 0
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+
+# Security Headers (All Environments)
+SECURE_CONTENT_TYPE_NOSNIFF = True  # Prevent MIME type sniffing
+SECURE_BROWSER_XSS_FILTER = True    # Enable XSS filter in browsers
+X_FRAME_OPTIONS = 'DENY'            # Prevent clickjacking
+
+# CORS Configuration
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins in development
+
+if not DEBUG:
+    # Production: Require explicit CORS origins
+    cors_origins = env.list('CORS_ALLOWED_ORIGINS', default=[])
+    
+    # Validate all origins are HTTPS
+    for origin in cors_origins:
+        if not origin.startswith('https://'):
+            raise ValueError(
+                f"CORS origin must use HTTPS in production: {origin}. "
+                f"Update CORS_ALLOWED_ORIGINS in .env"
+            )
+    
+    CORS_ALLOWED_ORIGINS = cors_origins
+    
+    # Require CORS origins to be configured
+    if not CORS_ALLOWED_ORIGINS:
+        import warnings
+        warnings.warn(
+            "CORS_ALLOWED_ORIGINS not configured. "
+            "Set CORS_ALLOWED_ORIGINS in .env for production deployment."
+        )
+else:
+    # Development: Allow configured origins or all if none specified
+    CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
+
+# CORS Headers
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-tenant-id',
+    'x-tenant-api-key',
+]
 
 # Redis Cache
 CACHES = {
@@ -531,6 +605,8 @@ CELERY_ACKS_LATE = True
 
 # Encryption
 ENCRYPTION_KEY = env('ENCRYPTION_KEY', default=None)
+# Support for key rotation - old keys used for decryption only
+ENCRYPTION_OLD_KEYS = env.list('ENCRYPTION_OLD_KEYS', default=[])
 
 # Rate Limiting
 RATE_LIMIT_ENABLED = env('RATE_LIMIT_ENABLED')
@@ -555,10 +631,12 @@ LOGGING = {
             '()': 'apps.core.logging.JSONFormatter',
         },
         'verbose': {
+            '()': 'apps.core.log_sanitizer.SanitizingFormatter',
             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
             'style': '{',
         },
         'simple': {
+            '()': 'apps.core.log_sanitizer.SanitizingFormatter',
             'format': '{levelname} {message}',
             'style': '{',
         },
@@ -570,12 +648,16 @@ LOGGING = {
         'require_debug_true': {
             '()': 'django.utils.log.RequireDebugTrue',
         },
+        'sanitize': {
+            '()': 'apps.core.log_sanitizer.SanitizingFilter',
+        },
     },
     'handlers': {
         'console': {
             'level': LOG_LEVEL,
             'class': 'logging.StreamHandler',
             'formatter': 'json' if JSON_LOGS else 'verbose',
+            'filters': ['sanitize'],
         },
         'file': {
             'level': 'INFO',
@@ -584,6 +666,16 @@ LOGGING = {
             'maxBytes': 1024 * 1024 * 10,  # 10 MB
             'backupCount': 5,
             'formatter': 'json' if JSON_LOGS else 'verbose',
+            'filters': ['sanitize'],
+        },
+        'security': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'security.log',
+            'maxBytes': 1024 * 1024 * 10,  # 10 MB
+            'backupCount': 10,
+            'formatter': 'json' if JSON_LOGS else 'verbose',
+            'filters': ['sanitize'],
         },
     },
     'root': {
@@ -609,6 +701,11 @@ LOGGING = {
         'apps': {
             'handlers': ['console', 'file'],
             'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'security': {
+            'handlers': ['security', 'console'],
+            'level': 'INFO',
             'propagate': False,
         },
     },

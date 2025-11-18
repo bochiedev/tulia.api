@@ -511,6 +511,78 @@ class TestFourEyesValidation:
         
         assert 'Four-eyes validation failed' in str(exc_info.value)
         assert 'must be different users' in str(exc_info.value)
+    
+    def test_validate_four_eyes_none_initiator_raises_error(self):
+        """Test that validation fails when initiator_user_id is None."""
+        user = User.objects.create_user(email='user@example.com', password='pass')
+        
+        with pytest.raises(ValueError) as exc_info:
+            RBACService.validate_four_eyes(None, user.id)
+        
+        assert 'Four-eyes validation failed' in str(exc_info.value)
+        assert 'initiator_user_id is required' in str(exc_info.value)
+    
+    def test_validate_four_eyes_none_approver_raises_error(self):
+        """Test that validation fails when approver_user_id is None."""
+        user = User.objects.create_user(email='user@example.com', password='pass')
+        
+        with pytest.raises(ValueError) as exc_info:
+            RBACService.validate_four_eyes(user.id, None)
+        
+        assert 'Four-eyes validation failed' in str(exc_info.value)
+        assert 'approver_user_id is required' in str(exc_info.value)
+    
+    def test_validate_four_eyes_inactive_initiator_raises_error(self):
+        """Test that validation fails when initiator is inactive."""
+        user1 = User.objects.create_user(email='user1@example.com', password='pass')
+        user1.is_active = False
+        user1.save()
+        
+        user2 = User.objects.create_user(email='user2@example.com', password='pass')
+        
+        with pytest.raises(ValueError) as exc_info:
+            RBACService.validate_four_eyes(user1.id, user2.id)
+        
+        assert 'Four-eyes validation failed' in str(exc_info.value)
+        assert 'initiator user is inactive' in str(exc_info.value)
+    
+    def test_validate_four_eyes_inactive_approver_raises_error(self):
+        """Test that validation fails when approver is inactive."""
+        user1 = User.objects.create_user(email='user1@example.com', password='pass')
+        
+        user2 = User.objects.create_user(email='user2@example.com', password='pass')
+        user2.is_active = False
+        user2.save()
+        
+        with pytest.raises(ValueError) as exc_info:
+            RBACService.validate_four_eyes(user1.id, user2.id)
+        
+        assert 'Four-eyes validation failed' in str(exc_info.value)
+        assert 'approver user is inactive' in str(exc_info.value)
+    
+    def test_validate_four_eyes_nonexistent_initiator_raises_error(self):
+        """Test that validation fails when initiator doesn't exist."""
+        import uuid
+        user2 = User.objects.create_user(email='user2@example.com', password='pass')
+        fake_id = uuid.uuid4()
+        
+        with pytest.raises(ValueError) as exc_info:
+            RBACService.validate_four_eyes(fake_id, user2.id)
+        
+        assert 'Four-eyes validation failed' in str(exc_info.value)
+        assert 'initiator user does not exist' in str(exc_info.value)
+    
+    def test_validate_four_eyes_nonexistent_approver_raises_error(self):
+        """Test that validation fails when approver doesn't exist."""
+        import uuid
+        user1 = User.objects.create_user(email='user1@example.com', password='pass')
+        fake_id = uuid.uuid4()
+        
+        with pytest.raises(ValueError) as exc_info:
+            RBACService.validate_four_eyes(user1.id, fake_id)
+        
+        assert 'Four-eyes validation failed' in str(exc_info.value)
+        assert 'approver user does not exist' in str(exc_info.value)
 
 
 @pytest.mark.django_db

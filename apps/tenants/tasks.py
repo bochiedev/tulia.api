@@ -6,6 +6,7 @@ Handles recurring billing, payment retries, and notifications.
 import logging
 from decimal import Decimal
 from datetime import timedelta
+from django.db import transaction
 from django.utils import timezone
 from django.conf import settings
 from celery import shared_task
@@ -62,41 +63,42 @@ def process_billing(self, subscription_id):
     )
     
     if payment_success:
-        # Payment succeeded - update subscription
-        from dateutil.relativedelta import relativedelta
-        
-        if subscription.billing_cycle == 'yearly':
-            subscription.next_billing_date = (
-                timezone.now() + relativedelta(years=1)
-            ).date()
-        else:
-            subscription.next_billing_date = (
-                timezone.now() + relativedelta(months=1)
-            ).date()
-        
-        subscription.save(update_fields=['next_billing_date'])
-        
-        # Log success event
-        SubscriptionEvent.objects.create(
-            subscription=subscription,
-            event_type='payment_succeeded',
-            metadata={
-                'amount': float(final_price),
-                'base_price': float(base_price),
-                'discount': float(total_discount),
-                'next_billing_date': str(subscription.next_billing_date)
-            }
-        )
-        
-        # Increment discount usage counts
-        for discount_info in applied_discounts:
-            from apps.tenants.models import SubscriptionDiscount
-            try:
-                discount = SubscriptionDiscount.objects.get(id=discount_info['id'])
-                discount.usage_count += 1
-                discount.save(update_fields=['usage_count'])
-            except SubscriptionDiscount.DoesNotExist:
-                pass
+        # Payment succeeded - update subscription within transaction
+        with transaction.atomic():
+            from dateutil.relativedelta import relativedelta
+            
+            if subscription.billing_cycle == 'yearly':
+                subscription.next_billing_date = (
+                    timezone.now() + relativedelta(years=1)
+                ).date()
+            else:
+                subscription.next_billing_date = (
+                    timezone.now() + relativedelta(months=1)
+                ).date()
+            
+            subscription.save(update_fields=['next_billing_date'])
+            
+            # Log success event
+            SubscriptionEvent.objects.create(
+                subscription=subscription,
+                event_type='payment_succeeded',
+                metadata={
+                    'amount': float(final_price),
+                    'base_price': float(base_price),
+                    'discount': float(total_discount),
+                    'next_billing_date': str(subscription.next_billing_date)
+                }
+            )
+            
+            # Increment discount usage counts
+            for discount_info in applied_discounts:
+                from apps.tenants.models import SubscriptionDiscount
+                try:
+                    discount = SubscriptionDiscount.objects.get(id=discount_info['id'])
+                    discount.usage_count += 1
+                    discount.save(update_fields=['usage_count'])
+                except SubscriptionDiscount.DoesNotExist:
+                    pass
         
         logger.info(
             f"Billing successful for subscription {subscription_id}. "

@@ -8,6 +8,7 @@ and calculating conversion rates.
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
+from django.db import transaction
 from django.db.models import Count, Sum, Avg, Q, F
 from django.utils import timezone
 from celery import shared_task
@@ -61,15 +62,17 @@ def rollup_daily_metrics(date_str=None):
         try:
             logger.info(f"Processing analytics for tenant: {tenant.name} ({tenant.id})")
             
-            # Aggregate metrics for this tenant and date
-            metrics = _aggregate_tenant_metrics(tenant, target_date)
-            
-            # Create or update AnalyticsDaily record
-            analytics, created = AnalyticsDaily.objects.update_or_create(
-                tenant=tenant,
-                date=target_date,
-                defaults=metrics
-            )
+            # Aggregate metrics within transaction
+            with transaction.atomic():
+                # Aggregate metrics for this tenant and date
+                metrics = _aggregate_tenant_metrics(tenant, target_date)
+                
+                # Create or update AnalyticsDaily record
+                analytics, created = AnalyticsDaily.objects.update_or_create(
+                    tenant=tenant,
+                    date=target_date,
+                    defaults=metrics
+                )
             
             action = "Created" if created else "Updated"
             logger.info(

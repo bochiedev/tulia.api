@@ -708,3 +708,110 @@ This implementation plan breaks down the AI-powered customer service agent into 
     - Add section on configuring handoff behavior
     - Add section on language preferences
     - _Requirements: All new requirements_
+
+
+---
+
+## Phase 2: RAG (Retrieval-Augmented Generation) Enhancement
+
+This phase adds document retrieval, semantic search, and multi-source context synthesis to enhance the AI agent's knowledge and accuracy.
+
+**Note**: These tasks are detailed in `.kiro/specs/ai-agent-rag-enhancement/` - see that spec for full implementation details. Tasks 30-37 below are high-level summaries that reference the detailed RAG spec.
+
+- [ ] 30. RAG Infrastructure (See RAG Spec Tasks 1-5)
+  - [ ] 30.1 Install LangChain and vector store (RAG Tasks 1.1, 1.2)
+  - [ ] 30.2 Create RAG database models (RAG Task 1.3)
+  - [ ] 30.3 Set up embedding service (RAG Task 4)
+  - [ ] 30.4 Implement vector store integration (RAG Task 5)
+
+- [ ] 31. Document Management (See RAG Spec Tasks 2-3)
+  - [ ] 31.1 Build document upload API (RAG Task 2)
+  - [ ] 31.2 Implement document processing pipeline (RAG Task 3)
+  - [ ] 31.3 Create document store service (RAG Task 6)
+
+- [ ] 32. Multi-Source Retrieval (See RAG Spec Tasks 7-10)
+  - [ ] 32.1 Implement hybrid search engine (RAG Task 7)
+  - [ ] 32.2 Build database store service (RAG Task 8)
+  - [ ] 32.3 Implement internet search service (RAG Task 9)
+  - [ ] 32.4 Create RAG retriever orchestrator (RAG Task 10)
+
+- [ ] 33. Context Synthesis & Attribution (See RAG Spec Tasks 11-12)
+  - [ ] 33.1 Implement context synthesizer (RAG Task 11)
+  - [ ] 33.2 Build attribution handler (RAG Task 12)
+
+- [ ] 34. RAG Integration (See RAG Spec Tasks 13-14)
+  - [ ] 34.1 Update AgentConfiguration for RAG (RAG Task 13.1)
+  - [ ] 34.2 Integrate RAG into AI agent service (RAG Task 13.2-13.4)
+  - [ ] 34.3 Add contextual retrieval (RAG Task 14)
+
+- [ ] 35. RAG Optimization & Analytics (See RAG Spec Tasks 15-17)
+  - [ ] 35.1 Implement performance optimizations (RAG Task 16)
+  - [ ] 35.2 Add RAG analytics and monitoring (RAG Task 15)
+  - [ ] 35.3 Implement security and tenant isolation (RAG Task 17)
+
+- [ ] 36. RAG Testing & Demo Data (See RAG Spec Tasks 18-19)
+  - [ ] 36.1 Create demo documents and data (RAG Task 18)
+  - [ ] 36.2 Write comprehensive RAG tests (RAG Task 19)
+
+- [ ] 37. RAG Documentation (See RAG Spec Task 20)
+  - [ ] 37.1 Update API documentation (RAG Task 20.1-20.2)
+  - [ ] 37.2 Create tenant onboarding guide (RAG Task 20.3)
+  - [ ] 37.3 Create deployment checklist (RAG Task 20.4)
+
+---
+
+## Phase 3: Multi-Provider Support & Continuous Learning
+
+This phase adds cost optimization through multi-provider LLM support (Gemini), feedback collection, and continuous learning capabilities.
+
+**Note**: These tasks are detailed in `.kiro/specs/ai-agent-rag-enhancement/` Phase 2 (Tasks 21-27) - see that spec for full implementation details.
+
+- [ ] 38. Multi-Provider LLM Support (See RAG Spec Task 21)
+  - [ ] 38.1 Add Gemini provider integration (RAG Task 21.1)
+  - [ ] 38.2 Implement smart provider routing (RAG Task 21.2)
+  - [ ] 38.3 Add provider failover mechanism (RAG Task 21.3)
+  - [ ] 38.4 Implement cost tracking per provider (RAG Task 21.4)
+  - [ ] 38.5 Add provider performance monitoring (RAG Task 21.5)
+
+- [ ] 39. Feedback Collection System (See RAG Spec Task 22)
+  - [ ] 39.1 Create feedback database models (RAG Task 22.1)
+  - [ ] 39.2 Add feedback API endpoints (RAG Task 22.2)
+  - [ ] 39.3 Implement WhatsApp feedback collection (RAG Task 22.3)
+  - [ ] 39.4 Track implicit feedback signals (RAG Task 22.4)
+  - [ ] 39.5 Implement human correction capture (RAG Task 22.5)
+
+- [ ] 40. Continuous Learning Pipeline (See RAG Spec Task 23)
+  - [ ] 40.1 Create evaluation dataset (RAG Task 23.1)
+  - [ ] 40.2 Implement training data generation (RAG Task 23.2)
+  - [ ] 40.3 Create model evaluation framework (RAG Task 23.3)
+  - [ ] 40.4 Implement A/B testing framework (RAG Task 23.4)
+  - [ ] 40.5 Build fine-tuning job scheduler (RAG Task 23.5)
+  - [ ] 40.6 Implement model rollback mechanism (RAG Task 23.6)
+
+- [ ] 41. Advanced Performance Monitoring (See RAG Spec Task 24)
+  - [ ] 41.1 Create quality metrics dashboard (RAG Task 24.1)
+  - [ ] 41.2 Implement business metrics tracking (RAG Task 24.2)
+  - [ ] 41.3 Add real-time alerting system (RAG Task 24.3)
+  - [ ] 41.4 Create model comparison tools (RAG Task 24.4)
+  - [ ] 41.5 Implement feedback loop analytics (RAG Task 24.5)
+
+- [ ] 42. Integration & Optimization (See RAG Spec Task 25)
+  - [ ] 42.1 Integrate multi-provider into AI agent (RAG Task 25.1)
+  - [ ] 42.2 Integrate feedback into conversation flow (RAG Task 25.2)
+  - [ ] 42.3 Implement gradual rollout strategy (RAG Task 25.3)
+  - [ ] 42.4 Optimize caching for multi-provider (RAG Task 25.4)
+  - [ ] 42.5 Create admin tools for continuous learning (RAG Task 25.5)
+
+- [ ] 43. Testing & Validation (See RAG Spec Task 26)
+  - [ ] 43.1 Write unit tests for multi-provider support (RAG Task 26.1)
+  - [ ] 43.2 Write unit tests for feedback system (RAG Task 26.2)
+  - [ ] 43.3 Write unit tests for learning pipeline (RAG Task 26.3)
+  - [ ] 43.4 Write integration tests for end-to-end flows (RAG Task 26.4)
+  - [ ] 43.5 Perform load testing with multiple providers (RAG Task 26.5)
+
+- [ ] 44. Documentation & Training (See RAG Spec Task 27)
+  - [ ] 44.1 Document multi-provider architecture (RAG Task 27.1)
+  - [ ] 44.2 Document feedback and learning system (RAG Task 27.2)
+  - [ ] 44.3 Create operator training materials (RAG Task 27.3)
+  - [ ] 44.4 Update API documentation (RAG Task 27.4)
+  - [ ] 44.5 Create success metrics guide (RAG Task 27.5)
