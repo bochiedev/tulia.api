@@ -2,7 +2,7 @@
 Django admin configuration for bot app.
 """
 from django.contrib import admin
-from .models import IntentEvent, AgentConfiguration, AgentInteraction
+from .models import IntentEvent, AgentConfiguration, AgentInteraction, BrowseSession
 
 
 @admin.register(IntentEvent)
@@ -136,3 +136,81 @@ class AgentInteractionAdmin(admin.ModelAdmin):
         return obj.conversation.tenant.name if obj.conversation and obj.conversation.tenant else '-'
     get_tenant.short_description = 'Tenant'
     get_tenant.admin_order_field = 'conversation__tenant__name'
+
+
+
+@admin.register(BrowseSession)
+class BrowseSessionAdmin(admin.ModelAdmin):
+    """Admin interface for BrowseSession model."""
+    list_display = [
+        'id',
+        'tenant',
+        'conversation',
+        'catalog_type',
+        'current_page',
+        'total_pages_display',
+        'total_items',
+        'is_active',
+        'expires_at',
+        'created_at'
+    ]
+    list_filter = [
+        'catalog_type',
+        'is_active',
+        'created_at',
+        'expires_at',
+        'tenant'
+    ]
+    search_fields = [
+        'conversation__id',
+        'tenant__name',
+        'search_query'
+    ]
+    readonly_fields = [
+        'id',
+        'tenant',
+        'conversation',
+        'total_pages_display',
+        'start_index_display',
+        'end_index_display',
+        'created_at',
+        'updated_at'
+    ]
+    ordering = ['-created_at']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'tenant', 'conversation', 'created_at', 'updated_at')
+        }),
+        ('Catalog Configuration', {
+            'fields': ('catalog_type', 'search_query', 'filters')
+        }),
+        ('Pagination State', {
+            'fields': (
+                'current_page',
+                'items_per_page',
+                'total_items',
+                'total_pages_display',
+                'start_index_display',
+                'end_index_display'
+            )
+        }),
+        ('Session Status', {
+            'fields': ('is_active', 'expires_at')
+        }),
+    )
+    
+    def total_pages_display(self, obj):
+        """Display total pages."""
+        return obj.total_pages
+    total_pages_display.short_description = 'Total Pages'
+    
+    def start_index_display(self, obj):
+        """Display start index (1-indexed)."""
+        return obj.start_index + 1
+    start_index_display.short_description = 'Start Index'
+    
+    def end_index_display(self, obj):
+        """Display end index (1-indexed)."""
+        return obj.end_index
+    end_index_display.short_description = 'End Index'

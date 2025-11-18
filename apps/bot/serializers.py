@@ -2,7 +2,7 @@
 Serializers for bot API endpoints.
 """
 from rest_framework import serializers
-from apps.bot.models import AgentConfiguration, KnowledgeEntry, AgentInteraction
+from apps.bot.models import AgentConfiguration, KnowledgeEntry, AgentInteraction, BrowseSession
 
 
 class AgentConfigurationSerializer(serializers.ModelSerializer):
@@ -547,3 +547,69 @@ class AgentInteractionStatsSerializer(serializers.Serializer):
     # Performance
     avg_processing_time_ms = serializers.FloatField(read_only=True)
     avg_tokens = serializers.FloatField(read_only=True)
+
+
+
+class BrowseSessionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for BrowseSession.
+    
+    Provides read-only access to browse session state for API endpoints.
+    Most fields are computed or managed by CatalogBrowserService.
+    """
+    
+    tenant_name = serializers.CharField(source='tenant.name', read_only=True)
+    conversation_id = serializers.UUIDField(source='conversation.id', read_only=True)
+    total_pages = serializers.IntegerField(read_only=True)
+    has_next_page = serializers.BooleanField(read_only=True)
+    has_previous_page = serializers.BooleanField(read_only=True)
+    start_index_display = serializers.SerializerMethodField()
+    end_index_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = BrowseSession
+        fields = [
+            'id',
+            'tenant',
+            'tenant_name',
+            'conversation',
+            'conversation_id',
+            'catalog_type',
+            'current_page',
+            'items_per_page',
+            'total_items',
+            'total_pages',
+            'has_next_page',
+            'has_previous_page',
+            'start_index_display',
+            'end_index_display',
+            'filters',
+            'search_query',
+            'is_active',
+            'expires_at',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'tenant',
+            'tenant_name',
+            'conversation',
+            'conversation_id',
+            'total_items',
+            'total_pages',
+            'has_next_page',
+            'has_previous_page',
+            'start_index_display',
+            'end_index_display',
+            'created_at',
+            'updated_at',
+        ]
+    
+    def get_start_index_display(self, obj):
+        """Get start index for display (1-indexed)."""
+        return obj.start_index + 1
+    
+    def get_end_index_display(self, obj):
+        """Get end index for display (1-indexed)."""
+        return min(obj.end_index, obj.total_items)

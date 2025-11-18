@@ -1045,7 +1045,8 @@ class AIAgentService:
         Build user prompt with context assembly.
         
         Uses PromptTemplateManager to assemble all context information
-        into a structured prompt for the LLM.
+        into a structured prompt for the LLM, including new features like
+        reference context, browse sessions, language preferences, etc.
         
         Args:
             context: AgentContext with all context data
@@ -1057,9 +1058,58 @@ class AIAgentService:
         # Extract context data
         conversation_summary = None
         key_facts = None
+        reference_context = None
+        browse_session = None
+        language_preference = None
+        product_analysis = None
+        clarification_count = 0
+        preferences = {}
+        
         if context.context:
             conversation_summary = context.context.conversation_summary
             key_facts = context.context.key_facts
+        
+        # Get reference context if available
+        try:
+            from apps.bot.services.reference_context_manager import ReferenceContextManager
+            ref_manager = ReferenceContextManager()
+            reference_context = ref_manager.get_current_list(context.conversation)
+        except Exception as e:
+            logger.debug(f"No reference context available: {e}")
+        
+        # Get browse session if available
+        try:
+            from apps.bot.models import BrowseSession
+            browse_session = BrowseSession.objects.filter(
+                conversation=context.conversation,
+                is_active=True
+            ).first()
+        except Exception as e:
+            logger.debug(f"No browse session available: {e}")
+        
+        # Get language preference if available
+        try:
+            from apps.bot.models import LanguagePreference
+            language_preference = LanguagePreference.objects.filter(
+                conversation=context.conversation
+            ).first()
+        except Exception as e:
+            logger.debug(f"No language preference available: {e}")
+        
+        # Get product analysis if viewing a specific product
+        if context.last_product_viewed:
+            try:
+                from apps.bot.models import ProductAnalysis
+                product_analysis = ProductAnalysis.objects.filter(
+                    product=context.last_product_viewed
+                ).first()
+            except Exception as e:
+                logger.debug(f"No product analysis available: {e}")
+        
+        # Get clarification context from conversation metadata
+        if context.conversation.metadata:
+            clarification_count = context.conversation.metadata.get('clarification_count', 0)
+            preferences = context.conversation.metadata.get('extracted_preferences', {})
         
         # Build complete prompt using template manager
         base_prompt = PromptTemplateManager.build_complete_user_prompt(
@@ -1070,7 +1120,13 @@ class AIAgentService:
             services=context.catalog_context.services,
             customer_history=context.customer_history,
             conversation_summary=conversation_summary,
-            key_facts=key_facts
+            key_facts=key_facts,
+            reference_context=reference_context,
+            browse_session=browse_session,
+            language_preference=language_preference,
+            product_analysis=product_analysis,
+            clarification_count=clarification_count,
+            preferences=preferences
         )
         
         # Add suggestions if available and enabled

@@ -1278,3 +1278,163 @@ def process_message_burst(self, conversation_id: str):
                 'status': 'failed',
                 'error': str(e)
             }
+
+
+@shared_task
+def analyze_products_batch(tenant_id: str, product_ids: list = None):
+    """
+    Background task to analyze products using AI.
+    
+    Analyzes products to extract:
+    - Key features
+    - Use cases
+    - Target audience
+    - Semantic embeddings
+    - AI categories and tags
+    
+    Args:
+        tenant_id: Tenant UUID
+        product_ids: Optional list of specific product IDs to analyze
+    
+    Requirements: 25.1, 25.4
+    """
+    from apps.tenants.models import Tenant
+    from apps.catalog.models import Product
+    from apps.bot.services.product_intelligence import ProductIntelligenceService
+    
+    logger.info(f"Starting product analysis batch for tenant {tenant_id}")
+    
+    try:
+        tenant = Tenant.objects.get(id=tenant_id)
+        
+        # Get products to analyze
+        if product_ids:
+            products = Product.objects.filter(
+                tenant=tenant,
+                id__in=product_ids,
+                is_active=True
+            )
+        else:
+            # Analyze products that haven't been analyzed or need refresh
+            from datetime import timedelta
+            from django.utils import timezone
+            from apps.bot.models import ProductAnalysis
+            
+            analyzed_product_ids = ProductAnalysis.objects.filter(
+                product__tenant=tenant,
+                analyzed_at__gte=timezone.now() - timedelta(hours=24)
+            ).values_list('product_id', flat=True)
+            
+            products = Product.objects.filter(
+                tenant=tenant,
+                is_active=True
+            ).exclude(id__in=analyzed_product_ids)[:50]  # Batch of 50
+        
+        analyzed_count = 0
+        error_count = 0
+        
+        for product in products:
+            try:
+                ProductIntelligenceService.analyze_product(product)
+                analyzed_count += 1
+            except Exception as e:
+                logger.error(f"Error analyzing product {product.id}: {e}")
+                error_count += 1
+        
+        logger.info(
+            f"Product analysis batch complete: {analyzed_count} analyzed, "
+            f"{error_count} errors"
+        )
+        
+        return {
+            'status': 'success',
+            'analyzed_count': analyzed_count,
+            'error_count': error_count,
+        }
+        
+    except Tenant.DoesNotExist:
+        logger.error(f"Tenant not found: {tenant_id}")
+        return {'status': 'error', 'error': 'tenant_not_found'}
+    
+    except Exception as e:
+        logger.error(f"Error in product analysis batch: {e}", exc_info=True)
+        return {'status': 'error', 'error': str(e)}
+
+
+@shared_task
+def cleanup_expired_browse_sessions():
+    """
+    Periodic task to clean up expired browse sessions.
+    
+    Runs periodically to deactivate browse sessions that have expired.
+    
+    Requirements: 23.1, 23.2
+    """
+    from apps.bot.services.catalog_browser import CatalogBrowserService
+    
+    logger.info("Starting expired browse session cleanup")
+    
+    try:
+        expired_count = CatalogBrowserService.cleanup_expired_sessions()
+        
+        logger.info(f"Browse session cleanup complete: {expired_count} deactivated")
+        
+        return {
+            'status': 'success',
+            'expired_count': expired_count,
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in browse session cleanup: {e}", exc_info=True)
+        return {'status': 'error', 'error': str(e)}
+
+
+@shared_task
+def cleanup_expired_reference_contexts():
+    """
+    Periodic task to clean up expired reference contexts.
+    
+    Runs periodically to delete reference contexts that have expired.
+    
+    Requirements: 24.1, 24.5
+    """
+    from apps.bot.services.reference_context_manager import ReferenceContextManager
+    
+    logger.info("Starting expired reference context cleanup")
+    
+    try:
+        deleted_count = ReferenceContextManager.cleanup_expired_contexts()
+        
+        logger.info(f"Reference context cleanup complete: {deleted_count} deleted")
+        
+        return {
+            'status': 'success',
+            'deleted_count': deleted_count,
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in reference context cleanup: {e}", exc_info=True)
+        return {'status': 'error', 'error': str(e)}
+
+
+
+@shared_task
+def cleanup_expired_browse_sessions():
+    """
+    Clean up expired browse sessions.
+    
+    This task should be run periodically (e.g., every 15 minutes) to
+    deactivate browse sessions that have expired.
+    
+    Returns:
+        Number of sessions cleaned up
+    """
+    from apps.bot.services.catalog_browser_service import CatalogBrowserService
+    
+    try:
+        count = CatalogBrowserService.cleanup_expired_sessions()
+        logger.info(f"Cleaned up {count} expired browse sessions")
+        return count
+    except Exception as e:
+        logger.error(f"Error cleaning up browse sessions: {e}", exc_info=True)
+        raise

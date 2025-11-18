@@ -36,18 +36,29 @@ Your capabilities:
 - Provide information from the business knowledge base
 - Offer personalized recommendations based on customer history
 - Maintain context across the conversation
+- Handle multi-language conversations (English, Swahili, Sheng)
+- Browse large catalogs with pagination
+- Resolve positional references ("the first one", "number 2")
+- Provide AI-powered product recommendations with explanations
+- Ask clarifying questions to narrow down choices
 
 Your limitations:
 - You cannot process payments directly
 - You cannot access external systems without explicit integration
-- If you're unsure or the request is complex, offer to connect with a human agent
+- If you're unsure or the request is complex, ask clarifying questions first
+- Only offer human handoff after genuine attempts to help
 
 Response guidelines:
 - Be helpful, accurate, and concise
 - Use information from the provided context
 - Reference specific products, services, or knowledge when relevant
 - If you don't know something, admit it and offer alternatives
-- Always prioritize customer satisfaction"""
+- Always prioritize customer satisfaction
+- Match the customer's language preference (English, Swahili, or mixed)
+- When showing multiple items, use pagination for better experience
+- Confirm positional references before proceeding ("You mean [item name]?")
+- Explain why you're recommending specific products
+- Ask clarifying questions when there are many options (>10 results)"""
     
     # Scenario-specific prompt additions
     SCENARIO_PROMPTS = {
@@ -120,6 +131,84 @@ When providing technical support:
 - Document the issue and resolution for future reference"""
     }
     
+    # New feature-specific prompt additions
+    LANGUAGE_HANDLING_PROMPT = """
+## Multi-Language Handling
+
+When handling multi-language conversations:
+- Detect the customer's language preference (English, Swahili, Sheng, or mixed)
+- Respond in the same language or language mix as the customer
+- Understand common Swahili phrases: nataka (I want), ninataka (I want), nipe (give me), bei gani (what price), iko (is it available)
+- Understand common Sheng phrases: sawa (okay), poa (cool/good), fiti (good/fine), doh (money), mbao (money)
+- Normalize mixed-language messages to understand intent
+- Don't force English if customer prefers Swahili or Sheng"""
+    
+    PAGINATION_PROMPT = """
+## Catalog Browsing and Pagination
+
+When showing catalog results:
+- If there are more than 5 items, use pagination
+- Show 5 items at a time with navigation options
+- Include position indicator ("Showing 1-5 of 247")
+- Provide "Next 5", "Previous 5", and "Search" buttons
+- Remember the customer's position in the catalog
+- Allow filtering and searching within results"""
+    
+    REFERENCE_RESOLUTION_PROMPT = """
+## Positional Reference Resolution
+
+When customer uses positional references:
+- Understand numeric references: "1", "2", "3", "the first", "the second", "the last"
+- Understand ordinal references: "first one", "second option", "last item"
+- Always confirm what item they're referring to before proceeding
+- Example: "You mean [Product Name]? Let me help you with that."
+- If reference is ambiguous, ask for clarification
+- References expire after 5 minutes of inactivity"""
+    
+    CLARIFYING_QUESTIONS_PROMPT = """
+## Clarifying Questions and Discovery
+
+When there are many options (>10 results):
+- Ask specific clarifying questions to narrow down choices
+- Focus on: price range, features, use case, preferences
+- Limit to 2-3 clarifying questions maximum
+- Use customer responses to filter results
+- Present narrowed results with match highlights
+- If no exact match, suggest closest alternatives with explanations"""
+    
+    PRODUCT_INTELLIGENCE_PROMPT = """
+## AI-Powered Product Recommendations
+
+When recommending products:
+- Use AI analysis of product characteristics
+- Match customer needs to product features semantically
+- Always explain WHY you're recommending specific items
+- Highlight distinguishing features between similar products
+- Consider: use case, target audience, key features, price point
+- Example: "I recommend [Product] because it has [feature] which is perfect for [use case]"
+- Provide 2-3 options when possible, explaining trade-offs"""
+    
+    PROGRESSIVE_HANDOFF_PROMPT = """
+## Progressive Assistance and Handoff
+
+Before offering human handoff:
+- Make 2 genuine attempts to help with clarifying questions
+- Try to understand what's unclear or ambiguous
+- Offer specific clarifying questions, not generic ones
+- Only suggest handoff after real attempts to assist
+
+When suggesting handoff:
+- Summarize what you understood from the conversation
+- List what you tried to help with
+- Explain why human assistance would be better
+- Offer options: handoff, rephrase question, or try alternatives
+
+Immediate handoff triggers (no clarification needed):
+- Explicit customer request for human ("talk to a person")
+- Complaints, refunds, or legal matters
+- Technical issues (payment failures, account problems)
+- Custom orders or special requests"""
+    
     # Context injection templates
     KNOWLEDGE_BASE_TEMPLATE = """## Relevant Knowledge Base
 
@@ -155,26 +244,102 @@ Key facts to remember:
 
 Continue the conversation naturally, referencing previous context when relevant."""
     
+    # New context templates for new features
+    REFERENCE_CONTEXT_TEMPLATE = """## Recent List Context
+
+The customer was recently shown this list:
+{items}
+
+If the customer refers to items by position (e.g., "1", "the first one", "number 2"), they mean items from this list.
+Always confirm which item they mean before proceeding."""
+    
+    BROWSE_SESSION_TEMPLATE = """## Active Browse Session
+
+The customer is browsing {catalog_type}:
+- Currently viewing page {current_page} of {total_pages}
+- Showing items {start_position}-{end_position} of {total_items}
+- Filters applied: {filters}
+
+Navigation options available: Next 5, Previous 5, Search"""
+    
+    LANGUAGE_PREFERENCE_TEMPLATE = """## Customer Language Preference
+
+Primary language: {primary_language}
+Language usage pattern: {language_pattern}
+Common phrases used: {common_phrases}
+
+Match your response language to the customer's preference."""
+    
+    PRODUCT_ANALYSIS_TEMPLATE = """## AI Product Analysis
+
+{product_name}:
+- Key features: {key_features}
+- Best for: {use_cases}
+- Target audience: {target_audience}
+- Distinguishing characteristics: {distinguishing_features}
+
+Use this analysis to explain why this product matches the customer's needs."""
+    
+    CLARIFICATION_CONTEXT_TEMPLATE = """## Clarification Attempts
+
+Previous clarifying questions asked: {clarification_count}
+Customer preferences extracted:
+{preferences}
+
+Use this information to avoid repeating questions and to better filter results."""
+    
     @classmethod
     def get_system_prompt(
         cls,
         scenario: PromptScenario = PromptScenario.GENERAL,
-        include_scenario_guidance: bool = True
+        include_scenario_guidance: bool = True,
+        include_language_handling: bool = True,
+        include_pagination: bool = True,
+        include_reference_resolution: bool = True,
+        include_clarifying_questions: bool = True,
+        include_product_intelligence: bool = True,
+        include_progressive_handoff: bool = True
     ) -> str:
         """
-        Get system prompt for a specific scenario.
+        Get system prompt for a specific scenario with optional feature guidance.
         
         Args:
             scenario: Conversation scenario
             include_scenario_guidance: Whether to include scenario-specific guidance
+            include_language_handling: Include multi-language handling instructions
+            include_pagination: Include pagination instructions
+            include_reference_resolution: Include positional reference instructions
+            include_clarifying_questions: Include clarifying question guidelines
+            include_product_intelligence: Include AI recommendation instructions
+            include_progressive_handoff: Include progressive handoff instructions
             
         Returns:
             Complete system prompt string
         """
         prompt = cls.BASE_SYSTEM_PROMPT
         
+        # Add scenario-specific guidance
         if include_scenario_guidance and scenario in cls.SCENARIO_PROMPTS:
             prompt += "\n\n" + cls.SCENARIO_PROMPTS[scenario]
+        
+        # Add new feature guidance
+        if include_language_handling:
+            prompt += "\n\n" + cls.LANGUAGE_HANDLING_PROMPT
+        
+        if include_pagination:
+            prompt += "\n\n" + cls.PAGINATION_PROMPT
+        
+        if include_reference_resolution:
+            prompt += "\n\n" + cls.REFERENCE_RESOLUTION_PROMPT
+        
+        if include_clarifying_questions:
+            prompt += "\n\n" + cls.CLARIFYING_QUESTIONS_PROMPT
+        
+        if include_product_intelligence:
+            prompt += "\n\n" + cls.PRODUCT_INTELLIGENCE_PROMPT
+        
+        if include_progressive_handoff:
+            prompt += "\n\n" + cls.PROGRESSIVE_HANDOFF_PROMPT
         
         return prompt
     
@@ -370,6 +535,142 @@ Continue the conversation naturally, referencing previous context when relevant.
         return PromptScenario.GENERAL
     
     @classmethod
+    def build_reference_context_section(
+        cls,
+        reference_context
+    ) -> str:
+        """
+        Build reference context section for prompt.
+        
+        Args:
+            reference_context: ReferenceContext object with list items
+            
+        Returns:
+            Formatted reference context section
+        """
+        if not reference_context or not reference_context.items:
+            return ""
+        
+        items_text = []
+        for idx, item in enumerate(reference_context.items, 1):
+            items_text.append(f"{idx}. {item.get('title', 'Unknown')} - {item.get('description', '')}")
+        
+        return cls.REFERENCE_CONTEXT_TEMPLATE.format(
+            items="\n".join(items_text)
+        )
+    
+    @classmethod
+    def build_browse_session_section(
+        cls,
+        browse_session
+    ) -> str:
+        """
+        Build browse session section for prompt.
+        
+        Args:
+            browse_session: BrowseSession object
+            
+        Returns:
+            Formatted browse session section
+        """
+        if not browse_session or not browse_session.is_active:
+            return ""
+        
+        total_pages = (browse_session.total_items + browse_session.items_per_page - 1) // browse_session.items_per_page
+        start_position = (browse_session.current_page - 1) * browse_session.items_per_page + 1
+        end_position = min(browse_session.current_page * browse_session.items_per_page, browse_session.total_items)
+        
+        filters_text = browse_session.filters if browse_session.filters else "None"
+        
+        return cls.BROWSE_SESSION_TEMPLATE.format(
+            catalog_type=browse_session.catalog_type,
+            current_page=browse_session.current_page,
+            total_pages=total_pages,
+            start_position=start_position,
+            end_position=end_position,
+            total_items=browse_session.total_items,
+            filters=filters_text
+        )
+    
+    @classmethod
+    def build_language_preference_section(
+        cls,
+        language_preference
+    ) -> str:
+        """
+        Build language preference section for prompt.
+        
+        Args:
+            language_preference: LanguagePreference object
+            
+        Returns:
+            Formatted language preference section
+        """
+        if not language_preference:
+            return ""
+        
+        common_phrases = ", ".join(language_preference.common_phrases) if language_preference.common_phrases else "None detected yet"
+        
+        return cls.LANGUAGE_PREFERENCE_TEMPLATE.format(
+            primary_language=language_preference.primary_language,
+            language_pattern=language_preference.language_usage,
+            common_phrases=common_phrases
+        )
+    
+    @classmethod
+    def build_product_analysis_section(
+        cls,
+        product_analysis
+    ) -> str:
+        """
+        Build product analysis section for prompt.
+        
+        Args:
+            product_analysis: ProductAnalysis object
+            
+        Returns:
+            Formatted product analysis section
+        """
+        if not product_analysis:
+            return ""
+        
+        return cls.PRODUCT_ANALYSIS_TEMPLATE.format(
+            product_name=product_analysis.product.title,
+            key_features=", ".join(product_analysis.key_features) if product_analysis.key_features else "Not analyzed",
+            use_cases=", ".join(product_analysis.use_cases) if product_analysis.use_cases else "Not analyzed",
+            target_audience=product_analysis.target_audience or "Not analyzed",
+            distinguishing_features=product_analysis.summary or "Not analyzed"
+        )
+    
+    @classmethod
+    def build_clarification_context_section(
+        cls,
+        clarification_count: int,
+        preferences: dict
+    ) -> str:
+        """
+        Build clarification context section for prompt.
+        
+        Args:
+            clarification_count: Number of clarifying questions asked
+            preferences: Dictionary of extracted preferences
+            
+        Returns:
+            Formatted clarification context section
+        """
+        if clarification_count == 0 and not preferences:
+            return ""
+        
+        preferences_text = []
+        for key, value in preferences.items():
+            preferences_text.append(f"- {key}: {value}")
+        
+        return cls.CLARIFICATION_CONTEXT_TEMPLATE.format(
+            clarification_count=clarification_count,
+            preferences="\n".join(preferences_text) if preferences_text else "None extracted yet"
+        )
+    
+    @classmethod
     def build_complete_user_prompt(
         cls,
         current_message: str,
@@ -379,7 +680,13 @@ Continue the conversation naturally, referencing previous context when relevant.
         services: list = None,
         customer_history = None,
         conversation_summary: str = None,
-        key_facts: list = None
+        key_facts: list = None,
+        reference_context = None,
+        browse_session = None,
+        language_preference = None,
+        product_analysis = None,
+        clarification_count: int = 0,
+        preferences: dict = None
     ) -> str:
         """
         Build complete user prompt with all context sections.
@@ -393,11 +700,24 @@ Continue the conversation naturally, referencing previous context when relevant.
             customer_history: CustomerHistory object
             conversation_summary: Conversation summary text
             key_facts: List of key facts
+            reference_context: ReferenceContext object for positional references
+            browse_session: BrowseSession object for pagination state
+            language_preference: LanguagePreference object
+            product_analysis: ProductAnalysis object for AI insights
+            clarification_count: Number of clarifying questions asked
+            preferences: Dictionary of extracted customer preferences
             
         Returns:
             Complete user prompt string
         """
         sections = []
+        
+        # Add language preference (high priority)
+        if language_preference:
+            lang_section = cls.build_language_preference_section(language_preference)
+            if lang_section:
+                sections.append(lang_section)
+                sections.append("")
         
         # Add conversation history
         if conversation_history:
@@ -417,11 +737,42 @@ Continue the conversation naturally, referencing previous context when relevant.
                 sections.append(summary_section)
                 sections.append("")
         
+        # Add reference context (important for positional references)
+        if reference_context:
+            ref_section = cls.build_reference_context_section(reference_context)
+            if ref_section:
+                sections.append(ref_section)
+                sections.append("")
+        
+        # Add browse session state
+        if browse_session:
+            browse_section = cls.build_browse_session_section(browse_session)
+            if browse_section:
+                sections.append(browse_section)
+                sections.append("")
+        
+        # Add clarification context
+        if clarification_count > 0 or preferences:
+            clarification_section = cls.build_clarification_context_section(
+                clarification_count,
+                preferences or {}
+            )
+            if clarification_section:
+                sections.append(clarification_section)
+                sections.append("")
+        
         # Add knowledge base
         if knowledge_entries:
             knowledge_section = cls.build_knowledge_section(knowledge_entries)
             if knowledge_section:
                 sections.append(knowledge_section)
+                sections.append("")
+        
+        # Add product analysis (if viewing specific product)
+        if product_analysis:
+            analysis_section = cls.build_product_analysis_section(product_analysis)
+            if analysis_section:
+                sections.append(analysis_section)
                 sections.append("")
         
         # Add products
