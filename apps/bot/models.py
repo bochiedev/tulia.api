@@ -265,6 +265,73 @@ class AgentConfiguration(BaseModel):
         help_text="Enable rich WhatsApp messages (buttons, lists, media)"
     )
     
+    # RAG Configuration
+    enable_document_retrieval = models.BooleanField(
+        default=False,
+        help_text="Enable retrieval from uploaded documents"
+    )
+    
+    enable_database_retrieval = models.BooleanField(
+        default=True,
+        help_text="Enable retrieval from database (products, services, orders)"
+    )
+    
+    enable_internet_enrichment = models.BooleanField(
+        default=False,
+        help_text="Enable internet search for product enrichment"
+    )
+    
+    enable_source_attribution = models.BooleanField(
+        default=True,
+        help_text="Include source citations in responses"
+    )
+    
+    max_document_results = models.IntegerField(
+        default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text="Maximum number of document chunks to retrieve"
+    )
+    
+    max_database_results = models.IntegerField(
+        default=5,
+        validators=[MinValueValidator(1), MaxValueValidator(20)],
+        help_text="Maximum number of database results to retrieve"
+    )
+    
+    max_internet_results = models.IntegerField(
+        default=2,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="Maximum number of internet search results"
+    )
+    
+    semantic_search_weight = models.FloatField(
+        default=0.7,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Weight for semantic search in hybrid search (0.0-1.0)"
+    )
+    
+    keyword_search_weight = models.FloatField(
+        default=0.3,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Weight for keyword search in hybrid search (0.0-1.0)"
+    )
+    
+    embedding_model = models.CharField(
+        max_length=50,
+        default='text-embedding-3-small',
+        help_text="Embedding model for semantic search"
+    )
+    
+    agent_can_do = models.TextField(
+        blank=True,
+        help_text="Explicit list of what the agent CAN do (for prompt engineering)"
+    )
+    
+    agent_cannot_do = models.TextField(
+        blank=True,
+        help_text="Explicit list of what the agent CANNOT do (for prompt engineering)"
+    )
+    
     class Meta:
         db_table = 'agent_configurations'
         verbose_name = 'Agent Configuration'
@@ -1174,3 +1241,29 @@ class LanguagePreference(BaseModel):
             return self.primary_language
         
         return max(self.language_usage.items(), key=lambda x: x[1])[0]
+
+
+# Import RAG models
+from apps.bot.models_rag import (
+    Document,
+    DocumentChunk,
+    InternetSearchCache,
+    RAGRetrievalLog
+)
+
+__all__ = [
+    'IntentEvent',
+    'AgentConfiguration',
+    'KnowledgeEntry',
+    'ConversationContext',
+    'AgentInteraction',
+    'BrowseSession',
+    'ReferenceContext',
+    'ProductAnalysis',
+    'LanguagePreference',
+    # RAG models
+    'Document',
+    'DocumentChunk',
+    'InternetSearchCache',
+    'RAGRetrievalLog',
+]

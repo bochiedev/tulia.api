@@ -742,6 +742,26 @@ OPENAI_API_KEY = env('OPENAI_API_KEY', default=None)
 OPENAI_MODEL = env('OPENAI_MODEL', default='gpt-4o-mini')
 ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default=None)
 
+# RAG Configuration
+PINECONE_API_KEY = env('PINECONE_API_KEY', default=None)
+PINECONE_INDEX_NAME = env('PINECONE_INDEX_NAME', default='wabotiq-rag')
+PINECONE_DIMENSION = env.int('PINECONE_DIMENSION', default=1536)  # text-embedding-3-small
+PINECONE_METRIC = env('PINECONE_METRIC', default='cosine')
+PINECONE_CLOUD = env('PINECONE_CLOUD', default='aws')
+PINECONE_REGION = env('PINECONE_REGION', default='us-east-1')
+
+# Document upload settings
+MAX_DOCUMENT_SIZE = env.int('MAX_DOCUMENT_SIZE', default=10 * 1024 * 1024)  # 10MB
+ALLOWED_DOCUMENT_TYPES = ['pdf', 'txt']
+DOCUMENT_STORAGE_PATH = os.path.join(BASE_DIR, 'media', 'documents')
+
+# RAG retrieval settings
+RAG_CHUNK_SIZE = env.int('RAG_CHUNK_SIZE', default=400)  # tokens
+RAG_CHUNK_OVERLAP = env.int('RAG_CHUNK_OVERLAP', default=50)  # tokens
+RAG_TOP_K_RESULTS = env.int('RAG_TOP_K_RESULTS', default=5)
+RAG_SEMANTIC_WEIGHT = env.float('RAG_SEMANTIC_WEIGHT', default=0.7)
+RAG_KEYWORD_WEIGHT = env.float('RAG_KEYWORD_WEIGHT', default=0.3)
+
 # Subscription Configuration
 DEFAULT_TRIAL_DAYS = env.int('DEFAULT_TRIAL_DAYS', default=14)
 

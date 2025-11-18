@@ -42,5 +42,17 @@ twilio==9.0.4
 openai==1.51.0
 httpx<0.28  # Required for openai compatibility
 
+# RAG & LangChain (Python 3.13 compatible)
+langchain==0.3.7
+langchain-openai==0.2.5
+langchain-community==0.3.7
+langchain-pinecone==0.2.13
+tiktoken==0.8.0
+
+# Document Processing
+pypdf2==3.0.1
+pdfplumber==0.11.4
+nltk==3.9.1
+
 # Input Validation
 jsonschema==4.23.0

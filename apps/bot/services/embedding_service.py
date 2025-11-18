@@ -1,111 +1,201 @@
 """
-Embedding service for generating semantic embeddings.
+Embedding service for generating text embeddings using OpenAI.
 """
+import hashlib
 import logging
-import math
-from typing import List
+from typing import List, Dict, Any
+from decimal import Decimal
+
+from django.core.cache import cache
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
     """
-    Service for generating and comparing semantic embeddings.
-    
-    Uses OpenAI's embedding API for generating embeddings
-    and provides cosine similarity for comparison.
+    Service for generating text embeddings with caching and batch support.
     """
     
-    @classmethod
-    def generate_embedding(cls, text: str) -> List[float]:
+    # Model pricing per 1M tokens
+    MODEL_PRICING = {
+        'text-embedding-3-small': Decimal('0.00002'),  # $0.02 per 1M tokens
+        'text-embedding-3-large': Decimal('0.00013'),  # $0.13 per 1M tokens
+    }
+    
+    DEFAULT_MODEL = 'text-embedding-3-small'
+    CACHE_TTL = 300  # 5 minutes for query embeddings
+    MAX_BATCH_SIZE = 100
+    
+    def __init__(self, api_key: str, model: str = None):
         """
-        Generate embedding vector for text.
+        Initialize embedding service.
+        
+        Args:
+            api_key: OpenAI API key
+            model: Embedding model to use (default: text-embedding-3-small)
+        """
+        self.client = OpenAI(api_key=api_key)
+        self.model = model or self.DEFAULT_MODEL
+    
+    def embed_text(
+        self,
+        text: str,
+        use_cache: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate embedding for a single text.
         
         Args:
             text: Text to embed
+            use_cache: Whether to use cache for this embedding
         
         Returns:
-            List of floats representing the embedding vector
+            Dict with 'embedding', 'tokens', and 'cost'
         """
+        if not text or not text.strip():
+            raise ValueError("Text cannot be empty")
+        
+        # Check cache
+        if use_cache:
+            cache_key = self._get_cache_key(text)
+            cached = cache.get(cache_key)
+            if cached:
+                logger.debug(f"Cache hit for embedding: {text[:50]}")
+                return cached
+        
+        # Generate embedding
         try:
-            import openai
-            from django.conf import settings
-            
-            # Use OpenAI's embedding model
-            client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-            
-            response = client.embeddings.create(
-                model="text-embedding-3-small",  # Cheaper, faster model
+            response = self.client.embeddings.create(
+                model=self.model,
                 input=text
             )
             
             embedding = response.data[0].embedding
-            return embedding
+            tokens = response.usage.total_tokens
+            cost = self._calculate_cost(tokens)
+            
+            result = {
+                'embedding': embedding,
+                'tokens': tokens,
+                'cost': cost,
+                'model': self.model
+            }
+            
+            # Cache result
+            if use_cache:
+                cache.set(cache_key, result, self.CACHE_TTL)
+            
+            logger.info(
+                f"Generated embedding: {tokens} tokens, "
+                f"${cost:.6f} cost"
+            )
+            
+            return result
             
         except Exception as e:
             logger.error(f"Error generating embedding: {e}")
-            # Return zero vector as fallback
-            return [0.0] * 1536  # text-embedding-3-small dimension
+            raise
     
-    @classmethod
-    def cosine_similarity(cls, embedding1: List[float], embedding2: List[float]) -> float:
-        """
-        Calculate cosine similarity between two embeddings.
-        
-        Args:
-            embedding1: First embedding vector
-            embedding2: Second embedding vector
-        
-        Returns:
-            Similarity score between 0 and 1
-        """
-        try:
-            # Calculate dot product
-            dot_product = sum(a * b for a, b in zip(embedding1, embedding2))
-            
-            # Calculate magnitudes
-            magnitude1 = math.sqrt(sum(a * a for a in embedding1))
-            magnitude2 = math.sqrt(sum(b * b for b in embedding2))
-            
-            if magnitude1 == 0 or magnitude2 == 0:
-                return 0.0
-            
-            # Calculate cosine similarity
-            similarity = dot_product / (magnitude1 * magnitude2)
-            
-            # Ensure result is between 0 and 1
-            return max(0.0, min(1.0, float(similarity)))
-            
-        except Exception as e:
-            logger.error(f"Error calculating cosine similarity: {e}")
-            return 0.0
-    
-    @classmethod
-    def batch_generate_embeddings(cls, texts: List[str]) -> List[List[float]]:
+    def embed_batch(
+        self,
+        texts: List[str],
+        use_cache: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         Generate embeddings for multiple texts in batch.
         
         Args:
             texts: List of texts to embed
+            use_cache: Whether to use cache (usually False for batch)
         
         Returns:
-            List of embedding vectors
+            List of dicts with 'embedding', 'tokens', and 'cost'
         """
+        if not texts:
+            return []
+        
+        if len(texts) > self.MAX_BATCH_SIZE:
+            raise ValueError(
+                f"Batch size {len(texts)} exceeds maximum {self.MAX_BATCH_SIZE}"
+            )
+        
+        # Filter empty texts
+        valid_texts = [t for t in texts if t and t.strip()]
+        if not valid_texts:
+            raise ValueError("No valid texts to embed")
+        
         try:
-            import openai
-            from django.conf import settings
-            
-            client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-            
-            response = client.embeddings.create(
-                model="text-embedding-3-small",
-                input=texts
+            response = self.client.embeddings.create(
+                model=self.model,
+                input=valid_texts
             )
             
-            embeddings = [item.embedding for item in response.data]
-            return embeddings
+            total_tokens = response.usage.total_tokens
+            total_cost = self._calculate_cost(total_tokens)
+            
+            results = []
+            for i, data in enumerate(response.data):
+                results.append({
+                    'embedding': data.embedding,
+                    'tokens': total_tokens // len(valid_texts),  # Approximate
+                    'cost': total_cost / len(valid_texts),  # Approximate
+                    'model': self.model,
+                    'text': valid_texts[i]
+                })
+            
+            logger.info(
+                f"Generated {len(results)} embeddings: "
+                f"{total_tokens} tokens, ${total_cost:.6f} cost"
+            )
+            
+            return results
             
         except Exception as e:
             logger.error(f"Error generating batch embeddings: {e}")
-            # Return zero vectors as fallback
-            return [[0.0] * 1536 for _ in texts]
+            raise
+    
+    def _get_cache_key(self, text: str) -> str:
+        """Generate cache key for text."""
+        text_hash = hashlib.sha256(text.encode()).hexdigest()
+        return f"embedding:{self.model}:{text_hash}"
+    
+    def _calculate_cost(self, tokens: int) -> Decimal:
+        """Calculate cost for given token count."""
+        price_per_token = self.MODEL_PRICING.get(
+            self.model,
+            self.MODEL_PRICING[self.DEFAULT_MODEL]
+        )
+        return (Decimal(tokens) / Decimal(1_000_000)) * price_per_token
+    
+    @classmethod
+    def create_for_tenant(cls, tenant) -> 'EmbeddingService':
+        """
+        Create embedding service for a tenant.
+        
+        Args:
+            tenant: Tenant instance
+        
+        Returns:
+            EmbeddingService instance
+        """
+        from django.conf import settings
+        
+        # Get API key from tenant settings or fall back to global
+        api_key = tenant.settings.openai_api_key
+        if not api_key:
+            api_key = settings.OPENAI_API_KEY
+        
+        if not api_key:
+            raise ValueError("OpenAI API key not configured")
+        
+        # Get embedding model from agent configuration
+        model = cls.DEFAULT_MODEL
+        try:
+            config = tenant.agent_configuration
+            if config and config.embedding_model:
+                model = config.embedding_model
+        except Exception:
+            pass
+        
+        return cls(api_key=api_key, model=model)

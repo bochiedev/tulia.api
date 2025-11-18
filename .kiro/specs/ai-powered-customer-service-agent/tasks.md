@@ -718,11 +718,11 @@ This phase adds document retrieval, semantic search, and multi-source context sy
 
 **Note**: These tasks are detailed in `.kiro/specs/ai-agent-rag-enhancement/` - see that spec for full implementation details. Tasks 30-37 below are high-level summaries that reference the detailed RAG spec.
 
-- [ ] 30. RAG Infrastructure (See RAG Spec Tasks 1-5)
-  - [ ] 30.1 Install LangChain and vector store (RAG Tasks 1.1, 1.2)
-  - [ ] 30.2 Create RAG database models (RAG Task 1.3)
-  - [ ] 30.3 Set up embedding service (RAG Task 4)
-  - [ ] 30.4 Implement vector store integration (RAG Task 5)
+- [x] 30. RAG Infrastructure (See RAG Spec Tasks 1-5) ✅ COMPLETE
+  - [x] 30.1 Install LangChain and vector store (RAG Tasks 1.1, 1.2)
+  - [x] 30.2 Create RAG database models (RAG Task 1.3)
+  - [x] 30.3 Set up embedding service (RAG Task 4)
+  - [x] 30.4 Implement vector store integration (RAG Task 5)
 
 - [ ] 31. Document Management (See RAG Spec Tasks 2-3)
   - [ ] 31.1 Build document upload API (RAG Task 2)
