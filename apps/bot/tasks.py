@@ -762,37 +762,17 @@ def _should_use_ai_agent(tenant) -> bool:
     """
     Check if AI agent should be used for this tenant.
     
-    Checks the feature flag in TenantSettings. Defaults to False
-    if settings don't exist or flag is not set.
+    AI agent is now the default for all tenants. Legacy system has been removed.
+    This function is kept for backwards compatibility but always returns True.
     
     Args:
         tenant: Tenant instance
         
     Returns:
-        bool: True if AI agent should be used
+        bool: Always True (AI agent is the default)
     """
-    try:
-        # Get tenant settings
-        if not hasattr(tenant, 'settings'):
-            logger.debug(f"Tenant {tenant.id} has no settings, using legacy system")
-            return False
-        
-        # Check feature flag
-        use_ai_agent = tenant.settings.is_feature_enabled('ai_agent_enabled')
-        
-        logger.debug(
-            f"AI agent feature flag for tenant {tenant.id}: {use_ai_agent}"
-        )
-        
-        return use_ai_agent
-        
-    except Exception as e:
-        logger.error(
-            f"Error checking AI agent feature flag for tenant {tenant.id}: {e}",
-            exc_info=True
-        )
-        # Default to legacy system on error
-        return False
+    # AI agent is now the default - no more legacy system
+    return True
 
 
 def _process_with_ai_agent(
