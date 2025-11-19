@@ -386,7 +386,7 @@ class PaymentService:
                 amount=order.total,
                 account_reference=f"ORD{order.id}",
                 transaction_desc=f"Order {order.id}",
-                callback_url=f"{settings.FRONTEND_URL}/api/v1/webhooks/mpesa/callback"
+                callback_url=f"{settings.CALLBACK_URL}/api/v1/webhooks/mpesa/callback"
             )
             
             # Update order with payment reference

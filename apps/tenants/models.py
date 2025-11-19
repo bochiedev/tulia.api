@@ -1265,11 +1265,19 @@ class TenantSettings(BaseModel):
         help_text="Encrypted Together AI API key"
     )
     
+    # Google Gemini
+    gemini_api_key = EncryptedCharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text="Encrypted Google Gemini API key"
+    )
+    
     # LLM Configuration
     llm_provider = models.CharField(
         max_length=50,
         default='openai',
-        help_text="LLM provider to use (openai, together, etc.)"
+        help_text="LLM provider to use (openai, together, gemini, etc.)"
     )
     llm_timeout = models.FloatField(
         null=True,
@@ -1383,6 +1391,14 @@ class TenantSettings(BaseModel):
         default=dict,
         blank=True,
         help_text="Additional settings metadata (payment provider credentials, etc.)"
+    )
+    
+    # === FEATURE FLAGS ===
+    
+    feature_flags = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Feature flags for gradual rollout and A/B testing"
     )
     
     class Meta:

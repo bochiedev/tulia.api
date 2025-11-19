@@ -3,14 +3,9 @@ URL configuration for bot app.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from apps.bot.views import (
-    AgentConfigurationView,
-    KnowledgeEntryViewSet,
-    AgentAnalyticsView,
-    AgentHandoffAnalyticsView,
-    AgentCostAnalyticsView,
-    AgentTopicsAnalyticsView,
-)
+
+# Import from bot_views.py
+import apps.bot.bot_views as bot_views
 from apps.bot.views_agent_interactions import (
     AgentInteractionListView,
     AgentInteractionDetailView,
@@ -21,11 +16,11 @@ app_name = 'bot'
 
 # Create router for ViewSets
 router = DefaultRouter()
-router.register(r'knowledge', KnowledgeEntryViewSet, basename='knowledge')
+router.register(r'knowledge', bot_views.KnowledgeEntryViewSet, basename='knowledge')
 
 urlpatterns = [
     # Agent Configuration
-    path('agent-config', AgentConfigurationView.as_view(), name='agent-config'),
+    path('agent-config', bot_views.AgentConfigurationView.as_view(), name='agent-config'),
     
     # Agent Interactions
     path('interactions', AgentInteractionListView.as_view(), name='interactions-list'),
@@ -33,11 +28,17 @@ urlpatterns = [
     path('interactions/<uuid:interaction_id>', AgentInteractionDetailView.as_view(), name='interactions-detail'),
     
     # Analytics Endpoints
-    path('analytics/conversations', AgentAnalyticsView.as_view(), name='analytics-conversations'),
-    path('analytics/handoffs', AgentHandoffAnalyticsView.as_view(), name='analytics-handoffs'),
-    path('analytics/costs', AgentCostAnalyticsView.as_view(), name='analytics-costs'),
-    path('analytics/topics', AgentTopicsAnalyticsView.as_view(), name='analytics-topics'),
+    path('analytics/conversations', bot_views.AgentAnalyticsView.as_view(), name='analytics-conversations'),
+    path('analytics/handoffs', bot_views.AgentHandoffAnalyticsView.as_view(), name='analytics-handoffs'),
+    path('analytics/costs', bot_views.AgentCostAnalyticsView.as_view(), name='analytics-costs'),
+    path('analytics/topics', bot_views.AgentTopicsAnalyticsView.as_view(), name='analytics-topics'),
     
     # Knowledge Base (ViewSet routes)
     path('', include(router.urls)),
+    
+    # RAG Document Management
+    path('documents/', include('apps.bot.urls_documents')),
+    
+    # Feedback Collection
+    path('', include('apps.bot.urls_feedback')),
 ]

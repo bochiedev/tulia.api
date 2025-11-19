@@ -16,7 +16,7 @@ import io
 import json
 
 from apps.bot.models import AgentConfiguration, KnowledgeEntry
-from apps.bot.serializers import (
+from apps.bot.bot_serializers import (
     AgentConfigurationSerializer,
     AgentConfigurationUpdateSerializer,
     KnowledgeEntrySerializer,

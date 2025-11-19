@@ -1438,3 +1438,206 @@ def cleanup_expired_browse_sessions():
     except Exception as e:
         logger.error(f"Error cleaning up browse sessions: {e}", exc_info=True)
         raise
+
+
+
+@shared_task(bind=True, max_retries=2)
+def process_document(self, document_id: str):
+    """
+    Process uploaded document: extract text, chunk, embed, and index.
+    
+    This task orchestrates the complete document processing pipeline:
+    1. Extract text from PDF/TXT file
+    2. Chunk text into smaller pieces
+    3. Generate embeddings for each chunk
+    4. Index chunks in vector store
+    5. Update document status
+    
+    Args:
+        document_id: UUID of the Document to process
+    
+    Returns:
+        Dict with processing statistics
+    """
+    from apps.bot.models import Document, DocumentChunk
+    from apps.bot.services.text_extraction_service import TextExtractionService
+    from apps.bot.services.chunking_service import ChunkingService
+    from apps.bot.services.embedding_service import EmbeddingService
+    from apps.bot.services.vector_store import PineconeVectorStore
+    from django.core.files.storage import default_storage
+    import time
+    import uuid
+    
+    start_time = time.time()
+    
+    try:
+        # Load document
+        document = Document.objects.get(id=document_id)
+        tenant = document.tenant
+        
+        logger.info(f"Starting document processing: {document_id}")
+        
+        # Update status to processing
+        document.status = 'processing'
+        document.processing_progress = 0
+        document.save(update_fields=['status', 'processing_progress'])
+        
+        # Get file path
+        file_path = default_storage.path(document.file_path)
+        
+        # Step 1: Extract text (20% progress)
+        logger.info(f"Extracting text from {document.file_name}")
+        extraction_result = TextExtractionService.extract(
+            file_path=file_path,
+            file_type=document.file_type
+        )
+        
+        document.processing_progress = 20
+        document.save(update_fields=['processing_progress'])
+        
+        # Step 2: Chunk text (40% progress)
+        logger.info(f"Chunking text from {document.file_name}")
+        chunking_service = ChunkingService.create_default()
+        
+        if 'pages' in extraction_result:
+            chunks = chunking_service.chunk_pages(extraction_result['pages'])
+        else:
+            chunks = chunking_service.chunk_text(
+                extraction_result['text'],
+                metadata=extraction_result.get('metadata', {})
+            )
+        
+        if not chunks:
+            raise ValueError("No chunks generated from document")
+        
+        document.processing_progress = 40
+        document.save(update_fields=['processing_progress'])
+        
+        # Step 3: Generate embeddings (70% progress)
+        logger.info(f"Generating embeddings for {len(chunks)} chunks")
+        embedding_service = EmbeddingService.create_for_tenant(tenant)
+        
+        # Batch embed chunks (max 100 at a time)
+        batch_size = 100
+        all_embeddings = []
+        
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i + batch_size]
+            batch_texts = [chunk['content'] for chunk in batch]
+            
+            embeddings = embedding_service.embed_batch(
+                batch_texts,
+                use_cache=False
+            )
+            all_embeddings.extend(embeddings)
+            
+            # Update progress
+            progress = 40 + int((i / len(chunks)) * 30)
+            document.processing_progress = progress
+            document.save(update_fields=['processing_progress'])
+        
+        document.processing_progress = 70
+        document.save(update_fields=['processing_progress'])
+        
+        # Step 4: Index in vector store (90% progress)
+        logger.info(f"Indexing {len(chunks)} chunks in vector store")
+        vector_store = PineconeVectorStore.create_from_settings()
+        namespace = f"tenant_{tenant.id}"
+        
+        # Create document chunks and prepare vectors
+        vectors = []
+        total_tokens = 0
+        
+        for i, (chunk, embedding) in enumerate(zip(chunks, all_embeddings)):
+            # Create vector ID
+            vector_id = f"doc_{document.id}_chunk_{i}"
+            
+            # Create DocumentChunk record
+            chunk_obj = DocumentChunk.objects.create(
+                document=document,
+                tenant=tenant,
+                chunk_index=i,
+                content=chunk['content'],
+                token_count=chunk['token_count'],
+                page_number=chunk['metadata'].get('page_number'),
+                section=chunk['metadata'].get('section'),
+                embedding_model=embedding['model'],
+                vector_id=vector_id
+            )
+            
+            total_tokens += chunk['token_count']
+            
+            # Prepare vector for upsert
+            vectors.append({
+                'id': vector_id,
+                'values': embedding['embedding'],
+                'metadata': {
+                    'tenant_id': str(tenant.id),
+                    'document_id': str(document.id),
+                    'chunk_id': str(chunk_obj.id),
+                    'chunk_index': i,
+                    'page_number': chunk['metadata'].get('page_number'),
+                    'file_name': document.file_name,
+                }
+            })
+        
+        # Upsert vectors to Pinecone
+        vector_store.upsert(vectors, namespace=namespace)
+        
+        document.processing_progress = 90
+        document.save(update_fields=['processing_progress'])
+        
+        # Step 5: Update document status (100% progress)
+        document.status = 'completed'
+        document.processing_progress = 100
+        document.chunk_count = len(chunks)
+        document.total_tokens = total_tokens
+        document.processed_at = timezone.now()
+        document.save(update_fields=[
+            'status',
+            'processing_progress',
+            'chunk_count',
+            'total_tokens',
+            'processed_at'
+        ])
+        
+        processing_time = time.time() - start_time
+        
+        logger.info(
+            f"Document processing complete: {document_id} - "
+            f"{len(chunks)} chunks, {total_tokens} tokens, "
+            f"{processing_time:.2f}s"
+        )
+        
+        return {
+            'status': 'success',
+            'document_id': str(document.id),
+            'chunk_count': len(chunks),
+            'total_tokens': total_tokens,
+            'processing_time': processing_time
+        }
+        
+    except Document.DoesNotExist:
+        logger.error(f"Document not found: {document_id}")
+        return {'status': 'error', 'error': 'Document not found'}
+        
+    except Exception as e:
+        logger.error(
+            f"Error processing document {document_id}: {e}",
+            exc_info=True
+        )
+        
+        # Update document status to failed
+        try:
+            document = Document.objects.get(id=document_id)
+            document.status = 'failed'
+            document.error_message = str(e)
+            document.save(update_fields=['status', 'error_message'])
+        except Exception:
+            pass
+        
+        # Retry if not max retries
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e, countdown=60 * (self.request.retries + 1))
+        
+        return {'status': 'error', 'error': str(e)}

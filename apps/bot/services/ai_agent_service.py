@@ -25,6 +25,8 @@ from apps.bot.services.agent_config_service import (
 )
 from apps.bot.services.llm.factory import LLMProviderFactory
 from apps.bot.services.llm.base import LLMProvider, LLMResponse
+from apps.bot.services.llm.provider_router import ProviderRouter
+from apps.bot.services.llm.failover_manager import ProviderFailoverManager
 from apps.bot.services.prompt_templates import PromptTemplateManager, PromptScenario
 from apps.bot.services.fuzzy_matcher_service import FuzzyMatcherService
 from apps.bot.services.rich_message_builder import (
@@ -32,6 +34,10 @@ from apps.bot.services.rich_message_builder import (
     WhatsAppMessage,
     RichMessageValidationError
 )
+from apps.bot.services.feature_flags import FeatureFlagService
+from apps.bot.services.rag_retriever_service import RAGRetrieverService
+from apps.bot.services.context_synthesizer import ContextSynthesizer
+from apps.bot.services.attribution_handler import AttributionHandler
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +138,12 @@ class AIAgentService:
         context_builder: Optional[ContextBuilderService] = None,
         config_service: Optional[AgentConfigurationService] = None,
         fuzzy_matcher: Optional[FuzzyMatcherService] = None,
-        rich_message_builder: Optional[RichMessageBuilder] = None
+        rich_message_builder: Optional[RichMessageBuilder] = None,
+        provider_router: Optional[ProviderRouter] = None,
+        failover_manager: Optional[ProviderFailoverManager] = None,
+        rag_retriever: Optional[RAGRetrieverService] = None,
+        context_synthesizer: Optional[ContextSynthesizer] = None,
+        attribution_handler: Optional[AttributionHandler] = None
     ):
         """
         Initialize AI Agent Service.
@@ -142,11 +153,23 @@ class AIAgentService:
             config_service: Optional AgentConfigurationService instance
             fuzzy_matcher: Optional FuzzyMatcherService instance
             rich_message_builder: Optional RichMessageBuilder instance
+            provider_router: Optional ProviderRouter instance
+            failover_manager: Optional ProviderFailoverManager instance
+            rag_retriever: Optional RAGRetrieverService instance
+            context_synthesizer: Optional ContextSynthesizer instance
+            attribution_handler: Optional AttributionHandler instance
         """
         self.context_builder = context_builder or create_context_builder_service()
         self.config_service = config_service or create_agent_config_service()
         self.fuzzy_matcher = fuzzy_matcher or FuzzyMatcherService()
         self.rich_message_builder = rich_message_builder or RichMessageBuilder()
+        self.provider_router = provider_router or ProviderRouter()
+        self.failover_manager = failover_manager or ProviderFailoverManager()
+        
+        # RAG components (initialized per-tenant in process_message)
+        self.rag_retriever = rag_retriever
+        self.context_synthesizer = context_synthesizer
+        self.attribution_handler = attribution_handler
         
         # Track correction accuracy for improvement
         self.correction_stats = {
@@ -348,6 +371,27 @@ class AIAgentService:
                 max_tokens=100000  # GPT-4o context window
             )
             
+            # Retrieve RAG context if enabled
+            rag_context = None
+            if self._should_use_rag(agent_config):
+                rag_context = self.retrieve_rag_context(
+                    query=processed_text,
+                    conversation=conversation,
+                    context=context,
+                    agent_config=agent_config,
+                    tenant=tenant
+                )
+                
+                # Add RAG context to agent context
+                if rag_context:
+                    context.metadata['rag_context'] = rag_context
+                    logger.info(
+                        f"RAG retrieval completed: "
+                        f"documents={len(rag_context.get('document_results', []))}, "
+                        f"database={len(rag_context.get('database_results', []))}, "
+                        f"internet={len(rag_context.get('internet_results', []))}"
+                    )
+            
             # Generate proactive suggestions
             suggestions = self.generate_suggestions(
                 context=context,
@@ -371,6 +415,14 @@ class AIAgentService:
                 tenant=tenant,
                 suggestions=suggestions
             )
+            
+            # Add source attribution if RAG was used
+            if rag_context and agent_config.enable_source_attribution:
+                response = self.add_attribution_to_response(
+                    response=response,
+                    rag_context=rag_context,
+                    agent_config=agent_config
+                )
             
             # Calculate processing time
             end_time = timezone.now()
@@ -440,12 +492,20 @@ class AIAgentService:
             )
             
             # Track interaction for analytics
-            self.track_interaction(
+            interaction = self.track_interaction(
                 conversation=conversation,
                 message=message,
                 response=response,
                 detected_intents=response.metadata.get('detected_intents', [])
             )
+            
+            # Add feedback buttons if enabled and interaction was tracked
+            if interaction and agent_config.enable_feedback_collection:
+                response = self.add_feedback_buttons_to_response(
+                    response=response,
+                    interaction=interaction,
+                    agent_config=agent_config
+                )
             
             return response
             
@@ -480,15 +540,16 @@ class AIAgentService:
         suggestions: Optional[Dict[str, Any]] = None
     ) -> AgentResponse:
         """
-        Generate AI response using LLM provider.
+        Generate AI response using LLM provider with smart routing and failover.
         
-        Builds prompts with persona and context, calls LLM, and processes
+        Builds prompts with persona and context, uses provider router to select
+        optimal provider/model, calls LLM with automatic failover, and processes
         the response into an AgentResponse object.
         
         Args:
             context: AgentContext with all context data
             agent_config: AgentConfiguration for this tenant
-            model: Model identifier to use
+            model: Model identifier to use (can be overridden by router)
             tenant: Tenant instance
             suggestions: Optional suggestions to include in prompt
             
@@ -496,17 +557,11 @@ class AIAgentService:
             AgentResponse with generated content and metadata
             
         Raises:
-            Exception: On LLM API errors after retries
+            Exception: On LLM API errors after all retries exhausted
         """
         logger.info(f"Generating response with model {model}")
         
         try:
-            # Get LLM provider
-            provider = LLMProviderFactory.create_from_tenant_settings(
-                tenant=tenant,
-                provider_name='openai'  # TODO: Make configurable
-            )
-            
             # Build prompts
             system_prompt = self._build_system_prompt(agent_config, context)
             user_prompt = self._build_user_prompt(context, suggestions)
@@ -517,10 +572,45 @@ class AIAgentService:
                 {'role': 'user', 'content': user_prompt}
             ]
             
-            # Call LLM
-            llm_response = provider.generate(
+            # Check if multi-provider routing is enabled
+            use_multi_provider = FeatureFlagService.is_enabled(
+                'multi_provider_routing',
+                tenant,
+                default=True
+            )
+            
+            if use_multi_provider:
+                # Use provider router to select optimal provider/model
+                routing_decision = self.provider_router.route(
+                    messages=messages,
+                    context_size=context.context_size_tokens,
+                    preferred_provider=None,  # Let router decide
+                    preferred_model=None  # Let router decide
+                )
+            else:
+                # Fall back to default OpenAI model
+                from apps.bot.services.llm.provider_router import RoutingDecision
+                routing_decision = RoutingDecision(
+                    provider='openai',
+                    model=model,
+                    reason='Multi-provider routing disabled',
+                    estimated_cost_per_1k_tokens=0.00625,
+                    complexity_score=0.5
+                )
+            
+            logger.info(
+                f"Router decision: {routing_decision.provider}/{routing_decision.model} "
+                f"(complexity={routing_decision.complexity_score:.2f}, "
+                f"reason={routing_decision.reason})"
+            )
+            
+            # Call LLM with automatic failover
+            llm_response, provider_used, model_used = self.failover_manager.execute_with_failover(
+                provider_factory=LLMProviderFactory,
+                tenant=tenant,
                 messages=messages,
-                model=model,
+                primary_provider=routing_decision.provider,
+                primary_model=routing_decision.model,
                 temperature=agent_config.temperature,
                 max_tokens=agent_config.max_response_length * 2  # Rough token estimate
             )
@@ -534,8 +624,8 @@ class AIAgentService:
             # Create agent response
             response = AgentResponse(
                 content=llm_response.content,
-                model_used=llm_response.model,
-                provider=llm_response.provider,
+                model_used=model_used,
+                provider=provider_used,
                 confidence_score=confidence_score,
                 processing_time_ms=0,  # Will be set by caller
                 input_tokens=llm_response.input_tokens,
@@ -546,7 +636,19 @@ class AIAgentService:
                 context_truncated=context.truncated,
                 metadata={
                     'finish_reason': llm_response.finish_reason,
-                    'llm_metadata': llm_response.metadata
+                    'llm_metadata': llm_response.metadata,
+                    'routing_decision': {
+                        'provider': routing_decision.provider,
+                        'model': routing_decision.model,
+                        'reason': routing_decision.reason,
+                        'complexity_score': routing_decision.complexity_score,
+                        'estimated_cost_per_1k': routing_decision.estimated_cost_per_1k_tokens
+                    },
+                    'provider_used': provider_used,
+                    'model_used': model_used,
+                    # Store for provider tracking
+                    '_llm_response': llm_response,
+                    '_routing_decision': routing_decision
                 }
             )
             
@@ -830,6 +932,99 @@ class AIAgentService:
             self.rich_message_stats['fallback_to_text'] += 1
         
         return response
+    
+    def add_feedback_buttons_to_response(
+        self,
+        response: AgentResponse,
+        interaction: AgentInteraction,
+        agent_config: AgentConfiguration
+    ) -> AgentResponse:
+        """
+        Add feedback buttons to agent response.
+        
+        Adds thumbs up/down buttons to collect user feedback on bot responses.
+        Respects feedback frequency settings (always/sometimes/never).
+        
+        Args:
+            response: AgentResponse to enhance
+            interaction: AgentInteraction that was just created
+            agent_config: AgentConfiguration for this tenant
+            
+        Returns:
+            Enhanced AgentResponse with feedback buttons
+        """
+        # Check if we should add feedback buttons based on frequency
+        should_add = self._should_add_feedback_buttons(
+            interaction=interaction,
+            frequency=agent_config.feedback_frequency
+        )
+        
+        if not should_add:
+            logger.debug("Skipping feedback buttons based on frequency setting")
+            return response
+        
+        # If response already has rich message, don't override it
+        # (feedback buttons are less important than product/service cards)
+        if response.use_rich_message and response.rich_message:
+            logger.debug("Response already has rich message, skipping feedback buttons")
+            response.metadata['feedback_skipped'] = 'has_rich_message'
+            return response
+        
+        try:
+            # Create feedback button message
+            feedback_message = self.rich_message_builder.add_feedback_buttons(
+                message_body=response.content,
+                interaction_id=interaction.id,
+                include_comment=False  # Keep it simple with just thumbs up/down
+            )
+            
+            # Update response with feedback buttons
+            response.rich_message = feedback_message
+            response.use_rich_message = True
+            response.metadata['has_feedback_buttons'] = True
+            
+            logger.info(f"Added feedback buttons to response for interaction {interaction.id}")
+            
+        except Exception as e:
+            logger.error(f"Error adding feedback buttons: {e}", exc_info=True)
+            response.metadata['feedback_error'] = str(e)
+        
+        return response
+    
+    def _should_add_feedback_buttons(
+        self,
+        interaction: AgentInteraction,
+        frequency: str
+    ) -> bool:
+        """
+        Determine if feedback buttons should be added based on frequency setting.
+        
+        Args:
+            interaction: Current AgentInteraction
+            frequency: Feedback frequency setting ('always', 'sometimes', 'never')
+            
+        Returns:
+            bool: True if feedback buttons should be added
+        """
+        if frequency == 'never':
+            return False
+        
+        if frequency == 'always':
+            return True
+        
+        if frequency == 'sometimes':
+            # Show feedback every 3rd message
+            # Count interactions for this conversation
+            interaction_count = AgentInteraction.objects.filter(
+                conversation=interaction.conversation,
+                tenant=interaction.tenant,
+                is_deleted=False
+            ).count()
+            
+            return interaction_count % 3 == 0
+        
+        # Default to sometimes
+        return True
     
     def should_handoff(
         self,
@@ -1128,6 +1323,12 @@ class AIAgentService:
             clarification_count=clarification_count,
             preferences=preferences
         )
+        
+        # Add RAG context if available
+        rag_context = context.metadata.get('rag_context')
+        if rag_context:
+            rag_section = self._build_rag_context_section(rag_context)
+            base_prompt = base_prompt + "\n\n" + rag_section
         
         # Add suggestions if available and enabled
         if suggestions and (suggestions.get('products') or suggestions.get('services')):
@@ -1828,6 +2029,18 @@ class AIAgentService:
                 f"cost=${response.estimated_cost}, confidence={response.confidence_score:.2f}"
             )
             
+            # Track provider usage if we have the necessary metadata
+            if '_llm_response' in response.metadata and '_routing_decision' in response.metadata:
+                self._track_provider_usage(
+                    tenant=conversation.tenant,
+                    conversation=conversation,
+                    llm_response=response.metadata['_llm_response'],
+                    routing_decision=response.metadata['_routing_decision'],
+                    provider_used=response.provider,
+                    model_used=response.model_used,
+                    agent_interaction=interaction
+                )
+            
             return interaction
             
         except Exception as e:
@@ -1836,6 +2049,281 @@ class AIAgentService:
                 exc_info=True
             )
             return None
+    
+    def _track_provider_usage(
+        self,
+        tenant,
+        conversation: Conversation,
+        llm_response: LLMResponse,
+        routing_decision,
+        provider_used: str,
+        model_used: str,
+        agent_interaction: Optional[AgentInteraction] = None
+    ):
+        """
+        Track provider usage for cost and performance monitoring.
+        
+        Records detailed metrics about LLM provider usage including:
+        - Provider and model used
+        - Token usage and costs
+        - Latency and performance
+        - Routing decisions and complexity scores
+        - Failover information
+        
+        Args:
+            tenant: Tenant instance
+            conversation: Conversation instance
+            llm_response: LLMResponse from provider
+            routing_decision: RoutingDecision from router
+            provider_used: Actual provider used (may differ from routing if failover)
+            model_used: Actual model used (may differ from routing if failover)
+            agent_interaction: Optional AgentInteraction to link to
+        """
+        try:
+            from apps.bot.models_provider_tracking import ProviderUsage
+            
+            # Determine if this was a failover
+            was_failover = (
+                provider_used != routing_decision.provider or
+                model_used != routing_decision.model
+            )
+            
+            # Calculate latency (estimate from response metadata)
+            latency_ms = llm_response.metadata.get('latency_ms', 0)
+            if not latency_ms:
+                # Estimate based on tokens (rough: 50 tokens/second)
+                latency_ms = int((llm_response.total_tokens / 50) * 1000)
+            
+            # Create usage record
+            usage = ProviderUsage.objects.create(
+                tenant=tenant,
+                conversation=conversation,
+                agent_interaction=agent_interaction,
+                provider=provider_used,
+                model=model_used,
+                input_tokens=llm_response.input_tokens,
+                output_tokens=llm_response.output_tokens,
+                total_tokens=llm_response.total_tokens,
+                estimated_cost=llm_response.estimated_cost,
+                latency_ms=latency_ms,
+                success=True,
+                finish_reason=llm_response.finish_reason,
+                was_failover=was_failover,
+                routing_reason=routing_decision.reason,
+                complexity_score=routing_decision.complexity_score,
+                metadata={
+                    'routing_provider': routing_decision.provider,
+                    'routing_model': routing_decision.model,
+                    'llm_metadata': llm_response.metadata
+                }
+            )
+            
+            logger.debug(
+                f"Tracked provider usage: {provider_used}/{model_used}, "
+                f"tokens={llm_response.total_tokens}, cost=${llm_response.estimated_cost}, "
+                f"failover={was_failover}"
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"Error tracking provider usage: {e}",
+                exc_info=True
+            )
+    
+    def _should_use_rag(self, agent_config: AgentConfiguration) -> bool:
+        """
+        Determine if RAG should be used based on agent configuration.
+        
+        Args:
+            agent_config: AgentConfiguration for this tenant
+            
+        Returns:
+            True if any RAG source is enabled
+        """
+        return (
+            agent_config.enable_document_retrieval or
+            agent_config.enable_database_retrieval or
+            agent_config.enable_internet_enrichment
+        )
+    
+    def retrieve_rag_context(
+        self,
+        query: str,
+        conversation: Conversation,
+        context: AgentContext,
+        agent_config: AgentConfiguration,
+        tenant
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve context from RAG sources (documents, database, internet).
+        
+        Orchestrates retrieval from multiple sources based on agent configuration,
+        synthesizes the results, and returns structured context for the LLM.
+        
+        Args:
+            query: Customer query text
+            conversation: Conversation instance
+            context: AgentContext with conversation data
+            agent_config: AgentConfiguration for this tenant
+            tenant: Tenant instance
+            
+        Returns:
+            Dictionary with synthesized RAG context or None if retrieval fails
+        """
+        try:
+            # Initialize RAG services if not already done
+            if not self.rag_retriever:
+                self.rag_retriever = RAGRetrieverService.create_for_tenant(tenant)
+            
+            if not self.context_synthesizer:
+                self.context_synthesizer = ContextSynthesizer()
+            
+            if not self.attribution_handler:
+                self.attribution_handler = AttributionHandler(
+                    enabled=agent_config.enable_source_attribution
+                )
+            
+            # Retrieve from all enabled sources
+            logger.info(f"Retrieving RAG context for query: {query[:100]}...")
+            
+            retrieval_results = self.rag_retriever.retrieve(
+                query=query,
+                conversation_context={
+                    'conversation_id': str(conversation.id),
+                    'customer_id': str(conversation.customer.id) if conversation.customer else None,
+                    'conversation_history': context.conversation_history[:5],  # Last 5 messages
+                    'current_topic': context.metadata.get('current_topic'),
+                },
+                max_document_results=agent_config.max_document_results,
+                max_database_results=agent_config.max_database_results,
+                max_internet_results=agent_config.max_internet_results,
+                enable_documents=agent_config.enable_document_retrieval,
+                enable_database=agent_config.enable_database_retrieval,
+                enable_internet=agent_config.enable_internet_enrichment
+            )
+            
+            # Synthesize results into coherent context
+            synthesized_context = self.context_synthesizer.synthesize(
+                retrieval_results=retrieval_results,
+                query=query,
+                conversation_context=context
+            )
+            
+            # Return structured context
+            return {
+                'document_results': retrieval_results.get('document_results', []),
+                'database_results': retrieval_results.get('database_results', []),
+                'internet_results': retrieval_results.get('internet_results', []),
+                'synthesized_text': synthesized_context.get('synthesized_text', ''),
+                'sources': synthesized_context.get('sources', []),
+                'confidence': synthesized_context.get('confidence', 0.0),
+                'retrieval_time_ms': retrieval_results.get('retrieval_time_ms', 0)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error retrieving RAG context: {e}", exc_info=True)
+            return None
+    
+    def _build_rag_context_section(self, rag_context: Dict[str, Any]) -> str:
+        """
+        Build RAG context section for prompt.
+        
+        Formats retrieved information from documents, database, and internet
+        into a structured section for the LLM prompt.
+        
+        Args:
+            rag_context: Dictionary with RAG retrieval results
+            
+        Returns:
+            Formatted RAG context section
+        """
+        sections = ["## Retrieved Information"]
+        
+        # Add synthesized context if available
+        if rag_context.get('synthesized_text'):
+            sections.append("\n### Relevant Context:")
+            sections.append(rag_context['synthesized_text'])
+        
+        # Add document results
+        document_results = rag_context.get('document_results', [])
+        if document_results:
+            sections.append("\n### From Business Documents:")
+            for i, result in enumerate(document_results[:3], 1):  # Limit to top 3
+                sections.append(f"\n{i}. {result.get('content', '')}")
+                if result.get('source'):
+                    sections.append(f"   (Source: {result['source']})")
+        
+        # Add database results
+        database_results = rag_context.get('database_results', [])
+        if database_results:
+            sections.append("\n### From Our Catalog:")
+            for i, result in enumerate(database_results[:5], 1):  # Limit to top 5
+                sections.append(f"\n{i}. {result.get('content', '')}")
+        
+        # Add internet results
+        internet_results = rag_context.get('internet_results', [])
+        if internet_results:
+            sections.append("\n### Additional Information:")
+            for i, result in enumerate(internet_results[:2], 1):  # Limit to top 2
+                sections.append(f"\n{i}. {result.get('content', '')}")
+                if result.get('source'):
+                    sections.append(f"   (Source: {result['source']})")
+        
+        sections.append("\n**Instructions:** Use the above retrieved information to provide accurate, helpful responses. Prioritize information from business documents and our catalog over external sources.")
+        
+        return "\n".join(sections)
+    
+    def add_attribution_to_response(
+        self,
+        response: AgentResponse,
+        rag_context: Optional[Dict[str, Any]],
+        agent_config: AgentConfiguration
+    ) -> AgentResponse:
+        """
+        Add source attribution to response if enabled.
+        
+        Uses AttributionHandler to add citations to the response content
+        based on the sources used in RAG retrieval.
+        
+        Args:
+            response: AgentResponse to add attribution to
+            rag_context: RAG context with sources
+            agent_config: AgentConfiguration for this tenant
+            
+        Returns:
+            AgentResponse with attribution added
+        """
+        # Skip if attribution is disabled or no RAG context
+        if not agent_config.enable_source_attribution or not rag_context:
+            return response
+        
+        try:
+            # Initialize attribution handler if needed
+            if not self.attribution_handler:
+                self.attribution_handler = AttributionHandler(
+                    enabled=agent_config.enable_source_attribution
+                )
+            
+            # Add attribution to response
+            attributed_content = self.attribution_handler.add_attribution(
+                response_text=response.content,
+                sources=rag_context.get('sources', []),
+                citation_style='inline'  # or 'endnote' based on preference
+            )
+            
+            # Update response content
+            response.content = attributed_content
+            
+            # Track attribution in metadata
+            response.metadata['attribution_added'] = True
+            response.metadata['source_count'] = len(rag_context.get('sources', []))
+            
+            logger.debug(f"Added attribution with {len(rag_context.get('sources', []))} sources")
+            
+        except Exception as e:
+            logger.error(f"Error adding attribution: {e}", exc_info=True)
+        
+        return response
     
     def _create_fallback_response(
         self,

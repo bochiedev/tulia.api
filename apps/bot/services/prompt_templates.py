@@ -33,7 +33,9 @@ class PromptTemplateManager:
 Your capabilities:
 - Answer questions about products and services
 - Help customers place orders and book appointments
-- Provide information from the business knowledge base
+- Provide information from the business knowledge base and uploaded documents
+- Retrieve real-time information from the catalog database
+- Enrich product information with internet search when needed
 - Offer personalized recommendations based on customer history
 - Maintain context across the conversation
 - Handle multi-language conversations (English, Swahili, Sheng)
@@ -50,7 +52,8 @@ Your limitations:
 
 Response guidelines:
 - Be helpful, accurate, and concise
-- Use information from the provided context
+- Use information from the provided context, especially retrieved information
+- Prioritize information from business documents and catalog over external sources
 - Reference specific products, services, or knowledge when relevant
 - If you don't know something, admit it and offer alternatives
 - Always prioritize customer satisfaction
@@ -58,7 +61,8 @@ Response guidelines:
 - When showing multiple items, use pagination for better experience
 - Confirm positional references before proceeding ("You mean [item name]?")
 - Explain why you're recommending specific products
-- Ask clarifying questions when there are many options (>10 results)"""
+- Ask clarifying questions when there are many options (>10 results)
+- When using retrieved information, cite sources naturally if attribution is enabled"""
     
     # Scenario-specific prompt additions
     SCENARIO_PROMPTS = {
@@ -188,6 +192,19 @@ When recommending products:
 - Example: "I recommend [Product] because it has [feature] which is perfect for [use case]"
 - Provide 2-3 options when possible, explaining trade-offs"""
     
+    RAG_USAGE_PROMPT = """
+## Using Retrieved Information (RAG)
+
+When retrieved information is provided:
+- Prioritize information from business documents (FAQs, policies, guides)
+- Use real-time catalog data for product/service availability and pricing
+- Use internet-enriched information for additional product details
+- Resolve conflicts by prioritizing: business documents > catalog > internet
+- If sources conflict, note the discrepancy and prioritize tenant-provided data
+- Cite sources naturally when attribution is enabled (e.g., "According to our FAQ...")
+- Don't make up information - only use what's provided in the retrieved context
+- If retrieved information doesn't answer the question, say so and offer alternatives"""
+    
     PROGRESSIVE_HANDOFF_PROMPT = """
 ## Progressive Assistance and Handoff
 
@@ -298,7 +315,8 @@ Use this information to avoid repeating questions and to better filter results."
         include_reference_resolution: bool = True,
         include_clarifying_questions: bool = True,
         include_product_intelligence: bool = True,
-        include_progressive_handoff: bool = True
+        include_progressive_handoff: bool = True,
+        include_rag_usage: bool = True
     ) -> str:
         """
         Get system prompt for a specific scenario with optional feature guidance.
@@ -312,6 +330,7 @@ Use this information to avoid repeating questions and to better filter results."
             include_clarifying_questions: Include clarifying question guidelines
             include_product_intelligence: Include AI recommendation instructions
             include_progressive_handoff: Include progressive handoff instructions
+            include_rag_usage: Include RAG usage instructions
             
         Returns:
             Complete system prompt string
@@ -321,6 +340,10 @@ Use this information to avoid repeating questions and to better filter results."
         # Add scenario-specific guidance
         if include_scenario_guidance and scenario in cls.SCENARIO_PROMPTS:
             prompt += "\n\n" + cls.SCENARIO_PROMPTS[scenario]
+        
+        # Add RAG usage guidance (early in prompt for visibility)
+        if include_rag_usage:
+            prompt += "\n\n" + cls.RAG_USAGE_PROMPT
         
         # Add new feature guidance
         if include_language_handling:

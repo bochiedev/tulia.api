@@ -676,6 +676,65 @@ class RichMessageBuilder:
         
         return sections
     
+    def add_feedback_buttons(
+        self,
+        message_body: str,
+        interaction_id: int,
+        include_comment: bool = False
+    ) -> WhatsAppMessage:
+        """
+        Add feedback buttons (thumbs up/down) to a message.
+        
+        Creates a button message with feedback options that customers can use
+        to rate the bot's response. Optionally includes a button to provide
+        detailed feedback.
+        
+        Args:
+            message_body: The bot's response text
+            interaction_id: AgentInteraction ID to link feedback to
+            include_comment: Whether to include a "Comment" button
+            
+        Returns:
+            WhatsAppMessage: Message with feedback buttons
+            
+        Raises:
+            RichMessageValidationError: If message validation fails
+            
+        Example:
+            >>> builder = RichMessageBuilder()
+            >>> message = builder.add_feedback_buttons(
+            ...     "Here's the information you requested...",
+            ...     interaction_id=123
+            ... )
+        """
+        buttons = [
+            {
+                'id': f'feedback_helpful_{interaction_id}',
+                'text': '👍 Helpful'
+            },
+            {
+                'id': f'feedback_not_helpful_{interaction_id}',
+                'text': '👎 Not Helpful'
+            }
+        ]
+        
+        # Add comment button if requested and we have room
+        if include_comment and len(buttons) < self.limits.MAX_BUTTONS:
+            buttons.append({
+                'id': f'feedback_comment_{interaction_id}',
+                'text': '💬 Comment'
+            })
+        
+        return WhatsAppMessage(
+            body=message_body,
+            message_type='button',
+            buttons=buttons,
+            metadata={
+                'interaction_id': interaction_id,
+                'has_feedback_buttons': True
+            }
+        )
+    
     def validate_message(self, message: WhatsAppMessage) -> bool:
         """
         Validate a WhatsApp message against API limits.

@@ -5,6 +5,7 @@ LLM Provider abstraction layer for AI-powered customer service agent.
 from .base import LLMProvider, LLMResponse, ModelInfo
 from .openai_provider import OpenAIProvider
 from .together_provider import TogetherAIProvider
+from .gemini_provider import GeminiProvider
 from .factory import LLMProviderFactory
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     'ModelInfo',
     'OpenAIProvider',
     'TogetherAIProvider',
+    'GeminiProvider',
     'LLMProviderFactory',
 ]

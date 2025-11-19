@@ -39,8 +39,9 @@ pytz==2024.1
 
 # External Integrations
 twilio==9.0.4
-openai==1.51.0
+openai==1.52.0
 httpx<0.28  # Required for openai compatibility
+google-generativeai==0.8.3  # Gemini AI provider
 
 # RAG & LangChain (Python 3.13 compatible)
 langchain==0.3.7

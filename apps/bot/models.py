@@ -265,6 +265,22 @@ class AgentConfiguration(BaseModel):
         help_text="Enable rich WhatsApp messages (buttons, lists, media)"
     )
     
+    enable_feedback_collection = models.BooleanField(
+        default=True,
+        help_text="Enable feedback collection buttons after bot responses"
+    )
+    
+    feedback_frequency = models.CharField(
+        max_length=20,
+        choices=[
+            ('always', 'Always'),
+            ('sometimes', 'Sometimes (every 3rd message)'),
+            ('never', 'Never'),
+        ],
+        default='sometimes',
+        help_text="How often to show feedback buttons"
+    )
+    
     # RAG Configuration
     enable_document_retrieval = models.BooleanField(
         default=False,

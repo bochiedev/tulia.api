@@ -8,6 +8,7 @@ from typing import Dict, Type, Optional
 from .base import LLMProvider
 from .openai_provider import OpenAIProvider
 from .together_provider import TogetherAIProvider
+from .gemini_provider import GeminiProvider
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class LLMProviderFactory:
     _providers: Dict[str, Type[LLMProvider]] = {
         'openai': OpenAIProvider,
         'together': TogetherAIProvider,
+        'gemini': GeminiProvider,
     }
     
     @classmethod

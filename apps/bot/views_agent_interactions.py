@@ -14,7 +14,7 @@ from django.db.models import Avg, Count, Sum, Q
 import logging
 
 from apps.bot.models import AgentInteraction
-from apps.bot.serializers import (
+from apps.bot.bot_serializers import (
     AgentInteractionSerializer,
     AgentInteractionListSerializer,
     AgentInteractionStatsSerializer,

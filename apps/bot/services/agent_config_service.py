@@ -189,6 +189,18 @@ class AgentConfigurationService:
             "or if the topic requires human expertise, offer to connect the customer with a human agent."
         )
         
+        # Add agent capabilities (what agent CAN do)
+        if config.agent_can_do:
+            persona_sections.append(
+                f"## What You CAN Do\n\n{config.agent_can_do}"
+            )
+        
+        # Add agent limitations (what agent CANNOT do)
+        if config.agent_cannot_do:
+            persona_sections.append(
+                f"## What You CANNOT Do\n\n{config.agent_cannot_do}"
+            )
+        
         # Combine base prompt with persona
         persona_prompt = "\n\n".join(persona_sections)
         enhanced_prompt = f"{base_prompt}\n\n## Your Persona\n\n{persona_prompt}"

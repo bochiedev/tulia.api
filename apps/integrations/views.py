@@ -222,6 +222,235 @@ def get_or_create_conversation(tenant: Tenant, customer: Customer) -> Conversati
     return conversation
 
 
+def handle_button_click(
+    tenant,
+    conversation: Conversation,
+    customer,
+    button_payload: str,
+    button_text: str,
+    message: Message
+):
+    """
+    Handle button click from WhatsApp interactive message.
+    
+    Processes different types of button clicks:
+    - Feedback buttons (helpful/not_helpful)
+    - Action buttons (buy, book, details)
+    - Navigation buttons (next, previous)
+    
+    Args:
+        tenant: Tenant instance
+        conversation: Conversation instance
+        customer: Customer instance
+        button_payload: Button ID/payload from Twilio
+        button_text: Button text displayed to user
+        message: Message instance
+    """
+    logger.info(
+        f"Button click received: payload={button_payload}, text={button_text}",
+        extra={
+            'tenant_id': str(tenant.id),
+            'conversation_id': str(conversation.id),
+            'customer_id': str(customer.id)
+        }
+    )
+    
+    try:
+        # Handle feedback buttons
+        if button_payload.startswith('feedback_'):
+            handle_feedback_button(
+                tenant=tenant,
+                conversation=conversation,
+                customer=customer,
+                button_payload=button_payload,
+                button_text=button_text
+            )
+        
+        # Handle product action buttons
+        elif button_payload.startswith('buy_product_') or button_payload.startswith('product_details_'):
+            handle_product_action_button(
+                tenant=tenant,
+                conversation=conversation,
+                button_payload=button_payload,
+                button_text=button_text
+            )
+        
+        # Handle service action buttons
+        elif button_payload.startswith('book_service_') or button_payload.startswith('service_details_'):
+            handle_service_action_button(
+                tenant=tenant,
+                conversation=conversation,
+                button_payload=button_payload,
+                button_text=button_text
+            )
+        
+        # Handle navigation buttons
+        elif button_payload.startswith('browse_'):
+            handle_browse_button(
+                tenant=tenant,
+                conversation=conversation,
+                button_payload=button_payload
+            )
+        
+        else:
+            logger.warning(f"Unknown button payload: {button_payload}")
+    
+    except Exception as e:
+        logger.error(
+            f"Error handling button click: {e}",
+            exc_info=True,
+            extra={
+                'button_payload': button_payload,
+                'tenant_id': str(tenant.id)
+            }
+        )
+
+
+def handle_feedback_button(
+    tenant,
+    conversation: Conversation,
+    customer,
+    button_payload: str,
+    button_text: str
+):
+    """
+    Handle feedback button click (helpful/not_helpful).
+    
+    Creates InteractionFeedback record and sends confirmation message.
+    
+    Args:
+        tenant: Tenant instance
+        conversation: Conversation instance
+        customer: Customer instance
+        button_payload: Button payload (e.g., 'feedback_helpful_123')
+        button_text: Button text
+    """
+    from apps.bot.models_feedback import InteractionFeedback
+    from apps.bot.models import AgentInteraction
+    
+    # Parse interaction ID from payload
+    # Format: feedback_{rating}_{interaction_id}
+    parts = button_payload.split('_')
+    if len(parts) < 3:
+        logger.error(f"Invalid feedback button payload: {button_payload}")
+        return
+    
+    rating_type = parts[1]  # 'helpful' or 'not' (from 'not_helpful')
+    interaction_id = parts[-1]  # Last part is the ID
+    
+    # Determine rating
+    if rating_type == 'helpful':
+        rating = 'helpful'
+    elif rating_type == 'not':
+        rating = 'not_helpful'
+    elif rating_type == 'comment':
+        # Handle comment button - prompt for text feedback
+        send_feedback_prompt(tenant, conversation)
+        return
+    else:
+        logger.error(f"Unknown rating type: {rating_type}")
+        return
+    
+    try:
+        # Get agent interaction
+        interaction = AgentInteraction.objects.get(
+            id=interaction_id,
+            conversation=conversation,
+            tenant=tenant
+        )
+        
+        # Check if feedback already exists
+        existing_feedback = InteractionFeedback.objects.filter(
+            agent_interaction=interaction,
+            tenant=tenant
+        ).first()
+        
+        if existing_feedback:
+            # Update existing feedback
+            existing_feedback.rating = rating
+            existing_feedback.save()
+            logger.info(f"Updated feedback for interaction {interaction_id}: {rating}")
+        else:
+            # Create new feedback
+            InteractionFeedback.objects.create(
+                tenant=tenant,
+                agent_interaction=interaction,
+                conversation=conversation,
+                customer=customer,
+                rating=rating,
+                feedback_source='whatsapp_button'
+            )
+            logger.info(f"Created feedback for interaction {interaction_id}: {rating}")
+        
+        # Send confirmation message
+        from apps.integrations.services import TwilioService
+        
+        # Get Twilio credentials
+        try:
+            settings = tenant.settings
+            if settings.has_twilio_configured():
+                twilio_sid = settings.twilio_sid
+                twilio_token = settings.twilio_token
+            else:
+                twilio_sid = tenant.twilio_sid
+                twilio_token = tenant.twilio_token
+        except AttributeError:
+            twilio_sid = tenant.twilio_sid
+            twilio_token = tenant.twilio_token
+        
+        twilio_service = TwilioService(
+            account_sid=twilio_sid,
+            auth_token=twilio_token,
+            from_number=tenant.whatsapp_number
+        )
+        
+        # Send confirmation
+        confirmation_messages = {
+            'helpful': "Thank you for your feedback! 😊 I'm glad I could help.",
+            'not_helpful': "Thank you for your feedback. I'll try to do better. Would you like to speak with a human agent?"
+        }
+        
+        twilio_service.send_whatsapp(
+            to=customer.phone_e164,
+            body=confirmation_messages.get(rating, "Thank you for your feedback!")
+        )
+        
+    except AgentInteraction.DoesNotExist:
+        logger.error(f"Agent interaction not found: {interaction_id}")
+    except Exception as e:
+        logger.error(f"Error handling feedback button: {e}", exc_info=True)
+
+
+def send_feedback_prompt(tenant, conversation: Conversation):
+    """
+    Send a prompt asking for detailed feedback.
+    
+    Args:
+        tenant: Tenant instance
+        conversation: Conversation instance
+    """
+    # TODO: Implement detailed feedback collection
+    pass
+
+
+def handle_product_action_button(tenant, conversation: Conversation, button_payload: str, button_text: str):
+    """Handle product action button clicks."""
+    # TODO: Implement product action handling
+    logger.info(f"Product action button clicked: {button_payload}")
+
+
+def handle_service_action_button(tenant, conversation: Conversation, button_payload: str, button_text: str):
+    """Handle service action button clicks."""
+    # TODO: Implement service action handling
+    logger.info(f"Service action button clicked: {button_payload}")
+
+
+def handle_browse_button(tenant, conversation: Conversation, button_payload: str):
+    """Handle browse navigation button clicks."""
+    # TODO: Implement browse navigation handling
+    logger.info(f"Browse button clicked: {button_payload}")
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def twilio_webhook(request):
@@ -255,6 +484,10 @@ def twilio_webhook(request):
         to_number = payload.get('To', '').replace('whatsapp:', '')
         message_body = payload.get('Body', '')
         message_sid = payload.get('MessageSid', '')
+        
+        # Check if this is a button response
+        button_payload = payload.get('ButtonPayload', '')
+        button_text = payload.get('ButtonText', '')
         
         logger.info(
             f"Twilio webhook received",
@@ -377,6 +610,17 @@ def twilio_webhook(request):
                     'conversation_id': str(conversation.id),
                     'message_id': str(message.id)
                 }
+            )
+        
+        # Handle button clicks (feedback, actions, etc.)
+        if button_payload:
+            handle_button_click(
+                tenant=tenant,
+                conversation=conversation,
+                customer=customer,
+                button_payload=button_payload,
+                button_text=button_text,
+                message=message
             )
         
         # Step 7: Trigger intent processing
