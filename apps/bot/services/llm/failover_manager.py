@@ -51,7 +51,7 @@ class ProviderFailoverManager:
     
     def _get_default_fallback_order(self) -> List[Tuple[str, str]]:
         """
-        Get default fallback order.
+        Get default fallback order with Together AI as final fallback.
         
         Returns:
             List of (provider, model) tuples
@@ -59,8 +59,11 @@ class ProviderFailoverManager:
         return [
             ('openai', 'gpt-4o'),
             ('gemini', 'gemini-1.5-pro'),
+            ('together', 'Qwen/Qwen2.5-72B-Instruct-Turbo'),  # Excellent multilingual support
             ('openai', 'gpt-4o-mini'),
             ('gemini', 'gemini-1.5-flash'),
+            ('together', 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo'),  # Strong general model
+            ('together', 'Qwen/Qwen2.5-7B-Instruct-Turbo'),  # Cost-effective fallback
         ]
     
     def execute_with_failover(

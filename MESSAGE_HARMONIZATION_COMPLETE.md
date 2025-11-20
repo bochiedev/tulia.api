@@ -56,11 +56,11 @@ The Gemini API expects `-latest` suffix for model names in v1beta.
 ```python
 MODELS = {
     'gemini-1.5-pro': {
-        'api_model_name': 'gemini-1.5-pro-latest',  # Maps to correct API name
+        'api_model_name': 'gemini-1.5-pro',  # Use stable version, not -latest
         ...
     },
     'gemini-1.5-flash': {
-        'api_model_name': 'gemini-1.5-flash-latest',
+        'api_model_name': 'gemini-1.5-flash',  # Use stable version, not -latest
         ...
     }
 }

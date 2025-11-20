@@ -29,7 +29,7 @@ class GeminiProvider(LLMProvider):
     MODELS = {
         'gemini-1.5-pro': {
             'display_name': 'Gemini 1.5 Pro',
-            'api_model_name': 'gemini-1.5-pro-latest',  # Use latest version
+            'api_model_name': 'gemini-1.5-pro',  # Use stable version, not -latest
             'context_window': 1000000,  # 1M tokens
             'input_cost_per_1k': Decimal('0.00125'),  # $1.25 per 1M = $0.00125 per 1K
             'output_cost_per_1k': Decimal('0.005'),   # $5 per 1M = $0.005 per 1K
@@ -38,7 +38,7 @@ class GeminiProvider(LLMProvider):
         },
         'gemini-1.5-flash': {
             'display_name': 'Gemini 1.5 Flash',
-            'api_model_name': 'gemini-1.5-flash-latest',  # Use latest version
+            'api_model_name': 'gemini-1.5-flash',  # Use stable version, not -latest
             'context_window': 1000000,  # 1M tokens
             'input_cost_per_1k': Decimal('0.000075'),  # $0.075 per 1M = $0.000075 per 1K
             'output_cost_per_1k': Decimal('0.0003'),   # $0.30 per 1M = $0.0003 per 1K
@@ -47,7 +47,7 @@ class GeminiProvider(LLMProvider):
         },
         'gemini-1.5-pro-latest': {
             'display_name': 'Gemini 1.5 Pro (Latest)',
-            'api_model_name': 'gemini-1.5-pro-latest',
+            'api_model_name': 'gemini-1.5-pro',  # -latest suffix not supported in v1beta
             'context_window': 1000000,
             'input_cost_per_1k': Decimal('0.00125'),
             'output_cost_per_1k': Decimal('0.005'),
@@ -56,7 +56,7 @@ class GeminiProvider(LLMProvider):
         },
         'gemini-1.5-flash-latest': {
             'display_name': 'Gemini 1.5 Flash (Latest)',
-            'api_model_name': 'gemini-1.5-flash-latest',
+            'api_model_name': 'gemini-1.5-flash',  # -latest suffix not supported in v1beta
             'context_window': 1000000,
             'input_cost_per_1k': Decimal('0.000075'),
             'output_cost_per_1k': Decimal('0.0003'),
