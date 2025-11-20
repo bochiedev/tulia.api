@@ -12,11 +12,17 @@ from .context_builder_service import ContextBuilderService, create_context_build
 from .conversation_summary_service import ConversationSummaryService, create_conversation_summary_service
 from .ai_agent_service import AIAgentService, create_ai_agent_service, AgentResponse
 from .fuzzy_matcher_service import FuzzyMatcherService, create_fuzzy_matcher_service
+from .reference_context_manager import ReferenceContextManager
+from .language_consistency_manager import LanguageConsistencyManager
 from .rich_message_builder import (
     RichMessageBuilder,
     WhatsAppMessage,
     RichMessageValidationError,
     WhatsAppMessageLimits
+)
+from .grounded_response_validator import (
+    GroundedResponseValidator,
+    create_grounded_response_validator
 )
 
 __all__ = [
@@ -43,8 +49,12 @@ __all__ = [
     'AgentResponse',
     'FuzzyMatcherService',
     'create_fuzzy_matcher_service',
+    'ReferenceContextManager',
+    'LanguageConsistencyManager',
     'RichMessageBuilder',
     'WhatsAppMessage',
     'RichMessageValidationError',
     'WhatsAppMessageLimits',
+    'GroundedResponseValidator',
+    'create_grounded_response_validator',
 ]

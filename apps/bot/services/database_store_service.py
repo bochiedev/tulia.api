@@ -65,7 +65,7 @@ class DatabaseStoreService:
         # Fuzzy search by query
         if query:
             queryset = queryset.filter(
-                Q(name__icontains=query) |
+                Q(title__icontains=query) |
                 Q(description__icontains=query) |
                 Q(sku__icontains=query)
             )
@@ -130,7 +130,7 @@ class DatabaseStoreService:
         # Fuzzy search by query
         if query:
             queryset = queryset.filter(
-                Q(name__icontains=query) |
+                Q(title__icontains=query) |
                 Q(description__icontains=query)
             )
         

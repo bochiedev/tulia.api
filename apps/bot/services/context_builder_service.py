@@ -20,6 +20,8 @@ from apps.services.models import Appointment
 from apps.bot.services.knowledge_base_service import KnowledgeBaseService
 from apps.bot.services.fuzzy_matcher_service import FuzzyMatcherService
 from apps.bot.services.catalog_cache_service import CatalogCacheService
+from apps.bot.services.conversation_history_service import ConversationHistoryService
+from apps.bot.services.language_consistency_manager import LanguageConsistencyManager
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,9 @@ class AgentContext:
     last_product_viewed: Optional[Any] = None
     last_service_viewed: Optional[Any] = None
     
+    # Language consistency
+    conversation_language: str = 'en'
+    
     # Metadata
     context_size_tokens: int = 0
     truncated: bool = False
@@ -87,6 +92,7 @@ class AgentContext:
             'services_count': len(self.catalog_context.services),
             'orders_count': len(self.customer_history.orders),
             'appointments_count': len(self.customer_history.appointments),
+            'conversation_language': self.conversation_language,
             'context_size_tokens': self.context_size_tokens,
             'truncated': self.truncated,
         }
@@ -117,7 +123,8 @@ class ContextBuilderService:
         self,
         knowledge_service: Optional[KnowledgeBaseService] = None,
         fuzzy_matcher: Optional[FuzzyMatcherService] = None,
-        catalog_cache: Optional[CatalogCacheService] = None
+        catalog_cache: Optional[CatalogCacheService] = None,
+        history_service: Optional[ConversationHistoryService] = None
     ):
         """
         Initialize Context Builder Service.
@@ -126,10 +133,12 @@ class ContextBuilderService:
             knowledge_service: Optional KnowledgeBaseService instance
             fuzzy_matcher: Optional FuzzyMatcherService instance
             catalog_cache: Optional CatalogCacheService instance
+            history_service: Optional ConversationHistoryService instance
         """
         self.knowledge_service = knowledge_service or KnowledgeBaseService()
         self.fuzzy_matcher = fuzzy_matcher or FuzzyMatcherService()
         self.catalog_cache = catalog_cache or CatalogCacheService()
+        self.history_service = history_service or ConversationHistoryService()
     
     def build_context(
         self,
@@ -172,11 +181,33 @@ class ContextBuilderService:
             context.last_product_viewed = context.context.last_product_viewed
             context.last_service_viewed = context.context.last_service_viewed
         
+        # Detect and update language consistency
+        # This ensures the conversation language is tracked and maintained
+        context.conversation_language = LanguageConsistencyManager.detect_and_update_language(
+            conversation,
+            message.text
+        )
+        logger.debug(
+            f"Conversation language set to '{context.conversation_language}' "
+            f"for conversation {conversation.id}"
+        )
+        
         # Build context from all sources
+        # CHANGED: Now loads ALL messages by default, with optional limiting
+        # This supports requirement 11.1-11.5 for full conversation history recall
         context.conversation_history = self.get_conversation_history(
             conversation,
-            max_messages=self.MAX_HISTORY_MESSAGES
+            max_messages=self.MAX_HISTORY_MESSAGES if max_tokens else None,
+            use_summary=True
         )
+        
+        # Ensure conversation summary is populated for long conversations
+        if context.context and len(context.conversation_history) >= self.history_service.SUMMARIZATION_THRESHOLD:
+            if not context.context.conversation_summary:
+                logger.info(
+                    f"Generating summary for long conversation {conversation.id}"
+                )
+                self.history_service.ensure_summary_exists(conversation)
         
         context.relevant_knowledge = self.get_relevant_knowledge(
             message.text,
@@ -212,64 +243,53 @@ class ContextBuilderService:
     def get_conversation_history(
         self,
         conversation: Conversation,
-        max_messages: int = 20,
+        max_messages: Optional[int] = None,
         use_summary: bool = True
     ) -> List[Message]:
         """
-        Retrieve conversation history with intelligent truncation.
+        Retrieve conversation history - now loads ALL messages by default.
         
-        Returns recent messages prioritizing:
-        1. Most recent messages (always included)
-        2. Messages with high importance (customer questions, bot responses)
-        3. Messages with extracted entities or actions
+        CHANGED: This method now loads the complete conversation history
+        to support requirements 11.1-11.5 (conversation history recall).
         
-        If conversation has many messages and a summary exists, uses summary
-        for older messages and returns only recent full messages.
+        For very long conversations (>50 messages), a summary is generated
+        and stored in ConversationContext, but all messages are still returned.
         
         Args:
             conversation: Conversation instance
-            max_messages: Maximum number of messages to return
-            use_summary: Whether to use summary for old messages
+            max_messages: Optional maximum number of messages (None = all messages)
+            use_summary: Whether to generate/update summary for long conversations
             
         Returns:
             List of Message instances ordered chronologically
         """
-        # Get total message count
-        total_messages = Message.objects.filter(
-            conversation=conversation
-        ).count()
+        # Get ALL messages from conversation
+        all_messages = self.history_service.get_full_history(conversation)
+        total_count = len(all_messages)
         
-        # If we have a summary and many messages, use it
-        if use_summary and total_messages > max_messages:
-            try:
-                context = ConversationContext.objects.get(conversation=conversation)
-                if context.conversation_summary:
-                    logger.debug(
-                        f"Using summary for conversation {conversation.id}: "
-                        f"{total_messages} total messages, returning {max_messages} recent"
-                    )
-                    # Return only recent messages, summary will be used separately
-                    messages = Message.objects.filter(
-                        conversation=conversation
-                    ).order_by('-created_at')[:max_messages]
-                    
-                    return list(reversed(messages))
-            except ConversationContext.DoesNotExist:
-                pass
-        
-        # Get recent messages
-        messages = Message.objects.filter(
-            conversation=conversation
-        ).order_by('-created_at')[:max_messages]
-        
-        # Convert to list and reverse to chronological order
-        messages = list(reversed(messages))
-        
-        logger.debug(
-            f"Retrieved {len(messages)} messages for conversation {conversation.id}"
+        logger.info(
+            f"Retrieved FULL history for conversation {conversation.id}: "
+            f"{total_count} messages"
         )
         
-        return messages
+        # Ensure summary exists for long conversations
+        if use_summary and total_count >= self.history_service.SUMMARIZATION_THRESHOLD:
+            logger.debug(
+                f"Conversation {conversation.id} has {total_count} messages, "
+                "ensuring summary exists"
+            )
+            self.history_service.ensure_summary_exists(conversation)
+        
+        # If max_messages specified, return only recent ones
+        # (but summary will still be available in context)
+        if max_messages and total_count > max_messages:
+            logger.debug(
+                f"Limiting to {max_messages} most recent messages "
+                f"(out of {total_count} total)"
+            )
+            return all_messages[-max_messages:]
+        
+        return all_messages
     
     def get_relevant_knowledge(
         self,
@@ -662,15 +682,20 @@ class ContextBuilderService:
 
 
 def create_context_builder_service(
-    knowledge_service: Optional[KnowledgeBaseService] = None
+    knowledge_service: Optional[KnowledgeBaseService] = None,
+    history_service: Optional[ConversationHistoryService] = None
 ) -> ContextBuilderService:
     """
     Factory function to create ContextBuilderService instance.
     
     Args:
         knowledge_service: Optional KnowledgeBaseService instance
+        history_service: Optional ConversationHistoryService instance
         
     Returns:
         ContextBuilderService instance
     """
-    return ContextBuilderService(knowledge_service=knowledge_service)
+    return ContextBuilderService(
+        knowledge_service=knowledge_service,
+        history_service=history_service
+    )

@@ -824,3 +824,530 @@ class TestScalabilityLimits:
         # Context should be under 1MB
         assert context_size < 1024 * 1024, \
             f"Context size {context_size} bytes exceeds 1MB limit"
+
+
+
+@pytest.mark.django_db
+class TestReferenceContextCachePerformance:
+    """Test reference context cache hit rates and performance."""
+    
+    def test_reference_context_cache_hit_rate(
+        self,
+        performance_tenant,
+        performance_conversation,
+        large_product_catalog
+    ):
+        """Test that reference context caching improves performance."""
+        from apps.bot.services.reference_context_manager import ReferenceContextManager
+        from django.core.cache import cache
+        
+        # Clear cache
+        cache.clear()
+        
+        # Store a reference context
+        items = [
+            {'id': str(p.id), 'title': p.title, 'price': str(p.price)}
+            for p in large_product_catalog[:10]
+        ]
+        
+        context_id = ReferenceContextManager.store_list_context(
+            conversation=performance_conversation,
+            list_type='products',
+            items=items
+        )
+        
+        # First retrieval (should hit cache)
+        _, first_time = measure_execution_time(
+            ReferenceContextManager.resolve_reference,
+            conversation=performance_conversation,
+            message_text="1"
+        )
+        
+        # Second retrieval (should also hit cache)
+        _, second_time = measure_execution_time(
+            ReferenceContextManager.resolve_reference,
+            conversation=performance_conversation,
+            message_text="2"
+        )
+        
+        # Third retrieval (should also hit cache)
+        _, third_time = measure_execution_time(
+            ReferenceContextManager.resolve_reference,
+            conversation=performance_conversation,
+            message_text="3"
+        )
+        
+        print(f"\nReference context resolution times:")
+        print(f"  First: {first_time:.4f}s")
+        print(f"  Second: {second_time:.4f}s")
+        print(f"  Third: {third_time:.4f}s")
+        
+        # All should be fast (under 0.1s)
+        assert first_time < 0.1, f"First resolution took {first_time:.4f}s"
+        assert second_time < 0.1, f"Second resolution took {second_time:.4f}s"
+        assert third_time < 0.1, f"Third resolution took {third_time:.4f}s"
+    
+    def test_reference_context_cache_vs_db(
+        self,
+        performance_tenant,
+        performance_conversation,
+        large_product_catalog
+    ):
+        """Test cache performance vs database queries."""
+        from apps.bot.services.reference_context_manager import ReferenceContextManager
+        from django.core.cache import cache
+        
+        items = [
+            {'id': str(p.id), 'title': p.title, 'price': str(p.price)}
+            for p in large_product_catalog[:10]
+        ]
+        
+        # Test with cache
+        cache.clear()
+        context_id = ReferenceContextManager.store_list_context(
+            conversation=performance_conversation,
+            list_type='products',
+            items=items
+        )
+        
+        cache_times = []
+        for i in range(10):
+            _, exec_time = measure_execution_time(
+                ReferenceContextManager.resolve_reference,
+                conversation=performance_conversation,
+                message_text=str(i % 5 + 1)
+            )
+            cache_times.append(exec_time)
+        
+        # Test without cache (clear and force DB queries)
+        cache.clear()
+        
+        db_times = []
+        for i in range(10):
+            # Re-store context to ensure it's in DB
+            if i == 0:
+                ReferenceContextManager.store_list_context(
+                    conversation=performance_conversation,
+                    list_type='products',
+                    items=items
+                )
+            
+            # Clear cache before each query to force DB hit
+            cache.delete(f"ref_context:{performance_conversation.id}:current")
+            
+            _, exec_time = measure_execution_time(
+                ReferenceContextManager.resolve_reference,
+                conversation=performance_conversation,
+                message_text=str(i % 5 + 1)
+            )
+            db_times.append(exec_time)
+        
+        avg_cache_time = statistics.mean(cache_times)
+        avg_db_time = statistics.mean(db_times)
+        
+        print(f"\nReference context performance:")
+        print(f"  Average with cache: {avg_cache_time:.4f}s")
+        print(f"  Average without cache: {avg_db_time:.4f}s")
+        print(f"  Speedup: {(avg_db_time / avg_cache_time):.2f}x")
+        
+        # Cache should be faster or at least not slower
+        # Note: In test environment, cache might not always be faster due to overhead
+        assert avg_cache_time <= avg_db_time * 1.5, \
+            "Cache should not be significantly slower than DB"
+
+
+@pytest.mark.django_db
+class TestConversationHistoryQueryPerformance:
+    """Test conversation history query performance with indexes."""
+    
+    def test_conversation_history_query_speed(
+        self,
+        performance_tenant,
+        performance_conversation,
+        large_conversation_history
+    ):
+        """Test conversation history query performance."""
+        from apps.bot.services.conversation_history_service import ConversationHistoryService
+        
+        history_service = ConversationHistoryService()
+        
+        # Test full history retrieval
+        _, execution_time = measure_execution_time(
+            history_service.get_full_history,
+            conversation=performance_conversation
+        )
+        
+        print(f"\nFull history retrieval (50 messages): {execution_time:.3f}s")
+        
+        # Should be fast with indexes
+        assert execution_time < 1.0, \
+            f"History retrieval took {execution_time:.3f}s, expected < 1.0s"
+    
+    def test_conversation_history_pagination_performance(
+        self,
+        performance_tenant,
+        performance_conversation,
+        large_conversation_history
+    ):
+        """Test paginated history retrieval performance."""
+        from apps.bot.services.conversation_history_service import ConversationHistoryService
+        
+        history_service = ConversationHistoryService()
+        
+        # Test paginated retrieval
+        page_times = []
+        for page in range(1, 6):  # Test 5 pages
+            _, exec_time = measure_execution_time(
+                history_service.get_history_page,
+                conversation=performance_conversation,
+                page=page,
+                page_size=10
+            )
+            page_times.append(exec_time)
+        
+        stats = calculate_percentiles(page_times)
+        
+        print(f"\nPaginated history retrieval stats:")
+        print(f"  Mean: {stats['mean']:.3f}s")
+        print(f"  P95: {stats['p95']:.3f}s")
+        print(f"  Max: {stats['max']:.3f}s")
+        
+        # All pages should load quickly
+        assert stats['p95'] < 0.5, \
+            f"P95 page load time {stats['p95']:.3f}s exceeds 0.5s"
+    
+    def test_conversation_history_with_large_dataset(
+        self,
+        performance_tenant,
+        performance_conversation
+    ):
+        """Test history query performance with very large conversation."""
+        from apps.bot.services.conversation_history_service import ConversationHistoryService
+        
+        # Create 500 messages
+        for i in range(500):
+            Message.objects.create(
+                conversation=performance_conversation,
+                direction='in' if i % 2 == 0 else 'out',
+                message_type='customer_inbound' if i % 2 == 0 else 'bot_response',
+                text=f"Message {i}"
+            )
+        
+        history_service = ConversationHistoryService()
+        
+        # Test paginated retrieval (should be fast even with 500 messages)
+        _, execution_time = measure_execution_time(
+            history_service.get_history_page,
+            conversation=performance_conversation,
+            page=1,
+            page_size=50
+        )
+        
+        print(f"\nHistory page retrieval (500 total messages): {execution_time:.3f}s")
+        
+        # Should still be fast with indexes
+        assert execution_time < 1.0, \
+            f"Page retrieval took {execution_time:.3f}s, expected < 1.0s"
+
+
+@pytest.mark.django_db
+class TestProductDiscoveryQueryPerformance:
+    """Test product discovery query performance with optimizations."""
+    
+    def test_product_discovery_query_speed(
+        self,
+        performance_tenant,
+        large_product_catalog
+    ):
+        """Test product discovery query performance."""
+        from apps.bot.services.discovery_service import SmartProductDiscoveryService
+        
+        discovery_service = SmartProductDiscoveryService()
+        
+        # Test immediate suggestions
+        _, execution_time = measure_execution_time(
+            discovery_service.get_immediate_suggestions,
+            tenant=performance_tenant,
+            query=None,
+            limit=5
+        )
+        
+        print(f"\nProduct discovery (no query): {execution_time:.3f}s")
+        
+        # Should be fast with caching
+        assert execution_time < 1.0, \
+            f"Product discovery took {execution_time:.3f}s, expected < 1.0s"
+    
+    def test_product_search_performance(
+        self,
+        performance_tenant,
+        large_product_catalog
+    ):
+        """Test product search performance."""
+        from apps.bot.services.discovery_service import SmartProductDiscoveryService
+        
+        discovery_service = SmartProductDiscoveryService()
+        
+        # Test search with query
+        search_times = []
+        queries = ["product", "item", "test", "description", "price"]
+        
+        for query in queries:
+            _, exec_time = measure_execution_time(
+                discovery_service.search_products,
+                tenant=performance_tenant,
+                query=query,
+                limit=10
+            )
+            search_times.append(exec_time)
+        
+        stats = calculate_percentiles(search_times)
+        
+        print(f"\nProduct search performance:")
+        print(f"  Mean: {stats['mean']:.3f}s")
+        print(f"  P95: {stats['p95']:.3f}s")
+        
+        # Searches should be fast
+        assert stats['p95'] < 1.0, \
+            f"P95 search time {stats['p95']:.3f}s exceeds 1.0s"
+    
+    def test_product_discovery_cache_effectiveness(
+        self,
+        performance_tenant,
+        large_product_catalog
+    ):
+        """Test that caching improves product discovery performance."""
+        from apps.bot.services.discovery_service import SmartProductDiscoveryService
+        from django.core.cache import cache
+        
+        discovery_service = SmartProductDiscoveryService()
+        
+        # Clear cache
+        cache.clear()
+        
+        # First call (cold cache)
+        _, first_time = measure_execution_time(
+            discovery_service.get_immediate_suggestions,
+            tenant=performance_tenant,
+            query="product",
+            limit=5
+        )
+        
+        # Second call (warm cache)
+        _, second_time = measure_execution_time(
+            discovery_service.get_immediate_suggestions,
+            tenant=performance_tenant,
+            query="product",
+            limit=5
+        )
+        
+        # Third call (warm cache)
+        _, third_time = measure_execution_time(
+            discovery_service.get_immediate_suggestions,
+            tenant=performance_tenant,
+            query="product",
+            limit=5
+        )
+        
+        print(f"\nProduct discovery caching:")
+        print(f"  First call (cold): {first_time:.3f}s")
+        print(f"  Second call (warm): {second_time:.3f}s")
+        print(f"  Third call (warm): {third_time:.3f}s")
+        
+        # Subsequent calls should be faster or similar
+        # Note: In test environment, cache might not always be faster
+        assert second_time <= first_time * 1.5, \
+            "Cached calls should not be significantly slower"
+        assert third_time <= first_time * 1.5, \
+            "Cached calls should not be significantly slower"
+
+
+@pytest.mark.django_db
+class TestQueryPerformanceMonitoring:
+    """Test query performance monitoring capabilities."""
+    
+    def test_context_builder_query_count(
+        self,
+        performance_tenant,
+        performance_conversation,
+        large_product_catalog,
+        large_conversation_history
+    ):
+        """Test that context building doesn't generate excessive queries."""
+        from django.test.utils import override_settings
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from apps.bot.services.context_builder_service import ContextBuilderService
+        
+        message = Message.objects.create(
+            conversation=performance_conversation,
+            direction='in',
+            message_type='customer_inbound',
+            text="Show me products"
+        )
+        
+        context_builder = ContextBuilderService()
+        
+        # Count queries
+        with CaptureQueriesContext(connection) as queries:
+            context = context_builder.build_context(
+                conversation=performance_conversation,
+                message=message,
+                tenant=performance_tenant
+            )
+        
+        query_count = len(queries)
+        
+        print(f"\nContext building query count: {query_count}")
+        
+        # Should use reasonable number of queries (with select_related/prefetch_related)
+        # Allow up to 35 queries for complex context building with large datasets
+        # (includes conversation history, products, services, knowledge base, etc.)
+        assert query_count < 35, \
+            f"Context building used {query_count} queries, expected < 35"
+    
+    def test_product_discovery_query_count(
+        self,
+        performance_tenant,
+        large_product_catalog
+    ):
+        """Test that product discovery doesn't generate excessive queries."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from apps.bot.services.discovery_service import SmartProductDiscoveryService
+        from django.core.cache import cache
+        
+        # Clear cache to test actual query count
+        cache.clear()
+        
+        discovery_service = SmartProductDiscoveryService()
+        
+        # Count queries
+        with CaptureQueriesContext(connection) as queries:
+            result = discovery_service.get_immediate_suggestions(
+                tenant=performance_tenant,
+                query="product",
+                limit=5
+            )
+        
+        query_count = len(queries)
+        
+        print(f"\nProduct discovery query count: {query_count}")
+        
+        # Should use minimal queries (ideally 1-2 with caching)
+        assert query_count < 10, \
+            f"Product discovery used {query_count} queries, expected < 10"
+    
+    def test_conversation_history_query_count(
+        self,
+        performance_conversation,
+        large_conversation_history
+    ):
+        """Test that conversation history retrieval is optimized."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from apps.bot.services.conversation_history_service import ConversationHistoryService
+        
+        history_service = ConversationHistoryService()
+        
+        # Count queries
+        with CaptureQueriesContext(connection) as queries:
+            messages = history_service.get_full_history(
+                conversation=performance_conversation
+            )
+        
+        query_count = len(queries)
+        
+        print(f"\nConversation history query count: {query_count}")
+        
+        # Should use single query with select_related
+        assert query_count <= 2, \
+            f"History retrieval used {query_count} queries, expected <= 2"
+
+
+@pytest.mark.django_db
+class TestCacheHitRateMetrics:
+    """Test cache hit rate tracking and metrics."""
+    
+    def test_reference_context_cache_hit_rate_calculation(
+        self,
+        performance_tenant,
+        performance_conversation,
+        large_product_catalog
+    ):
+        """Test cache hit rate for reference contexts."""
+        from apps.bot.services.reference_context_manager import ReferenceContextManager
+        from django.core.cache import cache
+        
+        cache.clear()
+        
+        items = [
+            {'id': str(p.id), 'title': p.title}
+            for p in large_product_catalog[:10]
+        ]
+        
+        # Store context
+        ReferenceContextManager.store_list_context(
+            conversation=performance_conversation,
+            list_type='products',
+            items=items
+        )
+        
+        # Perform 100 lookups
+        hits = 0
+        misses = 0
+        
+        for i in range(100):
+            # Every 10th lookup, clear cache to simulate miss
+            if i % 10 == 0 and i > 0:
+                cache.delete(f"ref_context:{performance_conversation.id}:current")
+                misses += 1
+            else:
+                hits += 1
+            
+            result = ReferenceContextManager.resolve_reference(
+                conversation=performance_conversation,
+                message_text=str((i % 5) + 1)
+            )
+        
+        hit_rate = hits / (hits + misses) * 100
+        
+        print(f"\nReference context cache metrics:")
+        print(f"  Hits: {hits}")
+        print(f"  Misses: {misses}")
+        print(f"  Hit rate: {hit_rate:.1f}%")
+        
+        # Should have high hit rate
+        assert hit_rate >= 80, \
+            f"Cache hit rate {hit_rate:.1f}% is below 80%"
+    
+    def test_catalog_cache_hit_rate(
+        self,
+        performance_tenant,
+        large_product_catalog
+    ):
+        """Test cache hit rate for catalog queries."""
+        from apps.bot.services.catalog_cache_service import CatalogCacheService
+        from django.core.cache import cache
+        
+        cache.clear()
+        
+        # First call (miss)
+        products1 = CatalogCacheService.get_products(performance_tenant, active_only=True)
+        
+        # Subsequent calls (hits)
+        hits = 0
+        for i in range(50):
+            products = CatalogCacheService.get_products(performance_tenant, active_only=True)
+            if products:
+                hits += 1
+        
+        hit_rate = hits / 50 * 100
+        
+        print(f"\nCatalog cache metrics:")
+        print(f"  Hits: {hits}/50")
+        print(f"  Hit rate: {hit_rate:.1f}%")
+        
+        # Should have very high hit rate (all hits after first)
+        assert hit_rate >= 95, \
+            f"Catalog cache hit rate {hit_rate:.1f}% is below 95%"

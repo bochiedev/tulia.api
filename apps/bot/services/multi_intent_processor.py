@@ -154,23 +154,26 @@ class MultiIntentProcessor:
         context: Optional[AgentContext] = None
     ) -> List[Intent]:
         """
-        Detect all intents in a message using LLM.
+        Detect all intents in a message using LLM with conversation context.
+        
+        CHANGED: Now uses conversation context to infer intent from vague messages
+        (Requirements 10.1, 10.4, 10.5). Context helps resolve ambiguous messages
+        like "I want that", "yes", "how much?" by looking at recent conversation.
         
         Args:
             message_text: Customer message text (can be combined from multiple messages)
-            context: Optional agent context for better detection
+            context: Optional agent context for better detection (RECOMMENDED)
             
         Returns:
             List of detected Intent objects
             
         Example:
             >>> processor = MultiIntentProcessor(tenant)
-            >>> intents = processor.detect_intents(
-            ...     "I want to book a haircut and also check the price of your shampoo"
-            ... )
-            >>> len(intents)  # 2
-            >>> intents[0].name  # 'BOOK_APPOINTMENT'
-            >>> intents[1].name  # 'PRICE_CHECK'
+            >>> # Without context - may be ambiguous
+            >>> intents = processor.detect_intents("I want that")
+            >>> # With context - can infer from recent conversation
+            >>> intents = processor.detect_intents("I want that", context=agent_context)
+            >>> intents[0].name  # 'PRODUCT_DETAILS' (inferred from context)
         """
         start_time = time.time()
         
@@ -178,8 +181,28 @@ class MultiIntentProcessor:
             # Build system prompt for multi-intent detection
             system_prompt = self._build_multi_intent_system_prompt()
             
-            # Build user prompt
+            # Build user prompt with context (CHANGED: now includes richer context)
             user_prompt = self._build_multi_intent_user_prompt(message_text, context)
+            
+            # Log context usage for debugging
+            has_context = context is not None
+            has_history = has_context and len(context.conversation_history) > 0
+            has_last_viewed = has_context and (
+                context.last_product_viewed is not None or 
+                context.last_service_viewed is not None
+            )
+            
+            logger.debug(
+                f"Detecting intents with context: history={has_history}, "
+                f"last_viewed={has_last_viewed}",
+                extra={
+                    'tenant_id': str(self.tenant.id),
+                    'message_preview': message_text[:50],
+                    'has_context': has_context,
+                    'has_history': has_history,
+                    'has_last_viewed': has_last_viewed
+                }
+            )
             
             # Call LLM
             response = self.llm_provider.generate(
@@ -208,15 +231,17 @@ class MultiIntentProcessor:
                 )
                 intents.append(intent)
             
-            # Log detection
+            # Log detection with context info
             processing_time_ms = int((time.time() - start_time) * 1000)
             logger.info(
-                f"Detected {len(intents)} intents in message",
+                f"Detected {len(intents)} intents in message (context_used={has_context})",
                 extra={
                     'tenant_id': str(self.tenant.id),
                     'intent_count': len(intents),
                     'intents': [i.name for i in intents],
-                    'processing_time_ms': processing_time_ms
+                    'processing_time_ms': processing_time_ms,
+                    'context_used': has_context,
+                    'context_helped': has_context and len(intents) > 0
                 }
             )
             
@@ -475,10 +500,11 @@ class MultiIntentProcessor:
         return 'support'  # Default category
     
     def _build_multi_intent_system_prompt(self) -> str:
-        """Build system prompt for multi-intent detection."""
+        """Build system prompt for multi-intent detection with context awareness."""
         return """You are an AI assistant that detects multiple intents in customer messages.
 
 Your task is to identify ALL distinct intents in a message, even if there are multiple.
+IMPORTANT: Use conversation context to infer intent when messages are vague or ambiguous.
 
 SUPPORTED INTENTS:
 - GREETING: Customer greets or starts conversation
@@ -501,6 +527,19 @@ SUPPORTED INTENTS:
 - HUMAN_HANDOFF: Customer requests human assistance
 - OTHER: Doesn't match specific intent
 
+CONTEXT-BASED INFERENCE:
+When the message is vague (e.g., "I want that", "yes", "how much?"), use the provided context:
+- Recent conversation history: What was just discussed?
+- Last viewed items: What product/service was the customer looking at?
+- Current topic: What is the ongoing conversation about?
+- Key facts: What has been established in the conversation?
+
+Examples of context-based inference:
+- "I want that" + Last Product Viewed: "Blue Shirt" → PRODUCT_DETAILS or ADD_TO_CART
+- "Yes" + Last Question: "Would you like to book?" → BOOK_APPOINTMENT
+- "How much?" + Current Topic: "haircut service" → PRICE_CHECK for service
+- "That one" + Recent conversation about products → PRODUCT_DETAILS
+
 RESPONSE FORMAT:
 Return a JSON object with an array of intents:
 {
@@ -509,7 +548,7 @@ Return a JSON object with an array of intents:
       "intent": "INTENT_NAME",
       "confidence": 0.0-1.0,
       "slots": {"key": "value"},
-      "reasoning": "Why this intent was detected"
+      "reasoning": "Why this intent was detected (mention context if used)"
     }
   ]
 }
@@ -518,8 +557,12 @@ GUIDELINES:
 - Detect ALL intents, even if there are 3-4 in one message
 - Each intent should be distinct (don't duplicate)
 - Extract relevant slots for each intent
-- Be confident when intents are clear
+- Use HIGH confidence (>0.8) when context makes intent clear
+- Use MODERATE confidence (0.5-0.8) when inferring from context
+- Use LOW confidence (<0.5) only when context is insufficient
+- ALWAYS explain your reasoning, especially when using context
 - If message is simple with one intent, return array with one item
+- Prefer inferring from context over asking for clarification
 """
     
     def _build_multi_intent_user_prompt(
@@ -527,16 +570,61 @@ GUIDELINES:
         message_text: str,
         context: Optional[AgentContext] = None
     ) -> str:
-        """Build user prompt for multi-intent detection."""
+        """
+        Build user prompt for multi-intent detection with conversation context.
+        
+        CHANGED: Now includes richer context from conversation history to support
+        intent inference from context (Requirements 10.1, 10.4, 10.5).
+        
+        Context helps resolve vague messages like:
+        - "I want that" -> infer from recently viewed products
+        - "Yes" -> infer from last question asked
+        - "How much?" -> infer from recently discussed items
+        """
         prompt = f"Detect all intents in this customer message:\n\n\"{message_text}\""
         
-        if context and context.conversation_history:
-            recent_messages = context.conversation_history[-3:]
-            if recent_messages:
-                prompt += "\n\nRecent conversation context:\n"
-                for msg in recent_messages:
-                    role = "Customer" if msg.direction == 'in' else "Assistant"
-                    prompt += f"{role}: {msg.text}\n"
+        # Add conversation context if available
+        if context:
+            context_parts = []
+            
+            # Include recent conversation history (last 3 messages)
+            if context.conversation_history:
+                recent_messages = context.conversation_history[-3:]
+                if recent_messages:
+                    context_parts.append("\n## Recent Conversation:")
+                    for msg in recent_messages:
+                        role = "Customer" if msg.direction == 'in' else "Assistant"
+                        context_parts.append(f"{role}: {msg.text}")
+            
+            # Include last viewed items for reference resolution
+            if context.last_product_viewed:
+                context_parts.append(
+                    f"\n## Last Product Viewed: {context.last_product_viewed.title}"
+                )
+            
+            if context.last_service_viewed:
+                context_parts.append(
+                    f"\n## Last Service Viewed: {context.last_service_viewed.title}"
+                )
+            
+            # Include current topic from conversation context
+            if context.context and context.context.current_topic:
+                context_parts.append(
+                    f"\n## Current Topic: {context.context.current_topic}"
+                )
+            
+            # Include key facts from conversation
+            if context.context and context.context.key_facts:
+                recent_facts = context.context.key_facts[-3:]  # Last 3 facts
+                if recent_facts:
+                    context_parts.append("\n## Key Facts from Conversation:")
+                    for fact in recent_facts:
+                        context_parts.append(f"- {fact}")
+            
+            # Add context to prompt
+            if context_parts:
+                prompt += "\n" + "\n".join(context_parts)
+                prompt += "\n\nUse this context to infer intent when the message is vague or ambiguous."
         
         return prompt
     

@@ -17,6 +17,12 @@ from decimal import Decimal
 logger = logging.getLogger(__name__)
 
 
+def get_reference_context_manager():
+    """Lazy import to avoid circular dependencies."""
+    from apps.bot.services.reference_context_manager import ReferenceContextManager
+    return ReferenceContextManager
+
+
 class WhatsAppMessageLimits:
     """WhatsApp API message limits and constraints."""
     
@@ -303,6 +309,125 @@ class RichMessageBuilder:
             }
         )
     
+    def build_product_list(
+        self,
+        products: List,
+        conversation=None,
+        show_prices: bool = True,
+        show_stock: bool = True,
+        button_text: str = "Select Product",
+        body: Optional[str] = None
+    ) -> WhatsAppMessage:
+        """
+        Build a WhatsApp list message for products with reference context storage.
+        
+        This method creates an interactive list message optimized for product display,
+        automatically stores the list in reference context for positional resolution,
+        and falls back to plain text if rich message creation fails.
+        
+        Args:
+            products: List of Product model instances
+            conversation: Conversation instance for storing reference context
+            show_prices: Whether to include prices in descriptions
+            show_stock: Whether to include stock information
+            button_text: Text for the list selection button
+            body: Optional custom message body
+            
+        Returns:
+            WhatsAppMessage: Rich message with product list
+            
+        Raises:
+            RichMessageValidationError: If message validation fails
+            
+        Example:
+            >>> builder = RichMessageBuilder()
+            >>> products = Product.objects.filter(tenant=tenant, is_active=True)[:5]
+            >>> message = builder.build_product_list(products, conversation)
+        """
+        if not products:
+            return WhatsAppMessage(
+                body="No products available at the moment.",
+                message_type='text'
+            )
+        
+        try:
+            # Build items for list message
+            items = []
+            reference_items = []
+            
+            for product in products:
+                # Build description
+                description_parts = []
+                
+                if show_prices:
+                    description_parts.append(
+                        f"{self._format_price(product.price, product.currency)}"
+                    )
+                
+                if show_stock:
+                    if product.is_in_stock:
+                        if product.stock is not None:
+                            description_parts.append(f"Stock: {product.stock}")
+                        else:
+                            description_parts.append("In Stock")
+                    else:
+                        description_parts.append("Out of Stock")
+                
+                description = " • ".join(description_parts)
+                
+                # Truncate title and description to fit WhatsApp limits
+                title = product.title[:self.limits.MAX_LIST_TITLE_LENGTH]
+                description = description[:self.limits.MAX_LIST_DESCRIPTION_LENGTH]
+                
+                items.append({
+                    'id': f'product_{product.id}',
+                    'title': title,
+                    'description': description
+                })
+                
+                # Store for reference context
+                reference_items.append({
+                    'id': str(product.id),
+                    'title': product.title,
+                    'type': 'product',
+                    'price': str(product.price),
+                    'currency': product.currency,
+                    'in_stock': product.is_in_stock
+                })
+            
+            # Store reference context if conversation provided
+            if conversation:
+                ReferenceContextManager = get_reference_context_manager()
+                context_id = ReferenceContextManager.store_list_context(
+                    conversation=conversation,
+                    list_type='products',
+                    items=reference_items
+                )
+                logger.info(f"Stored product list context {context_id} with {len(reference_items)} items")
+            
+            # Build list message
+            if body is None:
+                body = f"Here are {len(products)} products. Select one to learn more:"
+            
+            message = self.build_list_message(
+                title="Products",
+                items=items,
+                button_text=button_text,
+                body=body
+            )
+            
+            # Add reference context ID to metadata
+            if conversation:
+                message.metadata['context_id'] = context_id
+                message.metadata['list_type'] = 'products'
+            
+            return message
+            
+        except Exception as e:
+            # Fallback to plain text if rich message fails
+            logger.warning(f"Failed to build rich product list, falling back to plain text: {e}")
+            return self._build_product_list_fallback(products, show_prices, show_stock)
+    
     def build_list_message(
         self,
         title: str,
@@ -534,6 +659,144 @@ class RichMessageBuilder:
                 'has_buttons': bool(buttons)
             }
         )
+    
+    def build_checkout_message(
+        self,
+        order_summary: Dict[str, Any],
+        payment_link: Optional[str] = None,
+        payment_instructions: Optional[str] = None
+    ) -> WhatsAppMessage:
+        """
+        Build a checkout message with order summary and payment information.
+        
+        Creates a comprehensive checkout message that includes:
+        - Order summary with items and quantities
+        - Total price calculation
+        - Payment link (if available)
+        - Payment instructions
+        - Action buttons for proceeding or canceling
+        
+        Args:
+            order_summary: Dict with 'items', 'total', 'currency', 'customer_info'
+            payment_link: Optional URL for payment processing
+            payment_instructions: Optional custom payment instructions
+            
+        Returns:
+            WhatsAppMessage: Rich message with checkout information
+            
+        Raises:
+            RichMessageValidationError: If message validation fails
+            
+        Example:
+            >>> builder = RichMessageBuilder()
+            >>> order_summary = {
+            ...     'items': [
+            ...         {'title': 'Product 1', 'quantity': 2, 'price': 10.00},
+            ...         {'title': 'Product 2', 'quantity': 1, 'price': 25.00}
+            ...     ],
+            ...     'total': 45.00,
+            ...     'currency': 'USD',
+            ...     'customer_info': {'name': 'John Doe', 'phone': '+1234567890'}
+            ... }
+            >>> message = builder.build_checkout_message(
+            ...     order_summary,
+            ...     payment_link='https://pay.example.com/order123'
+            ... )
+        """
+        try:
+            # Build order summary text
+            body = "*🛒 Order Summary*\n\n"
+            
+            # Add items
+            items = order_summary.get('items', [])
+            for item in items:
+                title = item.get('title', 'Item')
+                quantity = item.get('quantity', 1)
+                price = item.get('price', 0)
+                currency = order_summary.get('currency', 'USD')
+                
+                item_total = Decimal(str(price)) * quantity
+                body += f"• {title}\n"
+                body += f"  Qty: {quantity} × {self._format_price(Decimal(str(price)), currency)}\n"
+                body += f"  Subtotal: {self._format_price(item_total, currency)}\n\n"
+            
+            # Add total
+            total = order_summary.get('total', 0)
+            currency = order_summary.get('currency', 'USD')
+            body += f"*Total: {self._format_price(Decimal(str(total)), currency)}*\n\n"
+            
+            # Add customer info if provided
+            customer_info = order_summary.get('customer_info')
+            if customer_info:
+                body += "📋 *Delivery Details*\n"
+                if customer_info.get('name'):
+                    body += f"Name: {customer_info['name']}\n"
+                if customer_info.get('phone'):
+                    body += f"Phone: {customer_info['phone']}\n"
+                if customer_info.get('address'):
+                    body += f"Address: {customer_info['address']}\n"
+                body += "\n"
+            
+            # Add payment information
+            if payment_link:
+                body += "💳 *Payment*\n"
+                body += f"Click the link below to complete your payment:\n{payment_link}\n\n"
+            elif payment_instructions:
+                body += "💳 *Payment Instructions*\n"
+                body += f"{payment_instructions}\n\n"
+            else:
+                body += "💳 *Payment*\n"
+                body += "Our team will contact you with payment instructions.\n\n"
+            
+            # Validate body length
+            if len(body) > self.limits.MAX_BODY_LENGTH:
+                # Truncate item descriptions if too long
+                body = body[:self.limits.MAX_BODY_LENGTH - 100]
+                body += "\n\n[Order details truncated]"
+            
+            # Build action buttons
+            buttons = []
+            
+            if payment_link:
+                buttons.append({
+                    'id': 'proceed_payment',
+                    'text': '💳 Pay Now'
+                })
+            else:
+                buttons.append({
+                    'id': 'confirm_order',
+                    'text': '✅ Confirm Order'
+                })
+            
+            if len(buttons) < self.limits.MAX_BUTTONS:
+                buttons.append({
+                    'id': 'modify_order',
+                    'text': '✏️ Modify'
+                })
+            
+            if len(buttons) < self.limits.MAX_BUTTONS:
+                buttons.append({
+                    'id': 'cancel_order',
+                    'text': '❌ Cancel'
+                })
+            
+            return WhatsAppMessage(
+                body=body,
+                message_type='button' if buttons else 'text',
+                buttons=buttons if buttons else None,
+                metadata={
+                    'message_type': 'checkout',
+                    'order_total': str(total),
+                    'currency': currency,
+                    'item_count': len(items),
+                    'has_payment_link': bool(payment_link)
+                }
+            )
+            
+        except Exception as e:
+            # Fallback to simple text message
+            logger.warning(f"Failed to build rich checkout message, falling back to plain text: {e}")
+            return self._build_checkout_fallback(order_summary, payment_link, payment_instructions)
     
     # Helper methods
     
@@ -783,3 +1046,102 @@ class RichMessageBuilder:
                     )
         
         return True
+    
+    # Fallback methods for when rich messages fail
+    
+    def _build_product_list_fallback(
+        self,
+        products: List,
+        show_prices: bool = True,
+        show_stock: bool = True
+    ) -> WhatsAppMessage:
+        """
+        Build a plain text fallback for product list.
+        
+        Args:
+            products: List of Product instances
+            show_prices: Whether to include prices
+            show_stock: Whether to include stock info
+            
+        Returns:
+            WhatsAppMessage: Plain text message
+        """
+        body = f"*Available Products* ({len(products)} items)\n\n"
+        
+        for i, product in enumerate(products, 1):
+            body += f"{i}. *{product.title}*\n"
+            
+            if show_prices:
+                body += f"   Price: {self._format_price(product.price, product.currency)}\n"
+            
+            if show_stock:
+                if product.is_in_stock:
+                    if product.stock is not None:
+                        body += f"   Stock: {product.stock} available\n"
+                    else:
+                        body += f"   ✅ In Stock\n"
+                else:
+                    body += f"   ❌ Out of Stock\n"
+            
+            body += "\n"
+        
+        body += "Reply with the number to select a product."
+        
+        return WhatsAppMessage(
+            body=body,
+            message_type='text',
+            metadata={
+                'fallback': True,
+                'list_type': 'products',
+                'item_count': len(products)
+            }
+        )
+    
+    def _build_checkout_fallback(
+        self,
+        order_summary: Dict[str, Any],
+        payment_link: Optional[str] = None,
+        payment_instructions: Optional[str] = None
+    ) -> WhatsAppMessage:
+        """
+        Build a plain text fallback for checkout message.
+        
+        Args:
+            order_summary: Order details
+            payment_link: Optional payment URL
+            payment_instructions: Optional payment instructions
+            
+        Returns:
+            WhatsAppMessage: Plain text message
+        """
+        body = "*🛒 Order Summary*\n\n"
+        
+        # Add items
+        items = order_summary.get('items', [])
+        for item in items:
+            title = item.get('title', 'Item')
+            quantity = item.get('quantity', 1)
+            body += f"• {title} (Qty: {quantity})\n"
+        
+        # Add total
+        total = order_summary.get('total', 0)
+        currency = order_summary.get('currency', 'USD')
+        body += f"\n*Total: {self._format_price(Decimal(str(total)), currency)}*\n\n"
+        
+        # Add payment info
+        if payment_link:
+            body += f"Payment link: {payment_link}\n\n"
+        elif payment_instructions:
+            body += f"Payment: {payment_instructions}\n\n"
+        
+        body += "Reply 'confirm' to proceed or 'cancel' to cancel the order."
+        
+        return WhatsAppMessage(
+            body=body,
+            message_type='text',
+            metadata={
+                'fallback': True,
+                'message_type': 'checkout',
+                'order_total': str(total)
+            }
+        )

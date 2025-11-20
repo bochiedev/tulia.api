@@ -30,6 +30,15 @@ Complete documentation for the Tulia AI WhatsApp Commerce Platform.
 - **[Monitoring Implementation](monitoring/MONITORING_IMPLEMENTATION_SUMMARY.md)** - Implementation details
 - **[Monitoring Guide](monitoring/MONITORING.md)** - Additional monitoring documentation
 
+## 🤖 AI & Bot Features
+
+- **[Conversational Commerce UX Enhancement](conversational-commerce-ux-enhancement/README.md)** - Complete documentation for UX enhancements
+  - [API Documentation](conversational-commerce-ux-enhancement/API_DOCUMENTATION.md) - Technical API reference
+  - [User Guide](conversational-commerce-ux-enhancement/USER_GUIDE.md) - End-user feature guide
+  - [Admin Guide](conversational-commerce-ux-enhancement/ADMIN_GUIDE.md) - Configuration and management
+  - [Deployment Checklist](conversational-commerce-ux-enhancement/DEPLOYMENT_CHECKLIST.md) - Deployment procedures
+  - [Rollback Plan](conversational-commerce-ux-enhancement/ROLLBACK_PLAN.md) - Emergency rollback procedures
+
 ## 🔌 API Documentation
 
 - **[API Quick Reference](api/API_QUICK_REFERENCE.md)** - Quick API reference
@@ -102,6 +111,14 @@ docs/
 │   ├── POSTMAN_TEST_SCENARIOS.md
 │   └── POSTMAN_COLLECTION_SUMMARY.md
 │
+├── conversational-commerce-ux-enhancement/  # UX Enhancement Feature
+│   ├── README.md                      # Feature documentation index
+│   ├── API_DOCUMENTATION.md           # Technical API reference
+│   ├── USER_GUIDE.md                  # End-user guide
+│   ├── ADMIN_GUIDE.md                 # Admin configuration guide
+│   ├── DEPLOYMENT_CHECKLIST.md        # Deployment procedures
+│   └── ROLLBACK_PLAN.md               # Rollback procedures
+│
 ├── guides/                            # User Guides
 │   ├── DEMO_DATA_GUIDE.md
 │   └── QUICKSTART.md
@@ -138,4 +155,4 @@ docs/
 
 ---
 
-**Last Updated**: 2025-01-12
+**Last Updated**: 2025-01-20

@@ -25,7 +25,7 @@ from apps.bot.models import (
 from apps.bot.services.catalog_browser_service import CatalogBrowserService
 from apps.bot.services.reference_context_manager import ReferenceContextManager
 from apps.bot.services.product_intelligence import ProductIntelligenceService
-from apps.bot.services.discovery_service import DiscoveryService
+from apps.bot.services.discovery_service import SmartProductDiscoveryService
 from apps.bot.services.multi_language_processor import MultiLanguageProcessor
 from apps.bot.services.progressive_handoff import ProgressiveHandoffService
 from apps.bot.services.direct_action_handler import DirectActionHandler
@@ -298,7 +298,7 @@ class TestDiscoveryService:
     
     def test_should_ask_clarifying_questions(self, tenant):
         """Test detection of when clarification is needed."""
-        service = DiscoveryService()
+        service = SmartProductDiscoveryService()
         
         # Create many products
         for i in range(20):
@@ -319,7 +319,7 @@ class TestDiscoveryService:
     
     def test_generate_clarifying_questions(self, tenant):
         """Test generation of clarifying questions."""
-        service = DiscoveryService()
+        service = SmartProductDiscoveryService()
         
         questions = service.generate_clarifying_questions(
             customer_message="I need a face cream",

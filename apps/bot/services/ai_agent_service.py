@@ -38,6 +38,8 @@ from apps.bot.services.feature_flags import FeatureFlagService
 from apps.bot.services.rag_retriever_service import RAGRetrieverService
 from apps.bot.services.context_synthesizer import ContextSynthesizer
 from apps.bot.services.attribution_handler import AttributionHandler
+from apps.bot.services.discovery_service import SmartProductDiscoveryService
+from apps.bot.services.grounded_response_validator import GroundedResponseValidator
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +145,13 @@ class AIAgentService:
         failover_manager: Optional[ProviderFailoverManager] = None,
         rag_retriever: Optional[RAGRetrieverService] = None,
         context_synthesizer: Optional[ContextSynthesizer] = None,
-        attribution_handler: Optional[AttributionHandler] = None
+        attribution_handler: Optional[AttributionHandler] = None,
+        discovery_service: Optional[SmartProductDiscoveryService] = None,
+        grounded_validator: Optional[GroundedResponseValidator] = None,
+        message_harmonization: Optional['MessageHarmonizationService'] = None,
+        reference_context_manager: Optional['ReferenceContextManager'] = None,
+        language_consistency_manager: Optional['LanguageConsistencyManager'] = None,
+        branded_persona_builder: Optional['BrandedPersonaBuilder'] = None
     ):
         """
         Initialize AI Agent Service.
@@ -158,6 +166,12 @@ class AIAgentService:
             rag_retriever: Optional RAGRetrieverService instance
             context_synthesizer: Optional ContextSynthesizer instance
             attribution_handler: Optional AttributionHandler instance
+            discovery_service: Optional SmartProductDiscoveryService instance
+            grounded_validator: Optional GroundedResponseValidator instance
+            message_harmonization: Optional MessageHarmonizationService instance
+            reference_context_manager: Optional ReferenceContextManager instance
+            language_consistency_manager: Optional LanguageConsistencyManager instance
+            branded_persona_builder: Optional BrandedPersonaBuilder instance
         """
         self.context_builder = context_builder or create_context_builder_service()
         self.config_service = config_service or create_agent_config_service()
@@ -170,6 +184,24 @@ class AIAgentService:
         self.rag_retriever = rag_retriever
         self.context_synthesizer = context_synthesizer
         self.attribution_handler = attribution_handler
+        
+        # Discovery service for proactive suggestions
+        self.discovery_service = discovery_service or SmartProductDiscoveryService()
+        
+        # Grounded response validator for preventing hallucinations
+        self.grounded_validator = grounded_validator or GroundedResponseValidator()
+        
+        # Message harmonization service for handling rapid message bursts
+        self.message_harmonization = message_harmonization
+        
+        # Reference context manager for positional resolution
+        self.reference_context_manager = reference_context_manager
+        
+        # Language consistency manager for maintaining language throughout conversation
+        self.language_consistency_manager = language_consistency_manager
+        
+        # Branded persona builder for tenant-specific bot identity
+        self.branded_persona_builder = branded_persona_builder
         
         # Track correction accuracy for improvement
         self.correction_stats = {
@@ -336,6 +368,88 @@ class AIAgentService:
         )
         
         try:
+            # Get agent configuration first (needed for harmonization check)
+            agent_config = self.config_service.get_or_create_configuration(tenant)
+            
+            # Initialize message harmonization service if not already done
+            if self.message_harmonization is None:
+                from apps.bot.services.message_harmonization_service import create_message_harmonization_service
+                self.message_harmonization = create_message_harmonization_service(
+                    wait_seconds=agent_config.harmonization_wait_seconds
+                )
+            
+            # Check if message harmonization is enabled and if we should buffer this message
+            if agent_config.enable_message_harmonization:
+                should_buffer = self.message_harmonization.should_buffer_message(
+                    conversation=conversation,
+                    message=message
+                )
+                
+                if should_buffer:
+                    # Buffer this message and return early
+                    self.message_harmonization.buffer_message(
+                        conversation=conversation,
+                        message=message
+                    )
+                    
+                    logger.info(
+                        f"Message {message.id} buffered for harmonization, "
+                        f"waiting for burst to complete"
+                    )
+                    
+                    # Return a special response indicating buffering
+                    # (caller should not send a response yet)
+                    return AgentResponse(
+                        content="",  # Empty content signals buffering
+                        model_used='buffered',
+                        provider='system',
+                        confidence_score=1.0,
+                        processing_time_ms=int((timezone.now() - start_time).total_seconds() * 1000),
+                        input_tokens=0,
+                        output_tokens=0,
+                        total_tokens=0,
+                        estimated_cost=Decimal('0'),
+                        metadata={
+                            'buffered': True,
+                            'buffer_stats': self.message_harmonization.get_buffer_stats(conversation)
+                        }
+                    )
+                
+                # Check if there are harmonized messages ready for processing
+                harmonized_messages = self.message_harmonization.get_harmonized_messages(
+                    conversation=conversation
+                )
+                
+                if harmonized_messages:
+                    # Mark messages as processing
+                    self.message_harmonization.mark_messages_processing(
+                        conversation=conversation,
+                        messages=harmonized_messages
+                    )
+                    
+                    # Combine messages into single text
+                    combined_text = self.message_harmonization.combine_messages(harmonized_messages)
+                    
+                    # Update current message text with combined text
+                    message.text = combined_text
+                    
+                    logger.info(
+                        f"Processing {len(harmonized_messages)} harmonized messages "
+                        f"as single turn for conversation {conversation.id}"
+                    )
+                    
+                    # Store harmonization metadata for tracking
+                    harmonization_metadata = {
+                        'harmonized': True,
+                        'message_count': len(harmonized_messages),
+                        'message_ids': [str(msg.id) for msg in harmonized_messages],
+                        'combined_length': len(combined_text)
+                    }
+                else:
+                    harmonization_metadata = {'harmonized': False}
+            else:
+                harmonization_metadata = {'harmonized': False}
+            
             # Sanitize customer message input
             from apps.bot.security_audit import InputSanitizer
             sanitized_text = InputSanitizer.sanitize_customer_message(message.text)
@@ -344,8 +458,20 @@ class AIAgentService:
             original_text = message.text
             message.text = sanitized_text
             
-            # Get agent configuration
-            agent_config = self.config_service.get_or_create_configuration(tenant)
+            # Initialize language consistency manager if not already done
+            if self.language_consistency_manager is None:
+                from apps.bot.services.language_consistency_manager import LanguageConsistencyManager
+                self.language_consistency_manager = LanguageConsistencyManager
+            
+            # Detect and update conversation language
+            detected_language = self.language_consistency_manager.detect_and_update_language(
+                conversation=conversation,
+                message_text=sanitized_text
+            )
+            
+            logger.info(
+                f"Conversation {conversation.id} language: {detected_language}"
+            )
             
             # Pre-process message for spelling correction
             processed_text, correction_metadata = self.preprocess_message(
@@ -362,6 +488,28 @@ class AIAgentService:
                 logger.info(
                     f"Message corrected: {len(correction_metadata['corrections_made'])} changes"
                 )
+            
+            # Initialize reference context manager if not already done
+            if self.reference_context_manager is None:
+                from apps.bot.services.reference_context_manager import ReferenceContextManager
+                self.reference_context_manager = ReferenceContextManager
+            
+            # Check if message is a positional reference
+            is_reference = self.reference_context_manager.is_positional_reference(sanitized_text)
+            if is_reference:
+                # Try to resolve the reference
+                resolved = self.reference_context_manager.resolve_reference(
+                    conversation=conversation,
+                    message_text=sanitized_text
+                )
+                
+                if resolved:
+                    logger.info(
+                        f"Resolved reference to {resolved['list_type']} "
+                        f"at position {resolved['position']}"
+                    )
+                    # Store resolved reference in metadata for context builder
+                    correction_metadata['resolved_reference'] = resolved
             
             # Build comprehensive context
             context = self.context_builder.build_context(
@@ -424,6 +572,35 @@ class AIAgentService:
                     agent_config=agent_config
                 )
             
+            # Validate response is grounded in actual data (if enabled)
+            # This prevents hallucinations by checking all factual claims
+            if agent_config.enable_grounded_validation:
+                is_valid, validation_issues = self.grounded_validator.validate_response(
+                    response=response.content,
+                    context=context
+                )
+                
+                # Store validation results in metadata
+                response.metadata['grounding_validation'] = {
+                    'is_valid': is_valid,
+                    'issues': validation_issues,
+                    'issues_count': len(validation_issues)
+                }
+                
+                # Log validation failures for monitoring
+                if not is_valid:
+                    logger.warning(
+                        f"Response validation failed with {len(validation_issues)} issues: "
+                        f"{validation_issues}"
+                    )
+                    
+                    # Optionally modify response to indicate uncertainty
+                    # (This is a design decision - we could also reject the response entirely)
+                    if len(validation_issues) > 0:
+                        # Add disclaimer to response
+                        response.content += "\n\nPlease note: Some details may need verification. Would you like me to connect you with a team member for confirmation?"
+                        response.metadata['grounding_validation']['disclaimer_added'] = True
+            
             # Calculate processing time
             end_time = timezone.now()
             processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
@@ -464,6 +641,19 @@ class AIAgentService:
             if correction_metadata.get('corrections_made'):
                 response.metadata['spelling_corrections'] = correction_metadata
             
+            # Add resolved reference metadata to response
+            if correction_metadata.get('resolved_reference'):
+                response.metadata['resolved_reference'] = correction_metadata['resolved_reference']
+            
+            # Add harmonization metadata to response
+            response.metadata['harmonization'] = harmonization_metadata
+            
+            # Add language metadata to response
+            response.metadata['language'] = {
+                'detected': detected_language,
+                'conversation_language': self.language_consistency_manager.get_conversation_language(conversation)
+            }
+            
             # Add suggestions metadata to response for tracking
             if suggestions and (suggestions.get('products') or suggestions.get('services')):
                 response.metadata['suggestions'] = {
@@ -483,6 +673,13 @@ class AIAgentService:
                 tenant=tenant,
                 suggestions=suggestions
             )
+            
+            # If we used message harmonization, mark messages as processed
+            if harmonization_metadata.get('harmonized') and harmonized_messages:
+                self.message_harmonization.mark_messages_processed(
+                    conversation=conversation,
+                    messages=harmonized_messages
+                )
             
             logger.info(
                 f"Message processed successfully: model={response.model_used}, "
@@ -514,6 +711,17 @@ class AIAgentService:
                 f"Error processing message {message.id}: {e}",
                 exc_info=True
             )
+            
+            # If we were processing harmonized messages, mark them as failed
+            if 'harmonized_messages' in locals() and harmonized_messages:
+                try:
+                    self.message_harmonization.mark_messages_failed(
+                        conversation=conversation,
+                        messages=harmonized_messages,
+                        error_message=str(e)
+                    )
+                except Exception as mark_error:
+                    logger.error(f"Failed to mark messages as failed: {mark_error}")
             
             # Return fallback response
             fallback_response = self._create_fallback_response(
@@ -910,6 +1118,40 @@ class AIAgentService:
                 response.use_rich_message = True
                 response.metadata['rich_message_type'] = message_type
                 
+                # Store reference context for list messages
+                if message_type in ['product_list', 'service_list'] and isinstance(data, list):
+                    try:
+                        if self.reference_context_manager is None:
+                            from apps.bot.services.reference_context_manager import ReferenceContextManager
+                            self.reference_context_manager = ReferenceContextManager
+                        
+                        # Prepare items for reference context
+                        list_type = 'products' if message_type == 'product_list' else 'services'
+                        items = []
+                        for idx, item in enumerate(data, 1):
+                            items.append({
+                                'id': str(item.id),
+                                'title': item.title,
+                                'position': idx,
+                                'price': str(item.price) if hasattr(item, 'price') else None,
+                                'description': getattr(item, 'description', '')[:100]
+                            })
+                        
+                        # Store reference context
+                        context_id = self.reference_context_manager.store_list_context(
+                            conversation=context.conversation,
+                            list_type=list_type,
+                            items=items
+                        )
+                        
+                        response.metadata['reference_context_id'] = context_id
+                        
+                        logger.info(
+                            f"Stored reference context {context_id} for {len(items)} {list_type}"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to store reference context: {e}")
+                
                 self.rich_message_stats['total_rich_messages'] += 1
                 
                 logger.info(
@@ -1198,7 +1440,7 @@ class AIAgentService:
         Build system prompt with persona and instructions.
         
         Detects conversation scenario and applies appropriate prompt template
-        with persona customization.
+        with branded persona customization.
         
         Args:
             agent_config: AgentConfiguration for this tenant
@@ -1221,11 +1463,35 @@ class AIAgentService:
             include_scenario_guidance=True
         )
         
-        # Apply persona
-        enhanced_prompt = self.config_service.apply_persona(
-            base_prompt=base_prompt,
-            config=agent_config
+        # Detect language from context
+        language = 'en'  # Default to English
+        try:
+            if self.language_consistency_manager is None:
+                from apps.bot.services.language_consistency_manager import LanguageConsistencyManager
+                self.language_consistency_manager = LanguageConsistencyManager
+            
+            detected_language = self.language_consistency_manager.get_conversation_language(
+                context.conversation
+            )
+            if detected_language in ['en', 'sw']:
+                language = detected_language
+        except Exception as e:
+            logger.debug(f"Could not detect language, using default: {e}")
+        
+        # Initialize BrandedPersonaBuilder if not already done
+        if self.branded_persona_builder is None:
+            from apps.bot.services.branded_persona_builder import create_branded_persona_builder
+            self.branded_persona_builder = create_branded_persona_builder()
+        
+        # Build branded persona prompt
+        branded_prompt = self.branded_persona_builder.build_system_prompt(
+            tenant=context.conversation.tenant,
+            agent_config=agent_config,
+            language=language
         )
+        
+        # Combine base scenario prompt with branded persona
+        enhanced_prompt = f"{base_prompt}\n\n{branded_prompt}"
         
         return enhanced_prompt
     
@@ -1264,9 +1530,11 @@ class AIAgentService:
         
         # Get reference context if available
         try:
-            from apps.bot.services.reference_context_manager import ReferenceContextManager
-            ref_manager = ReferenceContextManager()
-            reference_context = ref_manager.get_current_list(context.conversation)
+            if self.reference_context_manager is None:
+                from apps.bot.services.reference_context_manager import ReferenceContextManager
+                self.reference_context_manager = ReferenceContextManager
+            
+            reference_context = self.reference_context_manager.get_current_list(context.conversation)
         except Exception as e:
             logger.debug(f"No reference context available: {e}")
         
@@ -1529,12 +1797,12 @@ class AIAgentService:
         """
         Generate proactive suggestions based on context and customer history.
         
-        Analyzes conversation context, customer history, and catalog to provide
-        personalized recommendations. Suggestions include:
-        - Complementary products/services
-        - Items based on customer preferences
-        - Available appointments
-        - Popular or featured items
+        Uses SmartProductDiscoveryService to provide immediate product visibility
+        without requiring category narrowing. Analyzes conversation context,
+        customer history, and catalog to provide personalized recommendations.
+        
+        **Feature: conversational-commerce-ux-enhancement**
+        **Requirements: 2.1, 2.2, 2.3, 2.4, 2.5**
         
         Args:
             context: AgentContext with conversation and customer data
@@ -1559,18 +1827,49 @@ class AIAgentService:
                 'priority': 'low'
             }
         
-        suggestions = {
-            'products': [],
-            'services': [],
-            'reasoning': '',
-            'priority': 'medium'
-        }
-        
         try:
-            # Analyze current context for suggestion opportunities
             current_message = context.current_message.text.lower()
             
-            # 1. Suggest complementary items if customer is viewing a product/service
+            # Check if this is a general inquiry ("what do you have", "show me products", etc.)
+            is_general_inquiry = any(phrase in current_message for phrase in [
+                'what do you have',
+                'what products',
+                'what services',
+                'show me',
+                'what can i buy',
+                'what are you selling',
+                'what\'s available',
+                'browse',
+                'catalog',
+                'menu'
+            ])
+            
+            # Use SmartProductDiscoveryService for immediate suggestions
+            if is_general_inquiry or not context.last_product_viewed:
+                # Get immediate suggestions without narrowing
+                suggestions = self.discovery_service.get_immediate_suggestions(
+                    tenant=tenant,
+                    query=current_message if not is_general_inquiry else None,
+                    context=context,
+                    limit=5
+                )
+                
+                logger.info(
+                    f"Smart discovery: {len(suggestions['products'])} products, "
+                    f"{len(suggestions['services'])} services, "
+                    f"priority={suggestions['priority']}"
+                )
+                
+                return suggestions
+            
+            # If customer is viewing a specific product/service, suggest complementary items
+            suggestions = {
+                'products': [],
+                'services': [],
+                'reasoning': '',
+                'priority': 'medium'
+            }
+            
             if context.last_product_viewed:
                 complementary_products = self._get_complementary_products(
                     product=context.last_product_viewed,
@@ -1591,54 +1890,31 @@ class AIAgentService:
                 suggestions['reasoning'] = f"Based on your interest in {context.last_service_viewed.title}"
                 suggestions['priority'] = 'high'
             
-            # 2. Use customer history for personalized recommendations
-            if context.customer_history:
+            # Use customer history for personalized recommendations
+            if context.customer_history and not suggestions['products'] and not suggestions['services']:
                 history_based = self._get_history_based_suggestions(
                     customer_history=context.customer_history,
                     tenant=tenant,
                     limit=3
                 )
                 
-                # Add products from history
-                if history_based.get('products'):
-                    suggestions['products'].extend(history_based['products'])
-                    if not suggestions['reasoning']:
-                        suggestions['reasoning'] = "Based on your previous purchases"
-                        suggestions['priority'] = 'high'
-                
-                # Add services from history
-                if history_based.get('services'):
-                    suggestions['services'].extend(history_based['services'])
-                    if not suggestions['reasoning']:
-                        suggestions['reasoning'] = "Based on your previous bookings"
-                        suggestions['priority'] = 'high'
-            
-            # 3. Suggest based on current conversation topic
-            if not suggestions['products'] and not suggestions['services']:
-                topic_based = self._get_topic_based_suggestions(
-                    message_text=current_message,
-                    context=context,
-                    tenant=tenant,
-                    limit=3
-                )
-                
-                suggestions['products'].extend(topic_based.get('products', []))
-                suggestions['services'].extend(topic_based.get('services', []))
+                suggestions['products'].extend(history_based.get('products', []))
+                suggestions['services'].extend(history_based.get('services', []))
                 
                 if suggestions['products'] or suggestions['services']:
-                    suggestions['reasoning'] = "Based on what you're looking for"
-                    suggestions['priority'] = 'medium'
+                    suggestions['reasoning'] = "Based on your previous activity"
+                    suggestions['priority'] = 'high'
             
-            # 4. Prioritize available inventory and appointments
+            # Prioritize available inventory
             suggestions['products'] = self._filter_available_products(
                 products=suggestions['products'],
-                limit=3
+                limit=5
             )
             
             suggestions['services'] = self._filter_available_services(
                 services=suggestions['services'],
                 tenant=tenant,
-                limit=3
+                limit=5
             )
             
             # Remove duplicates
@@ -1650,10 +1926,16 @@ class AIAgentService:
                 f"{len(suggestions['services'])} service suggestions"
             )
             
+            return suggestions
+            
         except Exception as e:
             logger.error(f"Error generating suggestions: {e}", exc_info=True)
-        
-        return suggestions
+            return {
+                'products': [],
+                'services': [],
+                'reasoning': '',
+                'priority': 'low'
+            }
     
     def _get_complementary_products(
         self,
@@ -2352,7 +2634,11 @@ def create_ai_agent_service(
     context_builder: Optional[ContextBuilderService] = None,
     config_service: Optional[AgentConfigurationService] = None,
     fuzzy_matcher: Optional[FuzzyMatcherService] = None,
-    rich_message_builder: Optional[RichMessageBuilder] = None
+    rich_message_builder: Optional[RichMessageBuilder] = None,
+    message_harmonization: Optional['MessageHarmonizationService'] = None,
+    reference_context_manager: Optional['ReferenceContextManager'] = None,
+    language_consistency_manager: Optional['LanguageConsistencyManager'] = None,
+    branded_persona_builder: Optional['BrandedPersonaBuilder'] = None
 ) -> AIAgentService:
     """
     Factory function to create AIAgentService instance.
@@ -2362,6 +2648,10 @@ def create_ai_agent_service(
         config_service: Optional AgentConfigurationService instance
         fuzzy_matcher: Optional FuzzyMatcherService instance
         rich_message_builder: Optional RichMessageBuilder instance
+        message_harmonization: Optional MessageHarmonizationService instance
+        reference_context_manager: Optional ReferenceContextManager instance
+        language_consistency_manager: Optional LanguageConsistencyManager instance
+        branded_persona_builder: Optional BrandedPersonaBuilder instance
         
     Returns:
         AIAgentService instance
@@ -2370,5 +2660,9 @@ def create_ai_agent_service(
         context_builder=context_builder,
         config_service=config_service,
         fuzzy_matcher=fuzzy_matcher,
-        rich_message_builder=rich_message_builder
+        rich_message_builder=rich_message_builder,
+        message_harmonization=message_harmonization,
+        reference_context_manager=reference_context_manager,
+        language_consistency_manager=language_consistency_manager,
+        branded_persona_builder=branded_persona_builder
     )

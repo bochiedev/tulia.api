@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from rest_framework.test import APIRequestFactory, force_authenticate
 from apps.bot.models import AgentConfiguration
 from apps.bot.services import AgentConfigurationService
-from apps.bot.views import AgentConfigurationView
+from apps.bot.bot_views import AgentConfigurationView
 from apps.tenants.models import Tenant
 from apps.rbac.models import User, TenantUser, Role, Permission, RolePermission, TenantUserRole
 

@@ -122,10 +122,15 @@ class AgentConfigurationService:
     def apply_persona(
         cls,
         base_prompt: str,
-        config: AgentConfiguration
+        config: AgentConfiguration,
+        tenant=None,
+        language: str = 'en'
     ) -> str:
         """
         Apply persona settings to a base prompt.
+        
+        DEPRECATED: This method is maintained for backward compatibility.
+        New code should use BrandedPersonaBuilder.build_system_prompt() directly.
         
         Injects agent name, personality traits, tone, and behavioral
         restrictions into the system prompt.
@@ -133,10 +138,21 @@ class AgentConfigurationService:
         Args:
             base_prompt: Base system prompt template
             config: AgentConfiguration instance
+            tenant: Optional Tenant instance for branded persona
+            language: Language code for the prompt
             
         Returns:
             Enhanced prompt with persona applied
         """
+        # If tenant is provided, use BrandedPersonaBuilder for full branding
+        if tenant:
+            from apps.bot.services.branded_persona_builder import BrandedPersonaBuilder
+            builder = BrandedPersonaBuilder()
+            branded_prompt = builder.build_system_prompt(tenant, config, language)
+            # Combine with base prompt
+            return f"{base_prompt}\n\n{branded_prompt}"
+        
+        # Legacy behavior for backward compatibility
         persona_sections = []
         
         # Add agent identity

@@ -216,7 +216,7 @@ class CatalogBrowserService:
             # Apply search
             if search_query:
                 queryset = queryset.filter(
-                    Q(name__icontains=search_query) |
+                    Q(title__icontains=search_query) |
                     Q(description__icontains=search_query) |
                     Q(sku__icontains=search_query)
                 )
@@ -241,7 +241,7 @@ class CatalogBrowserService:
             # Apply search
             if search_query:
                 queryset = queryset.filter(
-                    Q(name__icontains=search_query) |
+                    Q(title__icontains=search_query) |
                     Q(description__icontains=search_query)
                 )
             

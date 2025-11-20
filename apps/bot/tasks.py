@@ -311,7 +311,7 @@ def _process_message_with_lock(message, conversation, tenant, task_instance):
                     'reason': 'no_unanswered_question_found'
                 }
         
-        # Check for message burst (rapid messages within 5 seconds)
+        # Check for message burst (rapid messages within 3 seconds)
         burst_detected = _detect_message_burst(message, conversation)
         
         if burst_detected:
@@ -328,10 +328,10 @@ def _process_message_with_lock(message, conversation, tenant, task_instance):
                     }
                 )
                 
-                # Schedule batch processing task (delayed by 5 seconds)
+                # Schedule batch processing task (delayed by 3 seconds)
                 process_message_burst.apply_async(
                     args=[str(conversation.id)],
-                    countdown=5
+                    countdown=3
                 )
                 
                 return {
@@ -343,7 +343,7 @@ def _process_message_with_lock(message, conversation, tenant, task_instance):
         # Check if there are already queued messages ready for batch processing
         ready_for_batch = MessageQueue.objects.ready_for_batch(
             conversation=conversation,
-            delay_seconds=5
+            delay_seconds=3
         ).exists()
         
         if ready_for_batch:
@@ -429,7 +429,9 @@ def _process_message_with_lock(message, conversation, tenant, task_instance):
 
 def _detect_message_burst(message, conversation) -> bool:
     """
-    Detect if message is part of a rapid burst (within 5 seconds of previous).
+    Detect if message is part of a rapid burst (within 3 seconds of previous).
+    
+    Uses the MessageHarmonizationService to detect rapid message patterns.
     
     Args:
         message: Current Message instance
@@ -438,39 +440,32 @@ def _detect_message_burst(message, conversation) -> bool:
     Returns:
         bool: True if burst detected, False otherwise
     """
-    from apps.messaging.models import Message
-    from datetime import timedelta
+    from apps.bot.services.message_harmonization_service import create_message_harmonization_service
     
-    # Get the previous inbound message in this conversation
-    previous_message = Message.objects.filter(
+    # Create harmonization service with 3 second wait time
+    harmonization_service = create_message_harmonization_service(wait_seconds=3)
+    
+    # Check if message should be buffered
+    should_buffer = harmonization_service.should_buffer_message(
         conversation=conversation,
-        direction='in',
-        created_at__lt=message.created_at
-    ).order_by('-created_at').first()
+        message=message
+    )
     
-    if not previous_message:
-        return False
-    
-    # Check if within 5 seconds
-    time_diff = message.created_at - previous_message.created_at
-    is_burst = time_diff <= timedelta(seconds=5)
-    
-    if is_burst:
+    if should_buffer:
         logger.debug(
-            f"Message burst detected: {time_diff.total_seconds():.2f}s since last message",
+            f"Message burst detected for harmonization",
             extra={
                 'conversation_id': str(conversation.id),
-                'current_message_id': str(message.id),
-                'previous_message_id': str(previous_message.id)
+                'message_id': str(message.id)
             }
         )
     
-    return is_burst
+    return should_buffer
 
 
 def _queue_message_for_burst(message, conversation):
     """
-    Queue message for batch processing.
+    Queue message for batch processing using MessageHarmonizationService.
     
     Args:
         message: Message instance to queue
@@ -479,8 +474,8 @@ def _queue_message_for_burst(message, conversation):
     Returns:
         MessageQueue: Created queue entry, or None if already queued
     """
+    from apps.bot.services.message_harmonization_service import create_message_harmonization_service
     from apps.messaging.models import MessageQueue
-    from django.db import transaction
     
     # Check if message is already queued
     existing = MessageQueue.objects.filter(message=message).first()
@@ -491,35 +486,25 @@ def _queue_message_for_burst(message, conversation):
         )
         return existing
     
-    # Get next queue position
-    with transaction.atomic():
-        max_position = MessageQueue.objects.filter(
-            conversation=conversation,
-            status='queued'
-        ).aggregate(
-            max_pos=models.Max('queue_position')
-        )['max_pos']
-        
-        next_position = (max_position or 0) + 1
-        
-        # Create queue entry
-        queue_entry = MessageQueue.objects.create(
-            conversation=conversation,
-            message=message,
-            status='queued',
-            queue_position=next_position
-        )
-        
-        logger.info(
-            f"Message queued at position {next_position}",
-            extra={
-                'message_id': str(message.id),
-                'conversation_id': str(conversation.id),
-                'queue_position': next_position
-            }
-        )
-        
-        return queue_entry
+    # Create harmonization service
+    harmonization_service = create_message_harmonization_service(wait_seconds=3)
+    
+    # Buffer the message
+    queue_entry = harmonization_service.buffer_message(
+        conversation=conversation,
+        message=message
+    )
+    
+    logger.info(
+        f"Message queued at position {queue_entry.queue_position}",
+        extra={
+            'message_id': str(message.id),
+            'conversation_id': str(conversation.id),
+            'queue_position': queue_entry.queue_position
+        }
+    )
+    
+    return queue_entry
 
 
 def _build_conversation_context(conversation) -> dict:
@@ -1111,8 +1096,10 @@ def process_message_burst(self, conversation_id: str):
     Process a burst of queued messages together.
     
     This task is triggered when message bursts are detected (multiple messages
-    within 5 seconds). It waits for the burst to complete, then processes all
-    queued messages together using the MultiIntentProcessor.
+    within 3 seconds). It waits for the burst to complete, then processes all
+    queued messages together as a single harmonized message.
+    
+    Uses MessageHarmonizationService to combine messages and AI agent for processing.
     
     Args:
         conversation_id: UUID of the Conversation
@@ -1121,7 +1108,8 @@ def process_message_burst(self, conversation_id: str):
         dict: Processing result with status and metadata
     """
     from apps.messaging.models import Conversation, MessageQueue
-    from apps.bot.services.multi_intent_processor import create_multi_intent_processor
+    from apps.bot.services.message_harmonization_service import create_message_harmonization_service
+    from apps.bot.services.ai_agent_service import create_ai_agent_service
     from apps.integrations.services.twilio_service import create_twilio_service_for_tenant
     
     try:
@@ -1159,13 +1147,16 @@ def process_message_burst(self, conversation_id: str):
                 'reason': 'handoff_active'
             }
         
-        # Check if there are queued messages ready for processing
-        ready_messages = MessageQueue.objects.ready_for_batch(
+        # Create harmonization service
+        harmonization_service = create_message_harmonization_service(wait_seconds=3)
+        
+        # Get harmonized messages ready for processing
+        harmonized_messages = harmonization_service.get_harmonized_messages(
             conversation=conversation,
-            delay_seconds=5
+            wait_seconds=3
         )
         
-        if not ready_messages.exists():
+        if not harmonized_messages:
             logger.debug(
                 f"No messages ready for batch processing yet",
                 extra={'conversation_id': str(conversation_id)}
@@ -1175,47 +1166,143 @@ def process_message_burst(self, conversation_id: str):
                 'reason': 'waiting_for_burst_completion'
             }
         
-        # Create services
-        multi_intent_processor = create_multi_intent_processor(tenant)
-        twilio_service = create_twilio_service_for_tenant(tenant)
-        
-        # Process message burst
-        result = multi_intent_processor.process_message_burst(
-            conversation=conversation,
-            delay_seconds=5
-        )
-        
-        if not result:
-            logger.warning(
-                f"No result from message burst processing",
-                extra={'conversation_id': str(conversation_id)}
-            )
-            return {
-                'status': 'no_result',
-                'reason': 'burst_processing_returned_none'
-            }
-        
-        # Send response
-        twilio_service.send_whatsapp(
-            to=conversation.customer.phone_e164,
-            body=result['response']
-        )
-        
         logger.info(
-            f"Message burst processed and response sent",
+            f"Processing {len(harmonized_messages)} harmonized messages",
             extra={
                 'conversation_id': str(conversation_id),
-                'message_count': result['message_count'],
-                'intents_addressed': len(result['intents_addressed'])
+                'message_count': len(harmonized_messages)
             }
         )
         
-        return {
-            'status': 'success',
-            'message_count': result['message_count'],
-            'intents_addressed': len(result['intents_addressed']),
-            'response_length': len(result['response'])
-        }
+        # Mark messages as processing
+        harmonization_service.mark_messages_processing(
+            conversation=conversation,
+            messages=harmonized_messages
+        )
+        
+        # Combine messages into single text
+        combined_text = harmonization_service.combine_messages(harmonized_messages)
+        
+        # Check feature flag for AI agent
+        use_ai_agent = _should_use_ai_agent(tenant)
+        
+        # Create services
+        twilio_service = create_twilio_service_for_tenant(tenant)
+        
+        try:
+            if use_ai_agent:
+                # Process with AI agent
+                ai_agent = create_ai_agent_service()
+                
+                # Use the first message as the base, but with combined text
+                primary_message = harmonized_messages[0]
+                primary_message.text = combined_text
+                
+                # Process with AI agent
+                agent_response = ai_agent.process_message(
+                    message=primary_message,
+                    conversation=conversation,
+                    tenant=tenant
+                )
+                
+                # Send response
+                if agent_response.use_rich_message and agent_response.rich_message:
+                    try:
+                        if hasattr(twilio_service, 'send_rich_whatsapp_message'):
+                            twilio_service.send_rich_whatsapp_message(
+                                to=conversation.customer.phone_e164,
+                                rich_message=agent_response.rich_message
+                            )
+                        else:
+                            twilio_service.send_whatsapp(
+                                to=conversation.customer.phone_e164,
+                                body=agent_response.content
+                            )
+                    except Exception:
+                        twilio_service.send_whatsapp(
+                            to=conversation.customer.phone_e164,
+                            body=agent_response.content
+                        )
+                else:
+                    twilio_service.send_whatsapp(
+                        to=conversation.customer.phone_e164,
+                        body=agent_response.content
+                    )
+                
+                # Mark messages as processed
+                harmonization_service.mark_messages_processed(
+                    conversation=conversation,
+                    messages=harmonized_messages
+                )
+                
+                logger.info(
+                    f"Message burst processed with AI agent",
+                    extra={
+                        'conversation_id': str(conversation_id),
+                        'message_count': len(harmonized_messages),
+                        'model': agent_response.model_used,
+                        'tokens': agent_response.total_tokens
+                    }
+                )
+                
+                return {
+                    'status': 'success',
+                    'system': 'ai_agent',
+                    'message_count': len(harmonized_messages),
+                    'model': agent_response.model_used,
+                    'tokens': agent_response.total_tokens,
+                    'cost': str(agent_response.estimated_cost)
+                }
+            else:
+                # Process with legacy multi-intent processor
+                from apps.bot.services.multi_intent_processor import create_multi_intent_processor
+                
+                multi_intent_processor = create_multi_intent_processor(tenant)
+                
+                # Process message burst
+                result = multi_intent_processor.process_message_burst(
+                    conversation=conversation,
+                    delay_seconds=3
+                )
+                
+                if not result:
+                    raise Exception("Multi-intent processor returned no result")
+                
+                # Send response
+                twilio_service.send_whatsapp(
+                    to=conversation.customer.phone_e164,
+                    body=result['response']
+                )
+                
+                # Mark messages as processed
+                harmonization_service.mark_messages_processed(
+                    conversation=conversation,
+                    messages=harmonized_messages
+                )
+                
+                logger.info(
+                    f"Message burst processed with legacy system",
+                    extra={
+                        'conversation_id': str(conversation_id),
+                        'message_count': result['message_count']
+                    }
+                )
+                
+                return {
+                    'status': 'success',
+                    'system': 'legacy',
+                    'message_count': result['message_count'],
+                    'intents_addressed': len(result['intents_addressed'])
+                }
+                
+        except Exception as processing_error:
+            # Mark messages as failed
+            harmonization_service.mark_messages_failed(
+                conversation=conversation,
+                messages=harmonized_messages,
+                error_message=str(processing_error)
+            )
+            raise processing_error
         
     except Conversation.DoesNotExist:
         logger.error(f"Conversation not found: {conversation_id}")

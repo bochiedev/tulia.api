@@ -2,7 +2,14 @@
 Django admin configuration for bot app.
 """
 from django.contrib import admin
-from .models import IntentEvent, AgentConfiguration, AgentInteraction, BrowseSession
+from .models import (
+    IntentEvent, 
+    AgentConfiguration, 
+    AgentInteraction, 
+    BrowseSession,
+    MessageHarmonizationLog,
+    ConversationContext
+)
 
 
 @admin.register(IntentEvent)
@@ -56,7 +63,48 @@ class AgentConfigurationAdmin(admin.ModelAdmin):
             'fields': ('confidence_threshold', 'auto_handoff_topics', 'max_low_confidence_attempts')
         }),
         ('Feature Flags', {
-            'fields': ('enable_proactive_suggestions', 'enable_spelling_correction', 'enable_rich_messages')
+            'fields': (
+                'enable_proactive_suggestions', 
+                'enable_spelling_correction', 
+                'enable_rich_messages',
+                'enable_grounded_validation',
+                'enable_feedback_collection',
+                'feedback_frequency'
+            )
+        }),
+        ('UX Enhancement Features', {
+            'fields': (
+                'enable_message_harmonization',
+                'harmonization_wait_seconds',
+                'enable_immediate_product_display',
+                'max_products_to_show',
+                'enable_reference_resolution'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Branding', {
+            'fields': (
+                'use_business_name_as_identity',
+                'custom_bot_greeting',
+                'agent_can_do',
+                'agent_cannot_do'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('RAG Configuration', {
+            'fields': (
+                'enable_document_retrieval',
+                'enable_database_retrieval',
+                'enable_internet_enrichment',
+                'enable_source_attribution',
+                'max_document_results',
+                'max_database_results',
+                'max_internet_results',
+                'semantic_search_weight',
+                'keyword_search_weight',
+                'embedding_model'
+            ),
+            'classes': ('collapse',)
         }),
     )
 
@@ -214,3 +262,173 @@ class BrowseSessionAdmin(admin.ModelAdmin):
         """Display end index (1-indexed)."""
         return obj.end_index
     end_index_display.short_description = 'End Index'
+
+
+@admin.register(MessageHarmonizationLog)
+class MessageHarmonizationLogAdmin(admin.ModelAdmin):
+    """Admin interface for MessageHarmonizationLog model."""
+    list_display = [
+        'id',
+        'get_tenant',
+        'conversation',
+        'message_count',
+        'wait_time_ms',
+        'response_time_ms',
+        'typing_indicator_shown',
+        'success',
+        'created_at'
+    ]
+    list_filter = [
+        'success',
+        'typing_indicator_shown',
+        'created_at',
+        'conversation__tenant'
+    ]
+    search_fields = [
+        'conversation__id',
+        'conversation__tenant__name',
+        'combined_text',
+        'response_generated'
+    ]
+    readonly_fields = [
+        'id',
+        'conversation',
+        'message_ids',
+        'message_count',
+        'combined_text',
+        'wait_time_ms',
+        'first_message_at',
+        'last_message_at',
+        'response_generated',
+        'response_time_ms',
+        'typing_indicator_shown',
+        'success',
+        'error_message',
+        'time_span_display',
+        'average_gap_display',
+        'created_at',
+        'updated_at'
+    ]
+    ordering = ['-created_at']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'conversation', 'created_at', 'updated_at')
+        }),
+        ('Input Messages', {
+            'fields': ('message_ids', 'message_count', 'combined_text')
+        }),
+        ('Timing', {
+            'fields': (
+                'first_message_at',
+                'last_message_at',
+                'time_span_display',
+                'wait_time_ms',
+                'average_gap_display'
+            )
+        }),
+        ('Output', {
+            'fields': ('response_generated', 'response_time_ms', 'typing_indicator_shown')
+        }),
+        ('Status', {
+            'fields': ('success', 'error_message')
+        }),
+    )
+    
+    def get_tenant(self, obj):
+        """Get tenant from conversation relationship."""
+        return obj.conversation.tenant.name if obj.conversation and obj.conversation.tenant else '-'
+    get_tenant.short_description = 'Tenant'
+    get_tenant.admin_order_field = 'conversation__tenant__name'
+    
+    def time_span_display(self, obj):
+        """Display time span between first and last message."""
+        return f"{obj.get_time_span_seconds():.2f}s"
+    time_span_display.short_description = 'Time Span'
+    
+    def average_gap_display(self, obj):
+        """Display average gap between messages."""
+        return f"{obj.get_average_message_gap_ms():.0f}ms"
+    average_gap_display.short_description = 'Avg Message Gap'
+
+
+@admin.register(ConversationContext)
+class ConversationContextAdmin(admin.ModelAdmin):
+    """Admin interface for ConversationContext model."""
+    list_display = [
+        'id',
+        'get_tenant',
+        'conversation',
+        'current_topic',
+        'pending_action',
+        'language_locked',
+        'last_interaction',
+        'is_expired_display',
+        'created_at'
+    ]
+    list_filter = [
+        'current_topic',
+        'language_locked',
+        'last_interaction',
+        'context_expires_at',
+        'conversation__tenant'
+    ]
+    search_fields = [
+        'conversation__id',
+        'conversation__tenant__name',
+        'current_topic',
+        'pending_action',
+        'conversation_summary'
+    ]
+    readonly_fields = [
+        'id',
+        'conversation',
+        'last_interaction',
+        'is_expired_display',
+        'created_at',
+        'updated_at'
+    ]
+    ordering = ['-last_interaction']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'conversation', 'created_at', 'updated_at')
+        }),
+        ('Current State', {
+            'fields': (
+                'current_topic',
+                'pending_action',
+                'extracted_entities',
+                'clarification_attempts'
+            )
+        }),
+        ('References', {
+            'fields': ('last_product_viewed', 'last_service_viewed')
+        }),
+        ('Memory', {
+            'fields': ('conversation_summary', 'key_facts', 'shopping_cart')
+        }),
+        ('Message Harmonization', {
+            'fields': ('last_message_time', 'message_buffer'),
+            'classes': ('collapse',)
+        }),
+        ('Language', {
+            'fields': ('language_locked',),
+            'classes': ('collapse',)
+        }),
+        ('Timing', {
+            'fields': ('last_interaction', 'context_expires_at', 'is_expired_display')
+        }),
+    )
+    
+    def get_tenant(self, obj):
+        """Get tenant from conversation relationship."""
+        return obj.conversation.tenant.name if obj.conversation and obj.conversation.tenant else '-'
+    get_tenant.short_description = 'Tenant'
+    get_tenant.admin_order_field = 'conversation__tenant__name'
+    
+    def is_expired_display(self, obj):
+        """Display whether context is expired."""
+        return obj.is_expired()
+    is_expired_display.short_description = 'Is Expired'
+    is_expired_display.boolean = True

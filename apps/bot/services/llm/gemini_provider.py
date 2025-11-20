@@ -29,6 +29,7 @@ class GeminiProvider(LLMProvider):
     MODELS = {
         'gemini-1.5-pro': {
             'display_name': 'Gemini 1.5 Pro',
+            'api_model_name': 'gemini-1.5-pro-latest',  # Use latest version
             'context_window': 1000000,  # 1M tokens
             'input_cost_per_1k': Decimal('0.00125'),  # $1.25 per 1M = $0.00125 per 1K
             'output_cost_per_1k': Decimal('0.005'),   # $5 per 1M = $0.005 per 1K
@@ -37,6 +38,7 @@ class GeminiProvider(LLMProvider):
         },
         'gemini-1.5-flash': {
             'display_name': 'Gemini 1.5 Flash',
+            'api_model_name': 'gemini-1.5-flash-latest',  # Use latest version
             'context_window': 1000000,  # 1M tokens
             'input_cost_per_1k': Decimal('0.000075'),  # $0.075 per 1M = $0.000075 per 1K
             'output_cost_per_1k': Decimal('0.0003'),   # $0.30 per 1M = $0.0003 per 1K
@@ -45,6 +47,7 @@ class GeminiProvider(LLMProvider):
         },
         'gemini-1.5-pro-latest': {
             'display_name': 'Gemini 1.5 Pro (Latest)',
+            'api_model_name': 'gemini-1.5-pro-latest',
             'context_window': 1000000,
             'input_cost_per_1k': Decimal('0.00125'),
             'output_cost_per_1k': Decimal('0.005'),
@@ -53,6 +56,7 @@ class GeminiProvider(LLMProvider):
         },
         'gemini-1.5-flash-latest': {
             'display_name': 'Gemini 1.5 Flash (Latest)',
+            'api_model_name': 'gemini-1.5-flash-latest',
             'context_window': 1000000,
             'input_cost_per_1k': Decimal('0.000075'),
             'output_cost_per_1k': Decimal('0.0003'),
@@ -129,8 +133,11 @@ class GeminiProvider(LLMProvider):
                 # Convert messages to Gemini format
                 gemini_messages = self._convert_messages(messages)
                 
+                # Get API model name (may differ from our internal name)
+                api_model_name = self.MODELS.get(model, {}).get('api_model_name', model)
+                
                 # Create model instance
-                gemini_model = genai.GenerativeModel(model)
+                gemini_model = genai.GenerativeModel(api_model_name)
                 
                 # Prepare generation config
                 generation_config = GenerationConfig(

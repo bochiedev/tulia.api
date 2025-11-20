@@ -281,6 +281,11 @@ class AgentConfiguration(BaseModel):
         help_text="How often to show feedback buttons"
     )
     
+    enable_grounded_validation = models.BooleanField(
+        default=True,
+        help_text="Enable validation that responses are grounded in actual data (prevents hallucinations)"
+    )
+    
     # RAG Configuration
     enable_document_retrieval = models.BooleanField(
         default=False,
@@ -346,6 +351,47 @@ class AgentConfiguration(BaseModel):
     agent_cannot_do = models.TextField(
         blank=True,
         help_text="Explicit list of what the agent CANNOT do (for prompt engineering)"
+    )
+    
+    # Branding Configuration
+    use_business_name_as_identity = models.BooleanField(
+        default=True,
+        help_text="Use tenant's business name in bot identity"
+    )
+    
+    custom_bot_greeting = models.TextField(
+        blank=True,
+        help_text="Custom greeting message for first contact (overrides default)"
+    )
+    
+    # Message Harmonization Configuration (Requirements: 4.1, 4.2, 4.3, 4.4, 4.5)
+    enable_message_harmonization = models.BooleanField(
+        default=True,
+        help_text="Enable message harmonization to combine rapid-fire messages"
+    )
+    
+    harmonization_wait_seconds = models.IntegerField(
+        default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text="Seconds to wait before processing harmonized messages (1-10)"
+    )
+    
+    # Immediate Product Display Configuration (Requirements: 2.1, 2.2, 2.3, 2.4, 2.5)
+    enable_immediate_product_display = models.BooleanField(
+        default=True,
+        help_text="Enable immediate product display without category narrowing"
+    )
+    
+    max_products_to_show = models.IntegerField(
+        default=5,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text="Maximum number of products to show immediately (1-10)"
+    )
+    
+    # Reference Resolution Configuration (Requirements: 1.1, 1.2, 1.3, 1.4, 1.5)
+    enable_reference_resolution = models.BooleanField(
+        default=True,
+        help_text="Enable resolution of positional references like '1', 'first', 'last'"
     )
     
     class Meta:
@@ -666,6 +712,25 @@ class ConversationContext(BaseModel):
         default=dict,
         blank=True,
         help_text="Shopping cart for multi-item purchases"
+    )
+    
+    # Message Harmonization (Requirements: 4.1, 4.2, 4.3, 4.4, 4.5)
+    last_message_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of last message received (for harmonization timing)"
+    )
+    
+    message_buffer = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Buffer for rapid messages awaiting harmonization"
+    )
+    
+    # Language Consistency (Requirements: 6.1, 6.2, 6.3, 6.4, 6.5)
+    language_locked = models.BooleanField(
+        default=False,
+        help_text="Whether language preference is locked for this conversation"
     )
     
     # Custom manager
@@ -1262,6 +1327,138 @@ class LanguagePreference(BaseModel):
         return max(self.language_usage.items(), key=lambda x: x[1])[0]
 
 
+class MessageHarmonizationLogManager(models.Manager):
+    """Manager for message harmonization log queries with tenant scoping."""
+    
+    def for_tenant(self, tenant):
+        """Get harmonization logs for a specific tenant."""
+        return self.filter(conversation__tenant=tenant)
+    
+    def for_conversation(self, conversation):
+        """Get harmonization logs for a specific conversation."""
+        return self.filter(conversation=conversation).order_by('-created_at')
+    
+    def recent(self, tenant, hours=24):
+        """Get recent harmonization logs for a tenant."""
+        from django.utils import timezone
+        from datetime import timedelta
+        cutoff = timezone.now() - timedelta(hours=hours)
+        return self.filter(conversation__tenant=tenant, created_at__gte=cutoff)
+
+
+class MessageHarmonizationLog(BaseModel):
+    """
+    Tracks message harmonization events for analytics and debugging.
+    
+    Records when multiple rapid messages are combined into a single
+    conversational turn, enabling analysis of harmonization effectiveness
+    and customer messaging patterns.
+    
+    Requirements: 4.1, 4.2, 4.3, 4.4, 4.5
+    
+    TENANT SCOPING: Inherits tenant from conversation relationship.
+    All queries MUST filter by conversation__tenant to prevent cross-tenant data leakage.
+    """
+    
+    conversation = models.ForeignKey(
+        'messaging.Conversation',
+        on_delete=models.CASCADE,
+        related_name='harmonization_logs',
+        db_index=True,
+        help_text="Conversation this harmonization belongs to"
+    )
+    
+    # Input Messages
+    message_ids = models.JSONField(
+        help_text="List of message IDs that were combined"
+    )
+    
+    message_count = models.IntegerField(
+        default=0,
+        help_text="Number of messages combined"
+    )
+    
+    combined_text = models.TextField(
+        help_text="Combined text from all messages"
+    )
+    
+    # Timing
+    wait_time_ms = models.IntegerField(
+        help_text="Time waited before processing in milliseconds"
+    )
+    
+    first_message_at = models.DateTimeField(
+        help_text="Timestamp of first message in burst"
+    )
+    
+    last_message_at = models.DateTimeField(
+        help_text="Timestamp of last message in burst"
+    )
+    
+    # Output
+    response_generated = models.TextField(
+        help_text="Generated response to harmonized messages"
+    )
+    
+    response_time_ms = models.IntegerField(
+        default=0,
+        help_text="Time taken to generate response in milliseconds"
+    )
+    
+    # Metadata
+    typing_indicator_shown = models.BooleanField(
+        default=False,
+        help_text="Whether typing indicator was shown during wait"
+    )
+    
+    success = models.BooleanField(
+        default=True,
+        help_text="Whether harmonization was successful"
+    )
+    
+    error_message = models.TextField(
+        blank=True,
+        help_text="Error message if harmonization failed"
+    )
+    
+    # Custom manager
+    objects = MessageHarmonizationLogManager()
+    
+    class Meta:
+        db_table = 'bot_message_harmonization_logs'
+        verbose_name = 'Message Harmonization Log'
+        verbose_name_plural = 'Message Harmonization Logs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['conversation', 'created_at']),
+            models.Index(fields=['conversation', 'success']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"MessageHarmonizationLog {self.id} - {self.message_count} messages"
+    
+    def get_time_span_seconds(self):
+        """Calculate time span between first and last message in seconds."""
+        if self.first_message_at and self.last_message_at:
+            delta = self.last_message_at - self.first_message_at
+            return delta.total_seconds()
+        return 0.0
+    
+    def get_average_message_gap_ms(self):
+        """Calculate average gap between messages in milliseconds."""
+        if self.message_count <= 1:
+            return 0
+        time_span_ms = self.get_time_span_seconds() * 1000
+        return time_span_ms / (self.message_count - 1)
+    
+    def save(self, *args, **kwargs):
+        """Override save to auto-populate message_count."""
+        if isinstance(self.message_ids, list):
+            self.message_count = len(self.message_ids)
+        super().save(*args, **kwargs)
+
+
 # Import RAG models
 from apps.bot.models_rag import (
     Document,
@@ -1292,6 +1489,7 @@ __all__ = [
     'ReferenceContext',
     'ProductAnalysis',
     'LanguagePreference',
+    'MessageHarmonizationLog',
     # RAG models
     'Document',
     'DocumentChunk',

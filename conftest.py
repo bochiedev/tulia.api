@@ -39,6 +39,32 @@ def tenant(db):
     return Tenant.objects.create(
         name='Test Tenant',
         slug='test-tenant',
+        status='active'
+    )
+
+
+@pytest.fixture
+def customer(db, tenant):
+    """Create a test customer."""
+    from apps.tenants.models import Customer
+    return Customer.objects.create(
+        tenant=tenant,
+        phone_e164='+254712345678',
+        name='Test Customer'
+    )
+
+
+@pytest.fixture
+def product(db, tenant):
+    """Create a test product."""
+    from apps.catalog.models import Product
+    from decimal import Decimal
+    return Product.objects.create(
+        tenant=tenant,
+        title='Test Product',
+        description='A test product',
+        price=Decimal('99.99'),
+        currency='USD',
         is_active=True
     )
 
@@ -82,3 +108,75 @@ def api_client_with_tenant(api_client, tenant):
     from unittest.mock import patch
     with patch('apps.core.permissions.HasTenantScopes.has_permission', return_value=True):
         yield api_client
+
+
+@pytest.fixture
+def tenant_user(db, tenant):
+    """Create a test tenant user with analytics:view scope."""
+    from django.contrib.auth import get_user_model
+    from apps.rbac.models import TenantUser, Permission
+    
+    User = get_user_model()
+    user = User.objects.create_user(
+        email='test@example.com',
+        password='testpass123'
+    )
+    
+    tenant_user = TenantUser.objects.create(
+        tenant=tenant,
+        user=user,
+        is_active=True
+    )
+    
+    # Grant analytics:view permission
+    permission, _ = Permission.objects.get_or_create(
+        code='analytics:view',
+        defaults={
+            'label': 'View Analytics',
+            'description': 'Can view analytics',
+            'category': 'analytics'
+        }
+    )
+    
+    from apps.rbac.models import UserPermission
+    UserPermission.objects.create(
+        tenant_user=tenant_user,
+        permission=permission,
+        granted=True
+    )
+    
+    return tenant_user
+
+
+@pytest.fixture
+def tenant_user_no_scopes(db, tenant):
+    """Create a test tenant user with no scopes."""
+    from django.contrib.auth import get_user_model
+    from apps.rbac.models import TenantUser
+    
+    User = get_user_model()
+    user = User.objects.create_user(
+        email='test_no_scopes@example.com',
+        password='testpass123'
+    )
+    
+    tenant_user = TenantUser.objects.create(
+        tenant=tenant,
+        user=user,
+        is_active=True
+    )
+    
+    return tenant_user
+
+
+@pytest.fixture
+def conversation(db, tenant, customer):
+    """Create a test conversation."""
+    from apps.messaging.models import Conversation
+    
+    return Conversation.objects.create(
+        tenant=tenant,
+        customer=customer,
+        channel='whatsapp',
+        status='active'
+    )
