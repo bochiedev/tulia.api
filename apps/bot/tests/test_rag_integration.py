@@ -30,8 +30,7 @@ def customer(db, tenant):
     return Customer.objects.create(
         tenant=tenant,
         phone_e164="+254712345678",
-        first_name="Test",
-        last_name="Customer"
+        name="Test Customer"
     )
 
 
@@ -51,9 +50,9 @@ def message(db, conversation):
     """Create test message."""
     return Message.objects.create(
         conversation=conversation,
-        direction='inbound',
-        text="Tell me about your return policy",
-        channel='whatsapp'
+        direction='in',
+        message_type='customer_inbound',
+        text="Tell me about your return policy"
     )
 
 
@@ -353,6 +352,7 @@ class TestRAGIntegration:
         llm_response = LLMResponse(
             content="Our return policy allows returns within 30 days of purchase.",
             model="gpt-4o",
+            provider="openai",
             finish_reason="stop",
             input_tokens=200,
             output_tokens=50,
@@ -375,7 +375,7 @@ class TestRAGIntegration:
         with patch.object(service, 'generate_suggestions', return_value={}):
             with patch.object(service, 'should_handoff', return_value=(False, '')):
                 with patch.object(service, '_update_conversation_context'):
-                    with patch.object(service, 'enhance_response_with_rich_message', side_effect=lambda r, **kwargs: r):
+                    with patch.object(service, 'enhance_response_with_rich_message', side_effect=lambda response, **kwargs: response):
                         with patch.object(service, 'track_interaction', return_value=None):
                             response = service.process_message(
                                 message=message,

@@ -718,8 +718,8 @@ class AIAgentService:
                 return True, 'product_card', context.last_product_viewed
             
             # Check if there are products in catalog context
-            if context.catalog_context and context.catalog_context.get('products'):
-                products = context.catalog_context['products']
+            if context.catalog_context and context.catalog_context.products:
+                products = context.catalog_context.products
                 if len(products) == 1:
                     logger.info(f"Detected product card opportunity for single product")
                     return True, 'product_card', products[0]
@@ -735,8 +735,8 @@ class AIAgentService:
                 return True, 'service_card', context.last_service_viewed
             
             # Check if there are services in catalog context
-            if context.catalog_context and context.catalog_context.get('services'):
-                services = context.catalog_context['services']
+            if context.catalog_context and context.catalog_context.services:
+                services = context.catalog_context.services
                 if len(services) == 1:
                     logger.info(f"Detected service card opportunity for single service")
                     return True, 'service_card', services[0]
@@ -2197,9 +2197,7 @@ class AIAgentService:
             
             # Synthesize results into coherent context
             synthesized_context = self.context_synthesizer.synthesize(
-                retrieval_results=retrieval_results,
-                query=query,
-                conversation_context=context
+                retrieval_results=retrieval_results
             )
             
             # Return structured context
