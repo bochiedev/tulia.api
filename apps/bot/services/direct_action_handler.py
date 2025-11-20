@@ -330,7 +330,7 @@ class DirectActionHandler:
                 f"✅ Order confirmed!\n\n"
                 f"Order #{order.order_number}\n"
                 f"{quantity}x {product.title}\n"
-                f"Total: {self._format_price(order.total_amount)}\n\n"
+                f"Total: {self._format_price(order.total)}\n\n"
                 f"We'll send you payment details shortly."
             )
             

@@ -33,7 +33,7 @@ def aggregate_provider_daily_summary(date_str=None):
     logger.info(f"Aggregating provider usage for date: {target_date}")
     
     # Get all tenants
-    tenants = Tenant.objects.filter(is_deleted=False)
+    tenants = Tenant.objects.all()
     
     total_summaries = 0
     
@@ -41,8 +41,7 @@ def aggregate_provider_daily_summary(date_str=None):
         # Get usage for this tenant and date
         usage_qs = ProviderUsage.objects.filter(
             tenant=tenant,
-            created_at__date=target_date,
-            is_deleted=False
+            created_at__date=target_date
         )
         
         if not usage_qs.exists():
@@ -129,11 +128,11 @@ def cleanup_old_provider_usage(days_to_keep=90):
     
     logger.info(f"Cleaning up provider usage older than {cutoff_date}")
     
-    # Soft delete old records
-    deleted_count = ProviderUsage.objects.filter(
+    # Soft delete old records (use objects_with_deleted to include already deleted)
+    deleted_count = ProviderUsage.objects_with_deleted.filter(
         created_at__lt=cutoff_date,
-        is_deleted=False
-    ).update(is_deleted=True)
+        deleted_at__isnull=True
+    ).update(deleted_at=timezone.now())
     
     logger.info(f"Soft deleted {deleted_count} old provider usage records")
     
@@ -159,7 +158,7 @@ def calculate_provider_health_metrics():
     logger.info("Calculating provider health metrics for last 24 hours")
     
     # Get all tenants
-    tenants = Tenant.objects.filter(is_deleted=False)
+    tenants = Tenant.objects.all()
     
     health_report = []
     
@@ -167,8 +166,7 @@ def calculate_provider_health_metrics():
         # Get usage stats per provider
         stats = ProviderUsage.objects.filter(
             tenant=tenant,
-            created_at__gte=since,
-            is_deleted=False
+            created_at__gte=since
         ).values('provider', 'model').annotate(
             total_calls=Count('id'),
             successful_calls=Count('id', filter=Q(success=True)),

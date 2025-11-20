@@ -63,8 +63,7 @@ class FeedbackSubmitSerializer(serializers.Serializer):
         try:
             interaction = AgentInteraction.objects.get(
                 id=value,
-                tenant=request.tenant,
-                is_deleted=False
+                tenant=request.tenant
             )
         except AgentInteraction.DoesNotExist:
             raise serializers.ValidationError("Agent interaction not found")

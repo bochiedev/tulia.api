@@ -1016,9 +1016,7 @@ class AIAgentService:
             # Show feedback every 3rd message
             # Count interactions for this conversation
             interaction_count = AgentInteraction.objects.filter(
-                conversation=interaction.conversation,
-                tenant=interaction.tenant,
-                is_deleted=False
+                conversation=interaction.conversation
             ).count()
             
             return interaction_count % 3 == 0
@@ -1768,7 +1766,7 @@ class AIAgentService:
         
         try:
             # Get products from past orders
-            past_orders = customer_history.get('orders', [])
+            past_orders = customer_history.orders if customer_history else []
             if past_orders:
                 # Extract product IDs from order items
                 product_ids = set()
@@ -1788,7 +1786,7 @@ class AIAgentService:
                     suggestions['products'].extend(list(products))
             
             # Get services from past appointments
-            past_appointments = customer_history.get('appointments', [])
+            past_appointments = customer_history.appointments if customer_history else []
             if past_appointments:
                 # Extract service IDs
                 service_ids = set()
@@ -2180,7 +2178,7 @@ class AIAgentService:
             
             if not self.attribution_handler:
                 self.attribution_handler = AttributionHandler(
-                    enabled=agent_config.enable_source_attribution
+                    config=agent_config
                 )
             
             # Retrieve from all enabled sources
@@ -2188,18 +2186,13 @@ class AIAgentService:
             
             retrieval_results = self.rag_retriever.retrieve(
                 query=query,
-                conversation_context={
+                query_type='general',
+                context={
                     'conversation_id': str(conversation.id),
                     'customer_id': str(conversation.customer.id) if conversation.customer else None,
                     'conversation_history': context.conversation_history[:5],  # Last 5 messages
                     'current_topic': context.metadata.get('current_topic'),
-                },
-                max_document_results=agent_config.max_document_results,
-                max_database_results=agent_config.max_database_results,
-                max_internet_results=agent_config.max_internet_results,
-                enable_documents=agent_config.enable_document_retrieval,
-                enable_database=agent_config.enable_database_retrieval,
-                enable_internet=agent_config.enable_internet_enrichment
+                }
             )
             
             # Synthesize results into coherent context
@@ -2301,7 +2294,7 @@ class AIAgentService:
             # Initialize attribution handler if needed
             if not self.attribution_handler:
                 self.attribution_handler = AttributionHandler(
-                    enabled=agent_config.enable_source_attribution
+                    config=agent_config
                 )
             
             # Add attribution to response

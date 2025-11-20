@@ -6,10 +6,10 @@ Tracks user feedback, implicit signals, and human corrections.
 
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
-from apps.core.models import BaseModel
+from apps.core.models import BaseModel, BaseModelManager
 
 
-class InteractionFeedbackManager(models.Manager):
+class InteractionFeedbackManager(BaseModelManager):
     """Manager for interaction feedback queries with tenant scoping."""
     
     def for_tenant(self, tenant):
@@ -168,7 +168,7 @@ class InteractionFeedback(BaseModel):
         return max(0.0, min(1.0, score))
 
 
-class HumanCorrectionManager(models.Manager):
+class HumanCorrectionManager(BaseModelManager):
     """Manager for human correction queries with tenant scoping."""
     
     def for_tenant(self, tenant):

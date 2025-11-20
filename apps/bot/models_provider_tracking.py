@@ -7,10 +7,10 @@ Tracks costs, performance, and usage across different LLM providers.
 from django.db import models
 from django.core.validators import MinValueValidator
 from decimal import Decimal
-from apps.core.models import BaseModel
+from apps.core.models import BaseModel, BaseModelManager
 
 
-class ProviderUsageManager(models.Manager):
+class ProviderUsageManager(BaseModelManager):
     """Manager for provider usage queries with tenant scoping."""
     
     def for_tenant(self, tenant):
@@ -174,7 +174,7 @@ class ProviderUsage(BaseModel):
         return f"{self.provider}/{self.model} - {self.total_tokens} tokens - ${self.estimated_cost}"
 
 
-class ProviderDailySummaryManager(models.Manager):
+class ProviderDailySummaryManager(BaseModelManager):
     """Manager for provider daily summary queries."""
     
     def for_tenant(self, tenant):

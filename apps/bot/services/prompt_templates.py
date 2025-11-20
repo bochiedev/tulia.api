@@ -445,7 +445,7 @@ Use this information to avoid repeating questions and to better filter results."
         for order in customer_history.orders[:3]:
             recent_items.append(
                 f"- Order #{order.id}: {order.status} "
-                f"(${order.total_amount:.2f})"
+                f"(${order.total:.2f})"
             )
         
         # Add recent appointments

@@ -1026,22 +1026,56 @@ class TestLLMProviderFactory:
         assert provider.max_retries == 3
     
     @pytest.mark.django_db
-    def test_create_from_tenant_settings_no_api_key(self):
-        """Test error when tenant has no API key configured."""
+    def test_create_from_tenant_settings_fallback_to_system_key(self):
+        """Test fallback to system-level API key when tenant has no API key configured."""
         from apps.tenants.models import Tenant, TenantSettings
+        import os
         
         # Create tenant (settings will be auto-created by signal)
         tenant = Tenant.objects.create(
             name="Test Tenant",
-            slug="test-tenant"
+            slug="test-tenant-fallback"
         )
         
         # Update settings to set provider but no API key
         tenant.settings.llm_provider = "openai"
         tenant.settings.save()
-        # No API key set
+        # No tenant-specific API key set
         
-        with pytest.raises(ValueError) as exc_info:
-            LLMProviderFactory.create_from_tenant_settings(tenant)
+        # If system has OPENAI_API_KEY, it should use that
+        if os.getenv('OPENAI_API_KEY'):
+            provider = LLMProviderFactory.create_from_tenant_settings(tenant)
+            assert isinstance(provider, OpenAIProvider)
+            assert provider.api_key == os.getenv('OPENAI_API_KEY')
+        else:
+            # If no system key either, should raise error
+            with pytest.raises(ValueError) as exc_info:
+                LLMProviderFactory.create_from_tenant_settings(tenant)
+            
+            assert "No API key configured" in str(exc_info.value)
+    
+    @pytest.mark.django_db
+    def test_create_from_tenant_settings_no_api_key_anywhere(self):
+        """Test error when no API key is available (tenant or system)."""
+        from apps.tenants.models import Tenant, TenantSettings
+        import os
+        from unittest.mock import patch
         
-        assert "No API key configured" in str(exc_info.value)
+        # Create tenant (settings will be auto-created by signal)
+        tenant = Tenant.objects.create(
+            name="Test Tenant No Key",
+            slug="test-tenant-no-key"
+        )
+        
+        # Update settings to set provider but no API key
+        tenant.settings.llm_provider = "openai"
+        tenant.settings.save()
+        # No tenant-specific API key set
+        
+        # Mock environment to have no system key either
+        with patch.dict(os.environ, {'OPENAI_API_KEY': ''}, clear=False):
+            with pytest.raises(ValueError) as exc_info:
+                LLMProviderFactory.create_from_tenant_settings(tenant)
+            
+            assert "No API key configured" in str(exc_info.value)
+            assert "OPENAI_API_KEY" in str(exc_info.value)

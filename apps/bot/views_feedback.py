@@ -61,8 +61,7 @@ class FeedbackSubmitView(APIView):
         
         # Check if feedback already exists
         existing_feedback = InteractionFeedback.objects.filter(
-            agent_interaction=interaction,
-            is_deleted=False
+            agent_interaction=interaction
         ).first()
         
         if existing_feedback:
@@ -116,8 +115,7 @@ class FeedbackViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Get feedback for current tenant."""
         return InteractionFeedback.objects.filter(
-            tenant=self.request.tenant,
-            is_deleted=False
+            tenant=self.request.tenant
         ).select_related(
             'agent_interaction',
             'conversation',
@@ -145,8 +143,7 @@ class FeedbackViewSet(viewsets.ReadOnlyModelViewSet):
         # Get feedback for period
         feedback_qs = InteractionFeedback.objects.filter(
             tenant=request.tenant,
-            created_at__gte=since,
-            is_deleted=False
+            created_at__gte=since
         )
         
         total_feedback = feedback_qs.count()
@@ -221,8 +218,7 @@ class HumanCorrectionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Get corrections for current tenant."""
         return HumanCorrection.objects.filter(
-            tenant=self.request.tenant,
-            is_deleted=False
+            tenant=self.request.tenant
         ).select_related(
             'agent_interaction',
             'conversation',

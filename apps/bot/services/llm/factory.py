@@ -96,7 +96,14 @@ class LLMProviderFactory:
         provider_name: Optional[str] = None
     ) -> LLMProvider:
         """
-        Create provider instance from tenant settings.
+        Create provider instance from tenant settings with fallback to system keys.
+        
+        Priority order:
+        1. Tenant-specific API key (from TenantSettings)
+        2. System-level API key (from environment variables)
+        
+        This allows tenants to use their own API keys (saving platform costs)
+        while providing a seamless fallback for tenants without configured keys.
         
         Args:
             tenant: Tenant instance with settings
@@ -106,8 +113,10 @@ class LLMProviderFactory:
             Instantiated LLMProvider
             
         Raises:
-            ValueError: If provider not configured or invalid
+            ValueError: If provider not configured or no API key available
         """
+        import os
+        
         # Get provider name from tenant settings or use override
         if provider_name is None:
             provider_name = getattr(
@@ -116,14 +125,44 @@ class LLMProviderFactory:
                 'openai'
             )
         
-        # Get API key from tenant settings
+        # Try to get API key from tenant settings first
         api_key_attr = f'{provider_name}_api_key'
         api_key = getattr(tenant.settings, api_key_attr, None)
         
+        # Fallback to system-level API key from environment
+        if not api_key:
+            env_key_map = {
+                'openai': 'OPENAI_API_KEY',
+                'gemini': 'GEMINI_API_KEY',
+                'together': 'TOGETHER_API_KEY',
+            }
+            
+            env_var = env_key_map.get(provider_name)
+            if env_var:
+                api_key = os.getenv(env_var)
+                
+                if api_key:
+                    logger.info(
+                        f"Using system-level API key for provider '{provider_name}' "
+                        f"(tenant {tenant.id} has no tenant-specific key)"
+                    )
+                else:
+                    logger.warning(
+                        f"No API key found for provider '{provider_name}' "
+                        f"(checked tenant settings and environment variable {env_var})"
+                    )
+        else:
+            logger.info(
+                f"Using tenant-specific API key for provider '{provider_name}' "
+                f"(tenant {tenant.id})"
+            )
+        
         if not api_key:
             raise ValueError(
-                f"No API key configured for provider '{provider_name}' "
-                f"in tenant settings (looking for {api_key_attr})"
+                f"No API key configured for provider '{provider_name}'. "
+                f"Please configure either:\n"
+                f"1. Tenant-specific key in TenantSettings.{api_key_attr}, or\n"
+                f"2. System-level key in environment variable {env_key_map.get(provider_name, 'N/A')}"
             )
         
         # Get additional configuration

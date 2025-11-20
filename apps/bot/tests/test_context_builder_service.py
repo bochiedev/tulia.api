@@ -514,13 +514,17 @@ class TestCustomerHistory:
             tenant=tenant,
             customer=customer,
             status='completed',
-            total_amount=Decimal('100.00')
+            total=Decimal('100.00'),
+            subtotal=Decimal('100.00'),
+            currency='USD'
         )
         Order.objects.create(
             tenant=tenant,
             customer=customer,
             status='paid',
-            total_amount=Decimal('50.00')
+            total=Decimal('50.00'),
+            subtotal=Decimal('50.00'),
+            currency='USD'
         )
         
         history = context_builder.get_customer_history(customer, tenant)
@@ -543,7 +547,9 @@ class TestCustomerHistory:
                 tenant=tenant,
                 customer=customer,
                 status='completed',
-                total_amount=Decimal('10.00')
+                total=Decimal('10.00'),
+                subtotal=Decimal('10.00'),
+                currency='USD'
             )
         
         history = context_builder.get_customer_history(

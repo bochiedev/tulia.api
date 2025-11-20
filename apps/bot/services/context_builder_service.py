@@ -66,9 +66,14 @@ class AgentContext:
     # Customer data
     customer_history: CustomerHistory = field(default_factory=CustomerHistory)
     
+    # Last viewed items (for quick reference)
+    last_product_viewed: Optional[Any] = None
+    last_service_viewed: Optional[Any] = None
+    
     # Metadata
     context_size_tokens: int = 0
     truncated: bool = False
+    metadata: Dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert context to dictionary for serialization."""
@@ -161,6 +166,11 @@ class ContextBuilderService:
         
         # Get or create conversation context
         context.context = self._get_or_create_context(conversation)
+        
+        # Populate last viewed items from conversation context
+        if context.context:
+            context.last_product_viewed = context.context.last_product_viewed
+            context.last_service_viewed = context.context.last_service_viewed
         
         # Build context from all sources
         context.conversation_history = self.get_conversation_history(
@@ -481,7 +491,7 @@ class ContextBuilderService:
                 tenant=tenant,
                 customer=customer,
                 status__in=['completed', 'paid']
-            ).aggregate(total=Sum('total_amount'))
+            ).aggregate(total=Sum('total'))
             history.total_spent = float(total['total'] or 0)
             
             # Get recent appointments
@@ -537,6 +547,8 @@ class ContextBuilderService:
             context = ConversationContext.objects.create(
                 conversation=conversation
             )
+            # Refresh to get the context_expires_at set by save()
+            context.refresh_from_db()
             logger.info(f"Created new context for conversation {conversation.id}")
         
         return context

@@ -740,7 +740,10 @@ class ConversationContext(BaseModel):
     
     def save(self, *args, **kwargs):
         """Override save to set default expiration if not set."""
-        if not self.context_expires_at and not self.pk:
+        # Check if this is a new object (not yet in database)
+        is_new = self._state.adding
+        
+        if not self.context_expires_at and is_new:
             # Set default expiration to 30 minutes on creation
             from django.utils import timezone
             from datetime import timedelta
@@ -1267,6 +1270,18 @@ from apps.bot.models_rag import (
     RAGRetrievalLog
 )
 
+# Import provider tracking models
+from apps.bot.models_provider_tracking import (
+    ProviderUsage,
+    ProviderDailySummary
+)
+
+# Import feedback models
+from apps.bot.models_feedback import (
+    InteractionFeedback,
+    HumanCorrection
+)
+
 __all__ = [
     'IntentEvent',
     'AgentConfiguration',
@@ -1282,4 +1297,10 @@ __all__ = [
     'DocumentChunk',
     'InternetSearchCache',
     'RAGRetrievalLog',
+    # Provider tracking models
+    'ProviderUsage',
+    'ProviderDailySummary',
+    # Feedback models
+    'InteractionFeedback',
+    'HumanCorrection',
 ]
