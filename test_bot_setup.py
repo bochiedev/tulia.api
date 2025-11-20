@@ -64,15 +64,15 @@ def test_bot_task_registered():
         return False
 
 
-def test_intent_service():
-    """Check if IntentService can be created."""
+def test_ai_agent_service():
+    """Check if AI Agent Service can be created."""
     try:
-        from apps.bot.services.intent_service import create_intent_service
-        service = create_intent_service()
-        print("✅ IntentService created successfully")
+        from apps.bot.services.ai_agent_service import create_ai_agent_service
+        service = create_ai_agent_service()
+        print("✅ AI Agent Service created successfully")
         return True
     except Exception as e:
-        print(f"❌ Failed to create IntentService: {e}")
+        print(f"❌ Failed to create AI Agent Service: {e}")
         return False
 
 
@@ -132,7 +132,7 @@ def main():
         ("Celery Config", test_celery_configured),
         ("Redis Connection", test_redis_connection),
         ("Bot Task", test_bot_task_registered),
-        ("Intent Service", test_intent_service),
+        ("AI Agent Service", test_ai_agent_service),
         ("Tenant Twilio", test_tenant_has_twilio),
     ]
     

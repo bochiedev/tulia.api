@@ -1,8 +1,18 @@
 """
-Multi-language processor for handling English, Swahili, and Sheng.
+Enhanced multi-language processor for handling English, Swahili, and Sheng.
+
+This processor enables the bot to understand and respond naturally in:
+- English (formal and casual)
+- Swahili (standard Kenyan Swahili)
+- Sheng (Kenyan street slang)
+- Code-switching (mixed languages - very common in Kenya)
+
+The bot can detect language patterns, understand mixed messages, and respond
+in a fun, engaging way that matches the customer's vibe.
 """
 import logging
 import re
+from typing import Dict, List, Tuple, Optional
 from apps.bot.models import LanguagePreference
 
 logger = logging.getLogger(__name__)
@@ -10,50 +20,73 @@ logger = logging.getLogger(__name__)
 
 class MultiLanguageProcessor:
     """
-    Service for processing multi-language messages.
+    Enhanced service for processing multi-language messages with personality.
     
     Supports:
-    - English
-    - Swahili
-    - Sheng (Kenyan slang)
+    - English (formal and casual)
+    - Swahili (standard Kenyan Swahili)
+    - Sheng (Kenyan street slang)
     - Code-switching (mixed languages)
+    - Fun, engaging responses that match customer's energy
     """
     
-    # Swahili common phrases and their English translations
+    # Expanded Swahili phrases with context
     SWAHILI_PHRASES = {
-        # Greetings
+        # Greetings (expanded)
         'habari': 'hello',
+        'habari yako': 'how are you',
+        'habari za asubuhi': 'good morning',
+        'habari za jioni': 'good evening',
         'mambo': 'hello',
         'sasa': 'hello',
         'vipi': 'how are you',
         'poa': 'good',
         'safi': 'good',
         'salama': 'peace',
+        'shikamoo': 'respectful greeting',
+        'hujambo': 'how are you',
+        'sijambo': 'i am fine',
         
-        # Requests
+        # Requests (expanded)
         'nataka': 'i want',
         'ninataka': 'i want',
         'nipe': 'give me',
         'naomba': 'i request',
         'ningependa': 'i would like',
+        'naweza kupata': 'can i get',
+        'nitapata': 'will i get',
+        'unaweza kunipa': 'can you give me',
+        'tafadhali': 'please',
         
-        # Questions
+        # Questions (expanded)
         'bei gani': 'what price',
         'ngapi': 'how much',
+        'ni bei gani': 'what is the price',
         'iko': 'is it available',
         'kuna': 'is there',
+        'iko wapi': 'where is it',
         'wapi': 'where',
         'lini': 'when',
         'nini': 'what',
+        'kwa nini': 'why',
+        'vipi': 'how',
+        'je': 'question marker',
+        'ama': 'or',
         
-        # Responses
+        # Responses (expanded)
         'sawa': 'okay',
+        'sawa sawa': 'very okay',
         'ndio': 'yes',
+        'ndiyo': 'yes',
         'hapana': 'no',
         'asante': 'thank you',
+        'asante sana': 'thank you very much',
         'karibu': 'welcome',
+        'karibu sana': 'very welcome',
+        'pole': 'sorry',
+        'pole sana': 'very sorry',
         
-        # Common words
+        # Common words (expanded)
         'bidhaa': 'product',
         'huduma': 'service',
         'bei': 'price',
@@ -62,62 +95,210 @@ class MultiLanguageProcessor:
         'oda': 'order',
         'kununua': 'to buy',
         'nunua': 'buy',
+        'uza': 'sell',
+        'tuma': 'send',
+        'peleka': 'deliver',
+        'lete': 'bring',
+        'chukua': 'take',
+        'angalia': 'look',
+        'tafuta': 'search',
+        'pata': 'get',
+        'kuja': 'come',
+        'nenda': 'go',
+        'rudi': 'return',
+        'fanya': 'do',
+        'sema': 'say',
+        'jibu': 'answer',
+        'uliza': 'ask',
+        'jua': 'know',
+        'elewa': 'understand',
+        'sikia': 'hear',
+        'ona': 'see',
+        'soma': 'read',
+        'andika': 'write',
     }
     
-    # Sheng phrases (Kenyan slang)
+    # Expanded Sheng phrases (Kenyan street slang)
     SHENG_PHRASES = {
+        # Greetings
+        'niaje': 'hello',
+        'niaje buda': 'hello friend',
+        'mambo vipi': 'how are you',
+        'uko poa': 'are you good',
+        'sasa': 'hello',
+        'sasa buda': 'hello friend',
+        'vipi': 'how are you',
+        
+        # Status/Feelings
         'fiti': 'good',
         'poa': 'good',
         'sawa': 'okay',
-        'doh': 'money',
-        'mbao': 'money',
-        'munde': 'person',
-        'msee': 'person',
-        'niaje': 'hello',
-        'mambo vipi': 'how are you',
+        'freshi': 'fresh/good',
+        'bomba': 'excellent',
+        'kali': 'cool',
+        'noma': 'awesome',
         'iko sawa': 'it is okay',
         'si mbaya': 'not bad',
+        'poa kabisa': 'very good',
+        'fiti kabisa': 'very good',
+        
+        # Money
+        'doh': 'money',
+        'mbao': 'money',
+        'ganji': 'money',
+        'munde': 'money',
+        'ngwara': 'money',
+        'chapaa': 'money',
+        
+        # People
+        'msee': 'person',
+        'mse': 'person',
+        'buda': 'friend',
+        'bro': 'brother',
+        'siz': 'sister',
+        'manze': 'friend',
+        'kijanaa': 'young person',
+        
+        # Actions
         'cheki': 'check',
         'tuma': 'send',
         'pata': 'get',
         'kuja': 'come',
+        'enda': 'go',
+        'leta': 'bring',
+        'chukua': 'take',
+        'angalia': 'look',
+        'tafuta': 'search',
+        'nunua': 'buy',
+        'uza': 'sell',
+        
+        # Expressions
+        'maze': 'friend',
+        'wacha': 'stop',
+        'wacha mchezo': 'stop joking',
+        'kwani': 'why',
+        'alafu': 'then',
+        'lakini': 'but',
+        'sasa hivi': 'right now',
+        'haraka': 'quickly',
+        'pole pole': 'slowly',
+        'tu': 'just',
+        'pia': 'also',
+        'tena': 'again',
+        
+        # Questions
+        'ni ngapi': 'how much',
+        'iko': 'is it there',
+        'kuna': 'is there',
+        'iko wapi': 'where is it',
+        'ni nini': 'what is it',
+        'ni lini': 'when is it',
+    }
+    
+    # Fun response templates for different languages
+    RESPONSE_TEMPLATES = {
+        'en': {
+            'greeting': ['Hey there!', 'Hello!', 'Hi!', 'Hey!'],
+            'thanks': ['You\'re welcome!', 'Happy to help!', 'Anytime!', 'My pleasure!'],
+            'confirmation': ['Got it!', 'Understood!', 'Perfect!', 'Awesome!'],
+        },
+        'sw': {
+            'greeting': ['Habari!', 'Mambo!', 'Karibu!'],
+            'thanks': ['Karibu sana!', 'Asante!', 'Hakuna matata!'],
+            'confirmation': ['Sawa!', 'Nzuri!', 'Poa!'],
+        },
+        'sheng': {
+            'greeting': ['Niaje!', 'Mambo vipi!', 'Sasa!', 'Vipi!'],
+            'thanks': ['Poa buda!', 'Sawa msee!', 'Fiti!'],
+            'confirmation': ['Sawa sawa!', 'Poa kabisa!', 'Fiti!', 'Bomba!'],
+        },
+        'mixed': {
+            'greeting': ['Niaje! How can I help?', 'Mambo! What do you need?', 'Sasa! Vipi?'],
+            'thanks': ['Asante! Happy to help!', 'Karibu sana!', 'Poa! Anytime!'],
+            'confirmation': ['Sawa sawa! Got it!', 'Poa! Perfect!', 'Fiti kabisa!'],
+        }
     }
     
     # Combined phrase dictionary
     PHRASE_DICT = {**SWAHILI_PHRASES, **SHENG_PHRASES}
     
     @classmethod
-    def detect_languages(cls, message_text):
+    def detect_languages(cls, message_text: str) -> List[str]:
         """
-        Detect languages present in message.
+        Detect languages present in message with improved accuracy.
         
         Args:
             message_text: Customer message
         
         Returns:
-            List of detected language codes
+            List of detected language codes (e.g., ['en', 'sw', 'sheng'])
         """
         text_lower = message_text.lower()
         detected = set()
+        
+        # Count phrase matches for each language
+        swahili_count = 0
+        sheng_count = 0
         
         # Check for Swahili/Sheng phrases
         for phrase in cls.PHRASE_DICT.keys():
             if phrase in text_lower:
                 if phrase in cls.SWAHILI_PHRASES:
-                    detected.add('sw')  # Swahili
+                    detected.add('sw')
+                    swahili_count += 1
                 if phrase in cls.SHENG_PHRASES:
                     detected.add('sheng')
+                    sheng_count += 1
         
         # Check for English (if contains common English words)
-        english_indicators = ['the', 'is', 'are', 'want', 'need', 'how', 'what', 'can', 'please']
-        if any(word in text_lower.split() for word in english_indicators):
+        english_indicators = [
+            'the', 'is', 'are', 'want', 'need', 'how', 'what', 'can', 'please',
+            'would', 'like', 'get', 'buy', 'price', 'cost', 'available', 'have',
+            'do', 'does', 'will', 'when', 'where', 'which', 'who', 'why'
+        ]
+        english_count = sum(1 for word in english_indicators if word in text_lower.split())
+        if english_count > 0:
             detected.add('en')
         
         # Default to English if nothing detected
         if not detected:
             detected.add('en')
         
-        return list(detected)
+        # Determine primary language based on counts
+        language_scores = {
+            'en': english_count,
+            'sw': swahili_count,
+            'sheng': sheng_count
+        }
+        
+        # Sort by score and return
+        sorted_languages = sorted(
+            [lang for lang in detected],
+            key=lambda x: language_scores.get(x, 0),
+            reverse=True
+        )
+        
+        return sorted_languages
+    
+    @classmethod
+    def get_language_mix_type(cls, languages: List[str]) -> str:
+        """
+        Determine the type of language mix.
+        
+        Args:
+            languages: List of detected languages
+            
+        Returns:
+            Language mix type: 'en', 'sw', 'sheng', or 'mixed'
+        """
+        if len(languages) == 1:
+            return languages[0]
+        elif 'sheng' in languages:
+            return 'mixed'  # Sheng is always mixed
+        elif 'sw' in languages and 'en' in languages:
+            return 'mixed'
+        else:
+            return languages[0] if languages else 'en'
     
     @classmethod
     def normalize_message(cls, message_text):
@@ -176,29 +357,141 @@ class MultiLanguageProcessor:
             )
     
     @classmethod
-    def format_response_in_language(cls, response_text, target_language):
+    def format_response_in_language(cls, response_text: str, target_language: str, add_personality: bool = True) -> str:
         """
-        Format response in customer's preferred language.
+        Format response in customer's preferred language with personality.
+        
+        This makes the bot more engaging by matching the customer's language style
+        and adding fun, natural expressions.
         
         Args:
             response_text: English response text
-            target_language: Target language code
+            target_language: Target language code ('en', 'sw', 'sheng', 'mixed')
+            add_personality: Whether to add personality touches
         
         Returns:
-            Formatted response
+            Formatted response with appropriate language mix
         """
-        # For now, we keep responses in English but add friendly Swahili greetings
+        if not add_personality:
+            return response_text
+        
+        # Add language-appropriate greetings and expressions
         if target_language in ['sw', 'sheng', 'mixed']:
-            # Add Swahili greeting if appropriate
-            if any(greeting in response_text.lower() for greeting in ['hello', 'hi', 'hey']):
-                response_text = response_text.replace('Hello', 'Habari', 1)
-                response_text = response_text.replace('Hi', 'Mambo', 1)
+            # Replace formal greetings with more natural ones
+            greetings_map = {
+                'Hello': 'Habari' if target_language == 'sw' else 'Niaje',
+                'Hi': 'Mambo' if target_language == 'sw' else 'Sasa',
+                'Hey': 'Vipi' if target_language == 'sw' else 'Niaje',
+                'Good morning': 'Habari za asubuhi',
+                'Good evening': 'Habari za jioni',
+            }
             
-            # Add Swahili closing if appropriate
-            if 'thank you' in response_text.lower():
-                response_text = response_text.replace('Thank you', 'Asante', 1)
+            for eng, local in greetings_map.items():
+                if eng in response_text:
+                    response_text = response_text.replace(eng, local, 1)
+                    break
+            
+            # Replace thank you expressions
+            if 'Thank you' in response_text or 'Thanks' in response_text:
+                replacement = 'Asante sana' if target_language == 'sw' else 'Asante buda'
+                response_text = response_text.replace('Thank you', replacement, 1)
+                response_text = response_text.replace('Thanks', replacement, 1)
+            
+            # Replace you're welcome
+            if "You're welcome" in response_text or 'Welcome' in response_text:
+                replacement = 'Karibu sana' if target_language == 'sw' else 'Poa msee'
+                response_text = response_text.replace("You're welcome", replacement, 1)
+            
+            # Add confirmations
+            if response_text.startswith('Okay') or response_text.startswith('OK'):
+                replacement = 'Sawa' if target_language == 'sw' else 'Poa'
+                response_text = response_text.replace('Okay', replacement, 1)
+                response_text = response_text.replace('OK', replacement, 1)
+            
+            # Add personality for Sheng/mixed
+            if target_language in ['sheng', 'mixed']:
+                # Add casual expressions
+                if 'Great!' in response_text:
+                    response_text = response_text.replace('Great!', 'Fiti kabisa!', 1)
+                if 'Perfect!' in response_text:
+                    response_text = response_text.replace('Perfect!', 'Bomba!', 1)
+                if 'Awesome!' in response_text:
+                    response_text = response_text.replace('Awesome!', 'Noma sana!', 1)
         
         return response_text
+    
+    @classmethod
+    def add_personality_to_response(cls, response_text: str, language_mix: str, customer_energy: str = 'neutral') -> str:
+        """
+        Add personality and fun to bot responses based on customer's energy.
+        
+        Args:
+            response_text: Base response text
+            language_mix: Detected language mix type
+            customer_energy: Customer's energy level ('casual', 'formal', 'excited', 'neutral')
+            
+        Returns:
+            Response with added personality
+        """
+        import random
+        
+        # Don't add personality to formal customers
+        if customer_energy == 'formal':
+            return response_text
+        
+        # Add fun expressions based on language mix
+        if language_mix == 'sheng' or (language_mix == 'mixed' and customer_energy == 'casual'):
+            # Add casual Sheng expressions
+            casual_additions = [
+                ' Poa!',
+                ' Fiti!',
+                ' Sawa sawa!',
+                ' Bomba!',
+            ]
+            if random.random() > 0.7:  # 30% chance
+                response_text += random.choice(casual_additions)
+        
+        elif language_mix == 'sw':
+            # Add Swahili expressions
+            swahili_additions = [
+                ' Asante!',
+                ' Karibu!',
+                ' Sawa!',
+            ]
+            if random.random() > 0.7:
+                response_text += random.choice(swahili_additions)
+        
+        return response_text
+    
+    @classmethod
+    def detect_customer_energy(cls, message_text: str) -> str:
+        """
+        Detect customer's energy/tone from their message.
+        
+        Args:
+            message_text: Customer message
+            
+        Returns:
+            Energy level: 'casual', 'formal', 'excited', 'neutral'
+        """
+        text_lower = message_text.lower()
+        
+        # Check for excited indicators
+        excited_indicators = ['!', '!!', '!!!', '😊', '😃', '🔥', '💯']
+        if any(indicator in message_text for indicator in excited_indicators):
+            return 'excited'
+        
+        # Check for casual/Sheng indicators
+        casual_indicators = ['niaje', 'vipi', 'msee', 'buda', 'poa', 'fiti']
+        if any(indicator in text_lower for indicator in casual_indicators):
+            return 'casual'
+        
+        # Check for formal indicators
+        formal_indicators = ['please', 'kindly', 'would like', 'could you', 'may i']
+        if any(indicator in text_lower for indicator in formal_indicators):
+            return 'formal'
+        
+        return 'neutral'
     
     @classmethod
     def update_language_preference(cls, conversation, message_text):

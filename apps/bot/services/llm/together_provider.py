@@ -35,6 +35,7 @@ class TogetherAIProvider(LLMProvider):
     # Model configurations with pricing (as of Nov 2024)
     # Prices are per million tokens
     MODELS = {
+        # Meta Llama models
         'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo': {
             'display_name': 'Llama 3.1 8B Instruct Turbo',
             'context_window': 131072,
@@ -59,6 +60,16 @@ class TogetherAIProvider(LLMProvider):
             'capabilities': ['chat', 'instruct', 'reasoning', 'complex_tasks'],
             'description': 'Most capable Llama model for complex reasoning and tasks'
         },
+        'meta-llama/Llama-3.2-3B-Instruct-Turbo': {
+            'display_name': 'Llama 3.2 3B Instruct Turbo',
+            'context_window': 131072,
+            'input_cost_per_1k': Decimal('0.00006'),
+            'output_cost_per_1k': Decimal('0.00006'),
+            'capabilities': ['chat', 'instruct'],
+            'description': 'Ultra-efficient small model for simple tasks'
+        },
+        
+        # Mistral models
         'mistralai/Mistral-7B-Instruct-v0.3': {
             'display_name': 'Mistral 7B Instruct v0.3',
             'context_window': 32768,
@@ -75,13 +86,23 @@ class TogetherAIProvider(LLMProvider):
             'capabilities': ['chat', 'instruct', 'reasoning'],
             'description': 'Mixture of experts model with strong performance'
         },
+        'mistralai/Mixtral-8x22B-Instruct-v0.1': {
+            'display_name': 'Mixtral 8x22B Instruct',
+            'context_window': 65536,
+            'input_cost_per_1k': Decimal('0.00120'),
+            'output_cost_per_1k': Decimal('0.00120'),
+            'capabilities': ['chat', 'instruct', 'reasoning', 'complex_tasks'],
+            'description': 'Large mixture of experts model for complex reasoning'
+        },
+        
+        # Qwen models (excellent for multilingual including Swahili)
         'Qwen/Qwen2.5-7B-Instruct-Turbo': {
             'display_name': 'Qwen 2.5 7B Instruct Turbo',
             'context_window': 32768,
             'input_cost_per_1k': Decimal('0.00030'),
             'output_cost_per_1k': Decimal('0.00030'),
             'capabilities': ['chat', 'instruct', 'multilingual'],
-            'description': 'Multilingual model with strong performance across languages'
+            'description': 'Multilingual model with strong performance across languages including Swahili'
         },
         'Qwen/Qwen2.5-72B-Instruct-Turbo': {
             'display_name': 'Qwen 2.5 72B Instruct Turbo',
@@ -89,7 +110,17 @@ class TogetherAIProvider(LLMProvider):
             'input_cost_per_1k': Decimal('0.00120'),
             'output_cost_per_1k': Decimal('0.00120'),
             'capabilities': ['chat', 'instruct', 'reasoning', 'multilingual'],
-            'description': 'Large multilingual model with advanced reasoning'
+            'description': 'Large multilingual model with advanced reasoning and excellent Swahili support'
+        },
+        
+        # DeepSeek models (cost-effective)
+        'deepseek-ai/deepseek-llm-67b-chat': {
+            'display_name': 'DeepSeek LLM 67B Chat',
+            'context_window': 4096,
+            'input_cost_per_1k': Decimal('0.00090'),
+            'output_cost_per_1k': Decimal('0.00090'),
+            'capabilities': ['chat', 'reasoning'],
+            'description': 'Cost-effective large model with strong reasoning'
         },
     }
     

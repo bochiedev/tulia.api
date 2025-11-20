@@ -1,8 +1,8 @@
 """
-Celery tasks for bot intent processing.
+Celery tasks for bot AI agent processing.
 
-Handles asynchronous processing of inbound messages, intent classification,
-and routing to appropriate handlers.
+Handles asynchronous processing of inbound messages using the AI agent service.
+All messages are processed through the AI agent - legacy intent classification removed.
 """
 import logging
 from celery import shared_task
@@ -15,11 +15,10 @@ logger = logging.getLogger(__name__)
 @shared_task(bind=True, max_retries=3)
 def process_inbound_message(self, message_id: str):
     """
-    Process inbound message using AI agent or legacy intent service.
+    Process inbound message using AI agent.
     
-    This task supports both the new AI-powered agent and the legacy intent
-    classification system. The system used is determined by a feature flag
-    in TenantSettings.
+    All messages are processed through the AI-powered agent service.
+    Legacy intent classification system has been removed.
     
     Supports message burst detection and queueing:
     - If messages arrive within 5 seconds, they are queued
@@ -34,36 +33,21 @@ def process_inbound_message(self, message_id: str):
     Args:
         message_id: UUID of the Message to process
         
-    Flow (AI Agent):
+    Flow:
         1. Load message and conversation
         2. Check for duplicate processing (deduplication)
         3. Acquire distributed lock for message
-        4. Check feature flag for AI agent enablement
-        5. Check for message burst (rapid messages within 5 seconds)
-        6. If burst detected, queue message and schedule batch processing
-        7. If no burst, process message with AI agent
-        8. Check if handoff is active (skip bot if yes)
-        9. Build comprehensive context from multiple sources
-        10. Generate response using LLM with persona and knowledge
-        11. Send response via Twilio (text or rich message)
-        12. Track interaction for analytics
-        13. Release distributed lock
-        
-    Flow (Legacy):
-        1-6. Same as AI Agent
-        7. Classify intent using IntentService
-        8. Route to appropriate handler based on intent
-        9. Send response via Twilio
-        10. Create IntentEvent for tracking
-        11. Release distributed lock
+        4. Check for message burst (rapid messages within 5 seconds)
+        5. If burst detected, queue message and schedule batch processing
+        6. If no burst, process message with AI agent
+        7. Check if handoff is active (skip bot if yes)
+        8. Build comprehensive context from multiple sources
+        9. Generate response using LLM with persona and knowledge
+        10. Send response via Twilio (text or rich message)
+        11. Track interaction for analytics
+        12. Release distributed lock
     """
     from apps.messaging.models import Message, Conversation, MessageQueue
-    from apps.bot.services.intent_service import create_intent_service
-    from apps.bot.services.product_handlers import create_product_handler
-    from apps.bot.services.service_handlers import create_service_handler
-    from apps.bot.services.handoff_handler import create_handoff_handler
-    from apps.bot.services.consent_handlers import create_consent_handler
-    from apps.bot.services.multi_intent_processor import create_multi_intent_processor
     from apps.bot.services.ai_agent_service import create_ai_agent_service
     from apps.integrations.services.twilio_service import create_twilio_service_for_tenant
     from apps.bot.services.message_deduplication import MessageDeduplicationService, MessageLockError
@@ -174,12 +158,6 @@ def _process_message_with_lock(message, conversation, tenant, task_instance):
         Dictionary with processing result
     """
     from apps.messaging.models import MessageQueue
-    from apps.bot.services.intent_service import create_intent_service
-    from apps.bot.services.product_handlers import create_product_handler
-    from apps.bot.services.service_handlers import create_service_handler
-    from apps.bot.services.handoff_handler import create_handoff_handler
-    from apps.bot.services.consent_handlers import create_consent_handler
-    from apps.bot.services.multi_intent_processor import create_multi_intent_processor
     from apps.bot.services.ai_agent_service import create_ai_agent_service
     from apps.integrations.services.twilio_service import create_twilio_service_for_tenant
     from datetime import timedelta
@@ -367,37 +345,24 @@ def _process_message_with_lock(message, conversation, tenant, task_instance):
                 'reason': 'handoff_active'
             }
         
-        # Check feature flag for AI agent
-        use_ai_agent = _should_use_ai_agent(tenant)
-        
         logger.info(
-            f"Processing with {'AI agent' if use_ai_agent else 'legacy intent service'}",
+            f"Processing with AI agent",
             extra={
                 'conversation_id': str(conversation.id),
-                'tenant_id': str(tenant.id),
-                'use_ai_agent': use_ai_agent
+                'tenant_id': str(tenant.id)
             }
         )
         
         # Create Twilio service
         twilio_service = create_twilio_service_for_tenant(tenant)
         
-        if use_ai_agent:
-            # === NEW AI AGENT FLOW ===
-            return _process_with_ai_agent(
-                message=message,
-                conversation=conversation,
-                tenant=tenant,
-                twilio_service=twilio_service
-            )
-        else:
-            # === LEGACY INTENT SERVICE FLOW ===
-            return _process_with_legacy_intent_service(
-                message=message,
-                conversation=conversation,
-                tenant=tenant,
-                twilio_service=twilio_service
-            )
+        # Process with AI agent (legacy system removed)
+        return _process_with_ai_agent(
+            message=message,
+            conversation=conversation,
+            tenant=tenant,
+            twilio_service=twilio_service
+        )
     
     except Message.DoesNotExist:
         logger.error(f"Message not found: {message_id}")
@@ -505,92 +470,6 @@ def _queue_message_for_burst(message, conversation):
     )
     
     return queue_entry
-
-
-def _build_conversation_context(conversation) -> dict:
-    """Build context for intent classification."""
-    from apps.bot.models import IntentEvent
-    
-    context = {}
-    
-    # Get last intent
-    last_intent_event = IntentEvent.objects.filter(
-        conversation=conversation
-    ).order_by('-created_at').first()
-    
-    if last_intent_event:
-        context['last_intent'] = last_intent_event.intent_name
-    
-    # Add customer name if available
-    if hasattr(conversation.customer, 'name') and conversation.customer.name:
-        context['customer_name'] = conversation.customer.name
-    
-    return context
-
-
-def _handle_product_intent(handler, intent_name: str, slots: dict) -> dict:
-    """Route product intent to appropriate handler method."""
-    intent_method_map = {
-        'GREETING': 'handle_greeting',
-        'BROWSE_PRODUCTS': 'handle_browse_products',
-        'PRODUCT_DETAILS': 'handle_product_details',
-        'PRICE_CHECK': 'handle_price_check',
-        'STOCK_CHECK': 'handle_stock_check',
-        'ADD_TO_CART': 'handle_add_to_cart',
-        'CHECKOUT_LINK': 'handle_checkout_link',
-    }
-    
-    method_name = intent_method_map.get(intent_name)
-    if method_name and hasattr(handler, method_name):
-        method = getattr(handler, method_name)
-        return method(slots)
-    
-    return {
-        'message': "I can help you browse products, check prices, or complete your order.",
-        'action': 'send'
-    }
-
-
-def _handle_service_intent(handler, intent_name: str, slots: dict) -> dict:
-    """Route service intent to appropriate handler method."""
-    intent_method_map = {
-        'BROWSE_SERVICES': 'handle_browse_services',
-        'SERVICE_DETAILS': 'handle_service_details',
-        'CHECK_AVAILABILITY': 'handle_check_availability',
-        'BOOK_APPOINTMENT': 'handle_book_appointment',
-        'RESCHEDULE_APPOINTMENT': 'handle_reschedule_appointment',
-        'CANCEL_APPOINTMENT': 'handle_cancel_appointment',
-    }
-    
-    method_name = intent_method_map.get(intent_name)
-    if method_name and hasattr(handler, method_name):
-        method = getattr(handler, method_name)
-        return method(slots)
-    
-    return {
-        'message': "I can help you browse services, check availability, or book appointments.",
-        'action': 'send'
-    }
-
-
-def _handle_consent_intent(handler, intent_name: str, slots: dict) -> dict:
-    """Route consent intent to appropriate handler method."""
-    intent_method_map = {
-        'OPT_IN_PROMOTIONS': 'handle_opt_in_promotions',
-        'OPT_OUT_PROMOTIONS': 'handle_opt_out_promotions',
-        'STOP_ALL': 'handle_stop_all',
-        'START_ALL': 'handle_start_all',
-    }
-    
-    method_name = intent_method_map.get(intent_name)
-    if method_name and hasattr(handler, method_name):
-        method = getattr(handler, method_name)
-        return method(slots)
-    
-    return {
-        'message': "I can help you manage your message preferences.",
-        'action': 'send'
-    }
 
 
 @shared_task
@@ -741,23 +620,6 @@ def cleanup_expired_contexts():
         'key_facts_preserved': key_facts_preserved_count,
         'errors': error_count
     }
-
-
-def _should_use_ai_agent(tenant) -> bool:
-    """
-    Check if AI agent should be used for this tenant.
-    
-    AI agent is now the default for all tenants. Legacy system has been removed.
-    This function is kept for backwards compatibility but always returns True.
-    
-    Args:
-        tenant: Tenant instance
-        
-    Returns:
-        bool: Always True (AI agent is the default)
-    """
-    # AI agent is now the default - no more legacy system
-    return True
 
 
 def _process_with_ai_agent(
@@ -921,175 +783,6 @@ def _process_with_ai_agent(
         }
 
 
-def _process_with_legacy_intent_service(
-    message,
-    conversation,
-    tenant,
-    twilio_service
-) -> dict:
-    """
-    Process message using the legacy intent classification service.
-    
-    This is the original implementation that uses IntentService for
-    classification and routes to specific handlers.
-    
-    Args:
-        message: Message instance
-        conversation: Conversation instance
-        tenant: Tenant instance
-        twilio_service: TwilioService instance
-        
-    Returns:
-        dict: Processing result with status and metadata
-    """
-    from apps.bot.services.intent_service import create_intent_service
-    from apps.bot.services.product_handlers import create_product_handler
-    from apps.bot.services.service_handlers import create_service_handler
-    from apps.bot.services.handoff_handler import create_handoff_handler
-    from apps.bot.services.consent_handlers import create_consent_handler
-    
-    try:
-        # Create services
-        intent_service = create_intent_service()
-        
-        # Build conversation context
-        context = _build_conversation_context(conversation)
-        
-        # Classify intent
-        classification = intent_service.classify_intent(
-            message_text=message.text,
-            conversation_context=context
-        )
-        
-        # Create intent event for tracking
-        intent_event = intent_service.create_intent_event(
-            conversation=conversation,
-            message_text=message.text,
-            classification_result=classification
-        )
-        
-        logger.info(
-            f"Intent classified: {classification['intent_name']} "
-            f"(confidence: {classification['confidence_score']:.2f})",
-            extra={
-                'intent': classification['intent_name'],
-                'confidence': classification['confidence_score'],
-                'intent_event_id': str(intent_event.id)
-            }
-        )
-        
-        # Handle low confidence
-        if intent_service.is_low_confidence(classification['confidence_score']):
-            low_confidence_count = getattr(conversation, 'low_confidence_count', 0)
-            
-            action = intent_service.handle_low_confidence(
-                conversation=conversation,
-                message_text=message.text,
-                confidence_score=classification['confidence_score'],
-                attempt_count=low_confidence_count
-            )
-            
-            if action['action'] == 'handoff':
-                # Auto-handoff triggered
-                handoff_handler = create_handoff_handler(tenant, conversation, twilio_service)
-                response = handoff_handler.handle_automatic_handoff(low_confidence_count)
-                handoff_handler.send_response(response)
-                
-                return {
-                    'status': 'handoff',
-                    'system': 'legacy',
-                    'reason': 'low_confidence',
-                    'attempt_count': low_confidence_count
-                }
-            
-            else:
-                # Ask for clarification
-                twilio_service.send_whatsapp(
-                    to=conversation.customer.phone_e164,
-                    body=action['message']
-                )
-                
-                return {
-                    'status': 'clarification_requested',
-                    'system': 'legacy',
-                    'attempt_count': low_confidence_count
-                }
-        
-        # Route to appropriate handler based on intent
-        intent_name = classification['intent_name']
-        slots = classification['slots']
-        
-        response = None
-        
-        # Product intents
-        if intent_name in intent_service.PRODUCT_INTENTS:
-            handler = create_product_handler(tenant, conversation, twilio_service)
-            response = _handle_product_intent(handler, intent_name, slots)
-        
-        # Service intents
-        elif intent_name in intent_service.SERVICE_INTENTS:
-            handler = create_service_handler(tenant, conversation, twilio_service)
-            response = _handle_service_intent(handler, intent_name, slots)
-        
-        # Consent intents
-        elif intent_name in intent_service.CONSENT_INTENTS:
-            handler = create_consent_handler(tenant, conversation, twilio_service)
-            response = _handle_consent_intent(handler, intent_name, slots)
-        
-        # Support intents
-        elif intent_name in intent_service.SUPPORT_INTENTS:
-            if intent_name == 'HUMAN_HANDOFF':
-                handler = create_handoff_handler(tenant, conversation, twilio_service)
-                response = handler.handle_human_handoff(slots, reason='customer_requested')
-            else:
-                # OTHER intent - generic fallback
-                response = {
-                    'message': "I'm not sure how to help with that. You can:\n"
-                               "• Browse products\n"
-                               "• Book appointments\n"
-                               "• Ask for human assistance",
-                    'action': 'send'
-                }
-        
-        # Send response
-        if response and response.get('action') == 'send':
-            twilio_service.send_whatsapp(
-                to=conversation.customer.phone_e164,
-                body=response['message']
-            )
-            
-            logger.info(
-                f"Response sent successfully",
-                extra={
-                    'conversation_id': str(conversation.id),
-                    'intent': intent_name
-                }
-            )
-        
-        return {
-            'status': 'success',
-            'system': 'legacy',
-            'intent': intent_name,
-            'confidence': classification['confidence_score']
-        }
-        
-    except Exception as e:
-        logger.error(
-            f"Error processing with legacy intent service: {e}",
-            extra={
-                'conversation_id': str(conversation.id),
-                'message_id': str(message.id)
-            },
-            exc_info=True
-        )
-        
-        return {
-            'status': 'error',
-            'system': 'legacy',
-            'error': str(e)
-        }
-
-
 @shared_task(bind=True, max_retries=2)
 def process_message_burst(self, conversation_id: str):
     """
@@ -1190,110 +883,68 @@ def process_message_burst(self, conversation_id: str):
         twilio_service = create_twilio_service_for_tenant(tenant)
         
         try:
-            if use_ai_agent:
-                # Process with AI agent
-                ai_agent = create_ai_agent_service()
-                
-                # Use the first message as the base, but with combined text
-                primary_message = harmonized_messages[0]
-                primary_message.text = combined_text
-                
-                # Process with AI agent
-                agent_response = ai_agent.process_message(
-                    message=primary_message,
-                    conversation=conversation,
-                    tenant=tenant
-                )
-                
-                # Send response
-                if agent_response.use_rich_message and agent_response.rich_message:
-                    try:
-                        if hasattr(twilio_service, 'send_rich_whatsapp_message'):
-                            twilio_service.send_rich_whatsapp_message(
-                                to=conversation.customer.phone_e164,
-                                rich_message=agent_response.rich_message
-                            )
-                        else:
-                            twilio_service.send_whatsapp(
-                                to=conversation.customer.phone_e164,
-                                body=agent_response.content
-                            )
-                    except Exception:
+            # Process with AI agent (legacy system removed)
+            ai_agent = create_ai_agent_service()
+            
+            # Use the first message as the base, but with combined text
+            primary_message = harmonized_messages[0]
+            primary_message.text = combined_text
+            
+            # Process with AI agent
+            agent_response = ai_agent.process_message(
+                message=primary_message,
+                conversation=conversation,
+                tenant=tenant
+            )
+            
+            # Send response
+            if agent_response.use_rich_message and agent_response.rich_message:
+                try:
+                    if hasattr(twilio_service, 'send_rich_whatsapp_message'):
+                        twilio_service.send_rich_whatsapp_message(
+                            to=conversation.customer.phone_e164,
+                            rich_message=agent_response.rich_message
+                        )
+                    else:
                         twilio_service.send_whatsapp(
                             to=conversation.customer.phone_e164,
                             body=agent_response.content
                         )
-                else:
+                except Exception:
                     twilio_service.send_whatsapp(
                         to=conversation.customer.phone_e164,
                         body=agent_response.content
                     )
-                
-                # Mark messages as processed
-                harmonization_service.mark_messages_processed(
-                    conversation=conversation,
-                    messages=harmonized_messages
-                )
-                
-                logger.info(
-                    f"Message burst processed with AI agent",
-                    extra={
-                        'conversation_id': str(conversation_id),
-                        'message_count': len(harmonized_messages),
-                        'model': agent_response.model_used,
-                        'tokens': agent_response.total_tokens
-                    }
-                )
-                
-                return {
-                    'status': 'success',
-                    'system': 'ai_agent',
-                    'message_count': len(harmonized_messages),
-                    'model': agent_response.model_used,
-                    'tokens': agent_response.total_tokens,
-                    'cost': str(agent_response.estimated_cost)
-                }
             else:
-                # Process with legacy multi-intent processor
-                from apps.bot.services.multi_intent_processor import create_multi_intent_processor
-                
-                multi_intent_processor = create_multi_intent_processor(tenant)
-                
-                # Process message burst
-                result = multi_intent_processor.process_message_burst(
-                    conversation=conversation,
-                    delay_seconds=3
-                )
-                
-                if not result:
-                    raise Exception("Multi-intent processor returned no result")
-                
-                # Send response
                 twilio_service.send_whatsapp(
                     to=conversation.customer.phone_e164,
-                    body=result['response']
+                    body=agent_response.content
                 )
-                
-                # Mark messages as processed
-                harmonization_service.mark_messages_processed(
-                    conversation=conversation,
-                    messages=harmonized_messages
-                )
-                
-                logger.info(
-                    f"Message burst processed with legacy system",
-                    extra={
-                        'conversation_id': str(conversation_id),
-                        'message_count': result['message_count']
-                    }
-                )
-                
-                return {
-                    'status': 'success',
-                    'system': 'legacy',
-                    'message_count': result['message_count'],
-                    'intents_addressed': len(result['intents_addressed'])
+            
+            # Mark messages as processed
+            harmonization_service.mark_messages_processed(
+                conversation=conversation,
+                messages=harmonized_messages
+            )
+            
+            logger.info(
+                f"Message burst processed with AI agent",
+                extra={
+                    'conversation_id': str(conversation_id),
+                    'message_count': len(harmonized_messages),
+                    'model': agent_response.model_used,
+                    'tokens': agent_response.total_tokens
                 }
+            )
+            
+            return {
+                'status': 'success',
+                'system': 'ai_agent',
+                'message_count': len(harmonized_messages),
+                'model': agent_response.model_used,
+                'tokens': agent_response.total_tokens,
+                'cost': str(agent_response.estimated_cost)
+            }
                 
         except Exception as processing_error:
             # Mark messages as failed
