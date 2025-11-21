@@ -108,6 +108,7 @@ class Order(BaseModel):
     
     STATUS_CHOICES = [
         ('draft', 'Draft'),
+        ('pending_payment', 'Pending Payment'),
         ('placed', 'Placed'),
         ('paid', 'Paid'),
         ('fulfilled', 'Fulfilled'),

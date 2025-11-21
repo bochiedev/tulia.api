@@ -8,7 +8,9 @@ from .models import (
     AgentInteraction, 
     BrowseSession,
     MessageHarmonizationLog,
-    ConversationContext
+    ConversationContext,
+    CheckoutSession,
+    ResponseValidationLog,
 )
 
 
@@ -79,6 +81,18 @@ class AgentConfigurationAdmin(admin.ModelAdmin):
                 'enable_immediate_product_display',
                 'max_products_to_show',
                 'enable_reference_resolution'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Conversation Flow Fixes', {
+            'fields': (
+                'enable_echo_prevention',
+                'enable_disclaimer_removal',
+                'max_response_sentences',
+                'enable_quick_checkout',
+                'max_checkout_messages',
+                'force_interactive_messages',
+                'fallback_to_text_on_error'
             ),
             'classes': ('collapse',)
         }),
@@ -416,6 +430,23 @@ class ConversationContextAdmin(admin.ModelAdmin):
             'fields': ('language_locked',),
             'classes': ('collapse',)
         }),
+        ('Checkout State', {
+            'fields': (
+                'checkout_state',
+                'selected_product_id',
+                'selected_quantity'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Session Tracking', {
+            'fields': (
+                'current_session_start',
+                'session_message_count',
+                'last_bot_message',
+                'last_customer_message'
+            ),
+            'classes': ('collapse',)
+        }),
         ('Timing', {
             'fields': ('last_interaction', 'context_expires_at', 'is_expired_display')
         }),
@@ -432,3 +463,318 @@ class ConversationContextAdmin(admin.ModelAdmin):
         return obj.is_expired()
     is_expired_display.short_description = 'Is Expired'
     is_expired_display.boolean = True
+
+
+# Sales Orchestration Refactor Admin Interfaces
+
+from .models_sales_orchestration import (
+    IntentClassificationLog,
+    LLMUsageLog,
+    PaymentRequest,
+)
+
+
+@admin.register(IntentClassificationLog)
+class IntentClassificationLogAdmin(admin.ModelAdmin):
+    """Admin interface for IntentClassificationLog model."""
+    list_display = ['id', 'tenant', 'conversation', 'detected_intent', 'confidence', 'method', 'classification_time_ms', 'created_at']
+    list_filter = ['detected_intent', 'method', 'created_at', 'tenant']
+    search_fields = ['detected_intent', 'conversation__id', 'tenant__name']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    ordering = ['-created_at']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'tenant', 'conversation', 'message', 'created_at', 'updated_at')
+        }),
+        ('Classification', {
+            'fields': ('detected_intent', 'confidence', 'method', 'classification_time_ms')
+        }),
+        ('Extracted Data', {
+            'fields': ('extracted_slots', 'detected_language')
+        }),
+        ('Metadata', {
+            'fields': ('metadata',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        """Disable manual creation - logs are auto-generated."""
+        return False
+
+
+@admin.register(LLMUsageLog)
+class LLMUsageLogAdmin(admin.ModelAdmin):
+    """Admin interface for LLMUsageLog model."""
+    list_display = ['id', 'tenant', 'model_name', 'task_type', 'total_tokens', 'estimated_cost_usd', 'created_at']
+    list_filter = ['model_name', 'task_type', 'created_at', 'tenant']
+    search_fields = ['model_name', 'task_type', 'tenant__name', 'conversation__id']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    ordering = ['-created_at']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'tenant', 'conversation', 'created_at', 'updated_at')
+        }),
+        ('Model', {
+            'fields': ('model_name', 'task_type')
+        }),
+        ('Usage', {
+            'fields': ('input_tokens', 'output_tokens', 'total_tokens')
+        }),
+        ('Cost', {
+            'fields': ('estimated_cost_usd',)
+        }),
+        ('Metadata', {
+            'fields': ('prompt_template', 'response_preview', 'metadata'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        """Disable manual creation - logs are auto-generated."""
+        return False
+
+
+@admin.register(PaymentRequest)
+class PaymentRequestAdmin(admin.ModelAdmin):
+    """Admin interface for PaymentRequest model."""
+    list_display = ['id', 'tenant', 'customer', 'amount', 'currency', 'payment_method', 'status', 'created_at']
+    list_filter = ['payment_method', 'status', 'currency', 'created_at', 'tenant']
+    search_fields = ['provider_reference', 'phone_number', 'customer__phone_e164', 'tenant__name']
+    readonly_fields = ['id', 'created_at', 'updated_at', 'callback_received_at']
+    ordering = ['-created_at']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'tenant', 'customer', 'order', 'appointment', 'created_at', 'updated_at')
+        }),
+        ('Payment Details', {
+            'fields': ('amount', 'currency', 'payment_method', 'phone_number', 'payment_link')
+        }),
+        ('Status', {
+            'fields': ('status',)
+        }),
+        ('Provider Details', {
+            'fields': ('provider_reference', 'provider_response')
+        }),
+        ('Callback', {
+            'fields': ('callback_received_at', 'callback_data'),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('metadata',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    actions = ['mark_as_success', 'mark_as_failed', 'mark_as_cancelled']
+    
+    def mark_as_success(self, request, queryset):
+        """Mark selected payment requests as successful."""
+        updated = queryset.update(status='SUCCESS')
+        self.message_user(request, f'{updated} payment request(s) marked as successful.')
+    mark_as_success.short_description = 'Mark as successful'
+    
+    def mark_as_failed(self, request, queryset):
+        """Mark selected payment requests as failed."""
+        updated = queryset.update(status='FAILED')
+        self.message_user(request, f'{updated} payment request(s) marked as failed.')
+    mark_as_failed.short_description = 'Mark as failed'
+    
+    def mark_as_cancelled(self, request, queryset):
+        """Mark selected payment requests as cancelled."""
+        updated = queryset.update(status='CANCELLED')
+        self.message_user(request, f'{updated} payment request(s) marked as cancelled.')
+    mark_as_cancelled.short_description = 'Mark as cancelled'
+
+
+# Bot Conversation Flow Fixes Admin Interfaces
+
+@admin.register(CheckoutSession)
+class CheckoutSessionAdmin(admin.ModelAdmin):
+    """Admin interface for CheckoutSession model."""
+    list_display = [
+        'id',
+        'tenant',
+        'conversation',
+        'customer',
+        'state',
+        'message_count',
+        'started_at',
+        'completed_at',
+        'is_active_display'
+    ]
+    list_filter = [
+        'state',
+        'started_at',
+        'completed_at',
+        'abandoned_at',
+        'tenant'
+    ]
+    search_fields = [
+        'conversation__id',
+        'customer__phone_e164',
+        'tenant__name'
+    ]
+    readonly_fields = [
+        'id',
+        'conversation',
+        'customer',
+        'tenant',
+        'started_at',
+        'completed_at',
+        'abandoned_at',
+        'is_active_display',
+        'is_completed_display',
+        'is_abandoned_display',
+        'created_at',
+        'updated_at'
+    ]
+    ordering = ['-started_at']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'tenant', 'conversation', 'customer', 'created_at', 'updated_at')
+        }),
+        ('State', {
+            'fields': ('state', 'message_count')
+        }),
+        ('Data', {
+            'fields': ('selected_product', 'quantity', 'order', 'payment_request')
+        }),
+        ('Timing', {
+            'fields': (
+                'started_at',
+                'completed_at',
+                'abandoned_at',
+                'is_active_display',
+                'is_completed_display',
+                'is_abandoned_display'
+            )
+        }),
+    )
+    
+    def is_active_display(self, obj):
+        """Display whether checkout is active."""
+        return obj.is_active()
+    is_active_display.short_description = 'Is Active'
+    is_active_display.boolean = True
+    
+    def is_completed_display(self, obj):
+        """Display whether checkout is completed."""
+        return obj.is_completed()
+    is_completed_display.short_description = 'Is Completed'
+    is_completed_display.boolean = True
+    
+    def is_abandoned_display(self, obj):
+        """Display whether checkout is abandoned."""
+        return obj.is_abandoned()
+    is_abandoned_display.short_description = 'Is Abandoned'
+    is_abandoned_display.boolean = True
+    
+    actions = ['mark_as_abandoned']
+    
+    def mark_as_abandoned(self, request, queryset):
+        """Mark selected checkout sessions as abandoned."""
+        count = 0
+        for session in queryset:
+            if session.is_active():
+                session.mark_abandoned()
+                count += 1
+        self.message_user(request, f'{count} checkout session(s) marked as abandoned.')
+    mark_as_abandoned.short_description = 'Mark as abandoned'
+
+
+@admin.register(ResponseValidationLog)
+class ResponseValidationLogAdmin(admin.ModelAdmin):
+    """Admin interface for ResponseValidationLog model."""
+    list_display = [
+        'id',
+        'get_tenant',
+        'conversation',
+        'had_echo',
+        'had_disclaimer',
+        'exceeded_length',
+        'missing_cta',
+        'validation_time_ms',
+        'issue_count_display',
+        'created_at'
+    ]
+    list_filter = [
+        'had_echo',
+        'had_disclaimer',
+        'exceeded_length',
+        'missing_cta',
+        'created_at',
+        'conversation__tenant'
+    ]
+    search_fields = [
+        'conversation__id',
+        'conversation__tenant__name',
+        'original_response',
+        'cleaned_response'
+    ]
+    readonly_fields = [
+        'id',
+        'conversation',
+        'message',
+        'had_echo',
+        'had_disclaimer',
+        'exceeded_length',
+        'missing_cta',
+        'original_response',
+        'cleaned_response',
+        'validation_time_ms',
+        'issues_found',
+        'issue_count_display',
+        'has_any_issues_display',
+        'created_at',
+        'updated_at'
+    ]
+    ordering = ['-created_at']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'conversation', 'message', 'created_at', 'updated_at')
+        }),
+        ('Validation Results', {
+            'fields': (
+                'had_echo',
+                'had_disclaimer',
+                'exceeded_length',
+                'missing_cta',
+                'has_any_issues_display',
+                'issue_count_display'
+            )
+        }),
+        ('Content', {
+            'fields': ('original_response', 'cleaned_response')
+        }),
+        ('Metadata', {
+            'fields': ('validation_time_ms', 'issues_found'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_tenant(self, obj):
+        """Get tenant from conversation relationship."""
+        return obj.conversation.tenant.name if obj.conversation and obj.conversation.tenant else '-'
+    get_tenant.short_description = 'Tenant'
+    get_tenant.admin_order_field = 'conversation__tenant__name'
+    
+    def issue_count_display(self, obj):
+        """Display count of issues found."""
+        return obj.get_issue_count()
+    issue_count_display.short_description = 'Issue Count'
+    
+    def has_any_issues_display(self, obj):
+        """Display whether any issues were found."""
+        return obj.has_any_issues()
+    has_any_issues_display.short_description = 'Has Issues'
+    has_any_issues_display.boolean = True
+    
+    def has_add_permission(self, request):
+        """Disable manual creation - logs are auto-generated."""
+        return False

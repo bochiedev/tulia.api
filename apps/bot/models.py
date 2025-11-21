@@ -6,6 +6,7 @@ of AI-powered conversation handling.
 """
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from decimal import Decimal
 from apps.core.models import BaseModel
 
 
@@ -394,6 +395,101 @@ class AgentConfiguration(BaseModel):
         help_text="Enable resolution of positional references like '1', 'first', 'last'"
     )
     
+    # Sales Orchestration Refactor - Intent Detection
+    enable_rule_based_intent = models.BooleanField(
+        default=True,
+        help_text="Enable rule-based intent classification (faster, cheaper)"
+    )
+    intent_confidence_threshold = models.FloatField(
+        default=0.65,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Minimum confidence threshold for intent classification (0.0-1.0)"
+    )
+    
+    # Sales Orchestration Refactor - LLM Budget
+    monthly_llm_budget_usd = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('10.00'),
+        help_text="Monthly LLM budget in USD"
+    )
+    llm_budget_exceeded_action = models.CharField(
+        max_length=20,
+        choices=[
+            ('fallback', 'Fallback to rules'),
+            ('throttle', 'Throttle usage'),
+            ('stop', 'Stop LLM usage'),
+        ],
+        default='fallback',
+        help_text="Action to take when LLM budget is exceeded"
+    )
+    
+    # Sales Orchestration Refactor - Payment
+    enable_mpesa_stk = models.BooleanField(
+        default=True,
+        help_text="Enable M-Pesa STK push payments"
+    )
+    enable_card_payments = models.BooleanField(
+        default=True,
+        help_text="Enable card payments (Paystack/Stripe/Pesapal)"
+    )
+    
+    # Sales Orchestration Refactor - Business Hours
+    business_hours_start = models.TimeField(
+        default='08:00:00',
+        help_text="Business hours start time"
+    )
+    business_hours_end = models.TimeField(
+        default='20:00:00',
+        help_text="Business hours end time"
+    )
+    quiet_hours_start = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Quiet hours start time (no automated messages)"
+    )
+    quiet_hours_end = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Quiet hours end time"
+    )
+    
+    # Bot Conversation Flow Fixes - Response Controls (Requirements: 1.1, 5.1, 12.1)
+    enable_echo_prevention = models.BooleanField(
+        default=True,
+        help_text="Enable echo prevention filter to remove customer message echoes"
+    )
+    enable_disclaimer_removal = models.BooleanField(
+        default=True,
+        help_text="Enable disclaimer removal to remove confidence-undermining phrases"
+    )
+    max_response_sentences = models.IntegerField(
+        default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text="Maximum number of sentences in bot responses (1-10)"
+    )
+    
+    # Bot Conversation Flow Fixes - Checkout Controls (Requirements: 1.1, 5.1, 12.1)
+    enable_quick_checkout = models.BooleanField(
+        default=True,
+        help_text="Enable quick checkout flow (≤3 messages from selection to payment)"
+    )
+    max_checkout_messages = models.IntegerField(
+        default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text="Maximum messages allowed in checkout flow (1-10)"
+    )
+    
+    # Bot Conversation Flow Fixes - Interactive Message Controls (Requirements: 1.1, 5.1, 12.1)
+    force_interactive_messages = models.BooleanField(
+        default=True,
+        help_text="Force use of WhatsApp interactive elements (lists, buttons)"
+    )
+    fallback_to_text_on_error = models.BooleanField(
+        default=True,
+        help_text="Fall back to text messages if interactive message API fails"
+    )
+    
     class Meta:
         db_table = 'agent_configurations'
         verbose_name = 'Agent Configuration'
@@ -731,6 +827,79 @@ class ConversationContext(BaseModel):
     language_locked = models.BooleanField(
         default=False,
         help_text="Whether language preference is locked for this conversation"
+    )
+    
+    # Sales Orchestration Refactor - Flow State
+    current_flow = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Current flow state (e.g., 'browsing_products', 'checkout', 'booking')"
+    )
+    awaiting_response = models.BooleanField(
+        default=False,
+        help_text="Whether bot is awaiting a specific response from customer"
+    )
+    last_question = models.TextField(
+        blank=True,
+        help_text="Last question asked by bot (for context)"
+    )
+    
+    # Sales Orchestration Refactor - Reference Resolution
+    last_menu = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Last displayed menu for reference resolution (e.g., {'type': 'products', 'items': [...]})"
+    )
+    last_menu_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When last_menu was created (for expiration checking)"
+    )
+    
+    # Sales Orchestration Refactor - Language Detection
+    detected_language = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Detected languages (e.g., ['en'], ['sw'], ['sheng'])"
+    )
+    
+    # Bot Conversation Flow Fixes - Checkout State (Requirements: 8.1, 10.1)
+    checkout_state = models.CharField(
+        max_length=50,
+        default='browsing',
+        help_text="Current checkout state (browsing, product_selected, etc.)"
+    )
+    selected_product_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text="ID of currently selected product in checkout"
+    )
+    selected_quantity = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Selected quantity for checkout"
+    )
+    
+    # Bot Conversation Flow Fixes - Session Tracking (Requirements: 8.1, 10.1)
+    current_session_start = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Start time of current conversation session"
+    )
+    session_message_count = models.IntegerField(
+        default=0,
+        help_text="Number of messages in current session"
+    )
+    
+    # Bot Conversation Flow Fixes - Last Messages (Requirements: 8.1, 10.1)
+    last_bot_message = models.TextField(
+        blank=True,
+        help_text="Last message sent by bot (for echo prevention)"
+    )
+    last_customer_message = models.TextField(
+        blank=True,
+        help_text="Last message sent by customer (for echo prevention)"
     )
     
     # Custom manager
@@ -1479,6 +1648,20 @@ from apps.bot.models_feedback import (
     HumanCorrection
 )
 
+# Import sales orchestration models
+from apps.bot.models_sales_orchestration import (
+    IntentClassificationLog,
+    LLMUsageLog,
+    PaymentRequest,
+)
+
+# Import checkout models
+from apps.bot.models_checkout import (
+    CheckoutState,
+    CheckoutSession,
+    ResponseValidationLog,
+)
+
 __all__ = [
     'IntentEvent',
     'AgentConfiguration',
@@ -1501,4 +1684,12 @@ __all__ = [
     # Feedback models
     'InteractionFeedback',
     'HumanCorrection',
+    # Sales orchestration models
+    'IntentClassificationLog',
+    'LLMUsageLog',
+    'PaymentRequest',
+    # Checkout models
+    'CheckoutState',
+    'CheckoutSession',
+    'ResponseValidationLog',
 ]
