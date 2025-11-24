@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('tenants', '0002_tenant_settings_feature_flags'),
-        ('tenants', '0013_add_gemini_api_key'),
+        ('tenants', '0012_add_together_ai_configuration'),
     ]
 
     operations = [
