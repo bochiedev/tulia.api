@@ -14,6 +14,7 @@ django-redis==5.4.0
 
 # API Documentation
 drf-spectacular==0.27.1
+django-filter==24.3
 
 # Security & Encryption
 cryptography==42.0.5
@@ -36,17 +37,17 @@ factory-boy==3.3.0
 hypothesis==6.92.1
 
 # Timezone support
-pytz==2024.1
+pytz==2024.2
 
 # External Integrations
 twilio==9.0.4
-openai==1.52.0
-httpx<0.28  # Required for openai compatibility
+openai==1.68.2
+httpx>=0.28.0,<1  # Required for openai and langchain compatibility
 google-generativeai==0.8.3  # Gemini AI provider
 
 # RAG & LangChain (Python 3.13 compatible)
 langchain==0.3.7
-langchain-openai==0.2.5
+langchain-openai==0.3.11
 langchain-community==0.3.7
 langchain-pinecone==0.2.13
 tiktoken==0.8.0

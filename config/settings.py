@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'corsheaders',
     'django_ratelimit',
+    'django_filters',
     
     # Tulia apps
     'apps.core',
@@ -175,6 +176,9 @@ REST_FRAMEWORK = {
         'apps.core.authentication.MiddlewareAuthentication',  # Use user from TenantContextMiddleware
     ],
     'DEFAULT_PERMISSION_CLASSES': [],
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+    ],
     'EXCEPTION_HANDLER': 'apps.core.exceptions.custom_exception_handler',
 }
 
