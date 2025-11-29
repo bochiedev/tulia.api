@@ -120,8 +120,6 @@ class TenantCORSMiddleware(MiddlewareMixin):
         Check if origin is allowed for tenant.
         
         Supports:
-        - Exact match: https://example.com
-        - Wildcard subdomain: https://*.example.com
         - Wildcard for development: *
         
         Args:
@@ -169,8 +167,6 @@ class TenantCORSMiddleware(MiddlewareMixin):
         Convert wildcard pattern to regex.
         
         Examples:
-        - https://*.example.com -> ^https://[^/]+\.example\.com$
-        - http://*.localhost:* -> ^http://[^/]+\.localhost:[0-9]+$
         
         Args:
             pattern: Wildcard pattern
