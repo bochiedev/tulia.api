@@ -149,8 +149,7 @@ class Command(BaseCommand):
             user_role = RBACService.assign_role(
                 tenant_user=tenant_user,
                 role=owner_role,
-                assigned_by=None,  # System assignment
-                request=None
+                assigned_by=None  # System assignment
             )
             
             self.stdout.write(

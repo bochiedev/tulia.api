@@ -61,9 +61,9 @@
   ],
   
   // Encrypted Credentials (stored encrypted)
-  "twilio_sid": "AC...",  // Encrypted
-  "twilio_token": "...",  // Encrypted
-  "webhook_secret": "...",  // Encrypted
+  "twilio_sid": "AC********************************",  // Encrypted
+  "twilio_token": "********************************",  // Encrypted
+  "webhook_secret": "********************************",  // Encrypted
   
   // Timestamps
   "created_at": "2025-11-01T00:00:00Z",
@@ -109,10 +109,10 @@ trial_expired
   "llm_max_retries": 3,
   
   // LLM API Keys (Encrypted)
-  "openai_api_key": "sk-...",  // Encrypted
-  "gemini_api_key": "AIza...",  // Encrypted
-  "together_api_key": "...",  // Encrypted
-  "anthropic_api_key": "...",  // Encrypted
+  "openai_api_key": "sk-proj-***************************",  // Encrypted
+  "gemini_api_key": "AIza***************************",  // Encrypted
+  "together_api_key": "***************************",  // Encrypted
+  "anthropic_api_key": "sk-ant-***************************",  // Encrypted
   
   // === AI AGENT CONFIGURATION ===
   "ai_agent_enabled": true,
@@ -160,45 +160,45 @@ trial_expired
   
   // === INTEGRATION CREDENTIALS (Encrypted) ===
   // Twilio
-  "twilio_sid": "AC...",  // Encrypted
-  "twilio_token": "...",  // Encrypted
+  "twilio_sid": "AC********************************",  // Encrypted
+  "twilio_token": "********************************",  // Encrypted
   "twilio_whatsapp_number": "+254712345678",
   
   // WooCommerce
   "woo_store_url": "https://store.acme.com",
-  "woo_consumer_key": "ck_...",  // Encrypted
-  "woo_consumer_secret": "cs_...",  // Encrypted
-  "woo_webhook_secret": "...",  // Encrypted
+  "woo_consumer_key": "ck_********************************",  // Encrypted
+  "woo_consumer_secret": "cs_********************************",  // Encrypted
+  "woo_webhook_secret": "********************************",  // Encrypted
   
   // Shopify
   "shopify_shop_domain": "acme.myshopify.com",
-  "shopify_access_token": "shpat_...",  // Encrypted
-  "shopify_webhook_secret": "...",  // Encrypted
+  "shopify_access_token": "shpat_********************************",  // Encrypted
+  "shopify_webhook_secret": "********************************",  // Encrypted
   
   // === PAYMENT CONFIGURATION ===
   // M-Pesa (Kenya)
-  "mpesa_consumer_key": "...",  // Encrypted
-  "mpesa_consumer_secret": "...",  // Encrypted
+  "mpesa_consumer_key": "********************************",  // Encrypted
+  "mpesa_consumer_secret": "********************************",  // Encrypted
   "mpesa_shortcode": "174379",
-  "mpesa_passkey": "...",  // Encrypted
+  "mpesa_passkey": "********************************",  // Encrypted
   "mpesa_environment": "production",  // sandbox or production
   
   // Paystack (Africa)
-  "paystack_secret_key": "sk_...",  // Encrypted
-  "paystack_public_key": "pk_...",
+  "paystack_secret_key": "sk_live_********************************",  // Encrypted
+  "paystack_public_key": "pk_live_********************************",
   
   // Pesapal (East Africa)
-  "pesapal_consumer_key": "...",  // Encrypted
-  "pesapal_consumer_secret": "...",  // Encrypted
-  "pesapal_ipn_id": "...",
+  "pesapal_consumer_key": "********************************",  // Encrypted
+  "pesapal_consumer_secret": "********************************",  // Encrypted
+  "pesapal_ipn_id": "********************************",
   
   // Stripe (International)
-  "stripe_secret_key": "sk_...",  // Encrypted
-  "stripe_publishable_key": "pk_...",
-  "stripe_webhook_secret": "whsec_...",  // Encrypted
+  "stripe_secret_key": "sk_live_********************************",  // Encrypted
+  "stripe_publishable_key": "pk_live_********************************",
+  "stripe_webhook_secret": "whsec_********************************",  // Encrypted
   
   // === PINECONE (Vector Store) ===
-  "pinecone_api_key": "...",  // Encrypted
+  "pinecone_api_key": "********************************",  // Encrypted
   "pinecone_index_name": "wabotiq-rag",
   "pinecone_namespace": "tenant_uuid",
   
@@ -398,10 +398,10 @@ trial_expired
 
 ```json
 {
-  "twilio_sid": "AC...",  // Encrypted
-  "twilio_token": "...",  // Encrypted
+  "twilio_sid": "AC********************************",  // Encrypted
+  "twilio_token": "********************************",  // Encrypted
   "twilio_whatsapp_number": "+254712345678",
-  "webhook_secret": "...",  // Encrypted
+  "webhook_secret": "********************************",  // Encrypted
   
   // Webhook URLs (auto-generated)
   "inbound_webhook_url": "https://api.wabotiq.com/v1/webhooks/twilio/inbound/{tenant_id}",
@@ -414,9 +414,9 @@ trial_expired
 ```json
 {
   "woo_store_url": "https://store.acme.com",
-  "woo_consumer_key": "ck_...",  // Encrypted
-  "woo_consumer_secret": "cs_...",  // Encrypted
-  "woo_webhook_secret": "...",  // Encrypted
+  "woo_consumer_key": "ck_********************************",  // Encrypted
+  "woo_consumer_secret": "cs_********************************",  // Encrypted
+  "woo_webhook_secret": "********************************",  // Encrypted
   
   // Sync Settings
   "woo_sync_enabled": true,
@@ -432,8 +432,8 @@ trial_expired
 ```json
 {
   "shopify_shop_domain": "acme.myshopify.com",
-  "shopify_access_token": "shpat_...",  // Encrypted
-  "shopify_webhook_secret": "...",  // Encrypted
+  "shopify_access_token": "shpat_********************************",  // Encrypted
+  "shopify_webhook_secret": "********************************",  // Encrypted
   
   // Sync Settings
   "shopify_sync_enabled": true,
@@ -449,10 +449,10 @@ trial_expired
 **M-Pesa (Kenya):**
 ```json
 {
-  "mpesa_consumer_key": "...",  // Encrypted
-  "mpesa_consumer_secret": "...",  // Encrypted
+  "mpesa_consumer_key": "********************************",  // Encrypted
+  "mpesa_consumer_secret": "********************************",  // Encrypted
   "mpesa_shortcode": "174379",
-  "mpesa_passkey": "...",  // Encrypted
+  "mpesa_passkey": "********************************",  // Encrypted
   "mpesa_environment": "production",
   "mpesa_callback_url": "https://api.wabotiq.com/v1/webhooks/mpesa/{tenant_id}"
 }
@@ -461,8 +461,8 @@ trial_expired
 **Paystack (Africa):**
 ```json
 {
-  "paystack_secret_key": "sk_...",  // Encrypted
-  "paystack_public_key": "pk_...",
+  "paystack_secret_key": "sk_live_********************************",  // Encrypted
+  "paystack_public_key": "pk_live_********************************",
   "paystack_webhook_url": "https://api.wabotiq.com/v1/webhooks/paystack/{tenant_id}"
 }
 ```

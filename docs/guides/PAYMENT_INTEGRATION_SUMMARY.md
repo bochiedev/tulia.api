@@ -237,7 +237,7 @@ Typical fees in Kenya (as of 2024):
 
 ### Sandbox/Test Environments:
 - **M-Pesa Sandbox**: https://sandbox.safaricom.co.ke
-- **Paystack Test**: Use test keys (pk_test_*, sk_test_*)
+- **Paystack Test**: Use test keys (pk_test_********************************, sk_test_********************************)
 - **Pesapal Test**: https://cybqa.pesapal.com/pesapalv3
 - **Stripe Test**: Use test keys and test cards
 

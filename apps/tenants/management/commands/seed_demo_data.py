@@ -336,8 +336,7 @@ class Command(BaseCommand):
             RBACService.assign_role(
                 tenant_user=tenant_user,
                 role=role,
-                assigned_by=None,
-                request=None
+                assigned_by=None
             )
         
         return tenant
