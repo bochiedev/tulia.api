@@ -146,6 +146,98 @@ class TestTenant(TestCase):
         days = self.tenant.days_until_trial_expires()
         self.assertGreater(days, 0)
         self.assertLessEqual(days, 14)
+    
+    def test_bot_persona_defaults(self):
+        """Test bot persona fields have correct defaults."""
+        self.assertEqual(self.tenant.bot_name, 'Assistant')
+        self.assertEqual(self.tenant.tone_style, 'friendly_concise')
+        self.assertEqual(self.tenant.default_language, 'en')
+        self.assertEqual(self.tenant.max_chattiness_level, 2)
+        self.assertEqual(self.tenant.allowed_languages, ['en'])
+        self.assertEqual(self.tenant.payment_methods_enabled, {})
+        self.assertEqual(self.tenant.escalation_rules, {})
+    
+    def test_get_allowed_languages(self):
+        """Test getting allowed languages with defaults."""
+        # Default case
+        languages = self.tenant.get_allowed_languages()
+        self.assertEqual(languages, ['en'])
+        
+        # Custom languages
+        self.tenant.allowed_languages = ['en', 'sw', 'sheng']
+        self.tenant.save()
+        languages = self.tenant.get_allowed_languages()
+        self.assertEqual(languages, ['en', 'sw', 'sheng'])
+    
+    def test_is_language_allowed(self):
+        """Test checking if language is allowed."""
+        # Default - only English allowed
+        self.assertTrue(self.tenant.is_language_allowed('en'))
+        self.assertFalse(self.tenant.is_language_allowed('sw'))
+        
+        # Add more languages
+        self.tenant.allowed_languages = ['en', 'sw', 'sheng']
+        self.tenant.save()
+        self.assertTrue(self.tenant.is_language_allowed('sw'))
+        self.assertTrue(self.tenant.is_language_allowed('sheng'))
+        self.assertFalse(self.tenant.is_language_allowed('fr'))
+    
+    def test_get_payment_methods(self):
+        """Test getting payment methods with defaults."""
+        # Default methods
+        methods = self.tenant.get_payment_methods()
+        expected = {
+            'mpesa_stk': True,
+            'mpesa_c2b': True,
+            'pesapal_card': False
+        }
+        self.assertEqual(methods, expected)
+        
+        # Custom methods
+        self.tenant.payment_methods_enabled = {'pesapal_card': True}
+        self.tenant.save()
+        methods = self.tenant.get_payment_methods()
+        expected = {
+            'mpesa_stk': True,
+            'mpesa_c2b': True,
+            'pesapal_card': True
+        }
+        self.assertEqual(methods, expected)
+    
+    def test_is_payment_method_enabled(self):
+        """Test checking if payment method is enabled."""
+        # Default settings
+        self.assertTrue(self.tenant.is_payment_method_enabled('mpesa_stk'))
+        self.assertTrue(self.tenant.is_payment_method_enabled('mpesa_c2b'))
+        self.assertFalse(self.tenant.is_payment_method_enabled('pesapal_card'))
+        
+        # Enable card payments
+        self.tenant.payment_methods_enabled = {'pesapal_card': True}
+        self.tenant.save()
+        self.assertTrue(self.tenant.is_payment_method_enabled('pesapal_card'))
+    
+    def test_get_escalation_rules(self):
+        """Test getting escalation rules with defaults."""
+        rules = self.tenant.get_escalation_rules()
+        expected = {
+            'auto_escalate_payment_disputes': True,
+            'auto_escalate_after_failures': 2,
+            'auto_escalate_sensitive_content': True,
+            'escalation_timeout_minutes': 30
+        }
+        self.assertEqual(rules, expected)
+        
+        # Custom rules
+        self.tenant.escalation_rules = {'escalation_timeout_minutes': 60}
+        self.tenant.save()
+        rules = self.tenant.get_escalation_rules()
+        expected = {
+            'auto_escalate_payment_disputes': True,
+            'auto_escalate_after_failures': 2,
+            'auto_escalate_sensitive_content': True,
+            'escalation_timeout_minutes': 60
+        }
+        self.assertEqual(rules, expected)
 
 
 @pytest.mark.django_db
@@ -305,3 +397,86 @@ class TestCustomer(TestCase):
         # Remove tag
         customer.remove_tag('vip')
         self.assertFalse(customer.has_tag('vip'))
+    
+    def test_consent_management(self):
+        """Test consent flag management."""
+        customer = Customer.objects.create(
+            tenant=self.tenant,
+            phone_e164='+14155559999',
+        )
+        
+        # Test default consent flags
+        self.assertEqual(customer.consent_flags, {})
+        self.assertIsNone(customer.marketing_opt_in)
+        self.assertIsNone(customer.language_preference)
+        
+        # Update consent
+        customer.update_consent('marketing', True)
+        self.assertTrue(customer.get_consent('marketing'))
+        
+        # Update marketing opt-in
+        customer.marketing_opt_in = True
+        customer.save()
+        self.assertTrue(customer.has_marketing_consent())
+        
+        # Test consent flags override
+        customer.consent_flags = {'marketing': False}
+        customer.marketing_opt_in = None
+        customer.save()
+        self.assertFalse(customer.has_marketing_consent())
+    
+    def test_opt_out_all(self):
+        """Test opting out of all communications."""
+        customer = Customer.objects.create(
+            tenant=self.tenant,
+            phone_e164='+14155559999',
+            marketing_opt_in=True,
+            consent_flags={'marketing': True, 'notifications': True}
+        )
+        
+        # Opt out of everything
+        customer.opt_out_all()
+        
+        self.assertFalse(customer.marketing_opt_in)
+        self.assertFalse(customer.get_consent('marketing'))
+        self.assertFalse(customer.get_consent('notifications'))
+        self.assertFalse(customer.get_consent('promotional'))
+    
+    def test_get_effective_language(self):
+        """Test getting effective language preference."""
+        customer = Customer.objects.create(
+            tenant=self.tenant,
+            phone_e164='+14155559999',
+        )
+        
+        # Default to tenant default
+        self.assertEqual(customer.get_effective_language('sw'), 'sw')
+        
+        # Use language preference if set
+        customer.language_preference = 'sw'
+        customer.save()
+        self.assertEqual(customer.get_effective_language('en'), 'sw')
+        
+        # Fall back to language field if no preference
+        customer.language_preference = None
+        customer.language = 'sheng'
+        customer.save()
+        self.assertEqual(customer.get_effective_language('en'), 'sheng')
+    
+    def test_language_preference_choices(self):
+        """Test language preference field choices."""
+        customer = Customer.objects.create(
+            tenant=self.tenant,
+            phone_e164='+14155559999',
+            language_preference='sw'
+        )
+        
+        self.assertEqual(customer.language_preference, 'sw')
+        
+        # Test all valid choices
+        valid_choices = ['en', 'sw', 'sheng', 'mixed']
+        for choice in valid_choices:
+            customer.language_preference = choice
+            customer.save()
+            customer.refresh_from_db()
+            self.assertEqual(customer.language_preference, choice)

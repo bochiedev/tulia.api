@@ -33,6 +33,7 @@ django-cors-headers==4.3.1
 pytest==8.0.2
 pytest-django==4.8.0
 pytest-cov==4.1.0
+pytest-asyncio==0.21.1
 factory-boy==3.3.0
 hypothesis==6.92.1
 
@@ -52,9 +53,13 @@ langchain-community==0.3.7
 langchain-pinecone==0.2.13
 tiktoken==0.8.0
 
+# LangGraph for orchestration
+langgraph==0.2.50
+
 # Document Processing
 pypdf2==3.0.1
 pdfplumber==0.11.4
+python-docx==1.1.2
 nltk==3.9.1
 
 # Input Validation

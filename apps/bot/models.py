@@ -1662,6 +1662,18 @@ from apps.bot.models_checkout import (
     ResponseValidationLog,
 )
 
+# Import conversation state models
+from apps.bot.models_conversation_state import (
+    ConversationSession,
+    ConversationStateService,
+)
+
+# Import tenant document models
+from apps.bot.models_tenant_documents import (
+    TenantDocument,
+    TenantDocumentChunk
+)
+
 __all__ = [
     'IntentEvent',
     'AgentConfiguration',
@@ -1692,4 +1704,10 @@ __all__ = [
     'CheckoutState',
     'CheckoutSession',
     'ResponseValidationLog',
+    # Conversation state models
+    'ConversationSession',
+    'ConversationStateService',
+    # Tenant document models
+    'TenantDocument',
+    'TenantDocumentChunk',
 ]

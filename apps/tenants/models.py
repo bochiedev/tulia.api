@@ -5,9 +5,13 @@ Implements strict tenant isolation with subscription management,
 Twilio configuration, and API key authentication.
 """
 from django.db import models
-from django.contrib.postgres.fields import ArrayField
 from apps.core.models import BaseModel
 from apps.core.fields import EncryptedCharField, EncryptedTextField
+
+
+def default_allowed_languages():
+    """Default allowed languages for tenant."""
+    return ['en']
 
 
 class TenantManager(models.Manager):
@@ -152,6 +156,59 @@ class Tenant(BaseModel):
         help_text="Primary contact phone"
     )
     
+    # Bot Persona Configuration (for LangGraph Agent)
+    bot_name = models.CharField(
+        max_length=100,
+        default="Assistant",
+        help_text="Custom bot name for conversations"
+    )
+    tone_style = models.CharField(
+        max_length=50,
+        default="friendly_concise",
+        choices=[
+            ('friendly_concise', 'Friendly & Concise'),
+            ('professional', 'Professional'),
+            ('casual', 'Casual'),
+            ('formal', 'Formal'),
+        ],
+        help_text="Communication tone and style"
+    )
+    default_language = models.CharField(
+        max_length=10,
+        default="en",
+        choices=[
+            ('en', 'English'),
+            ('sw', 'Swahili'),
+            ('sheng', 'Sheng'),
+        ],
+        help_text="Default language for conversations"
+    )
+    allowed_languages = models.JSONField(
+        default=default_allowed_languages,
+        blank=True,
+        help_text="Languages allowed for this tenant (e.g., ['en', 'sw', 'sheng'])"
+    )
+    max_chattiness_level = models.IntegerField(
+        default=2,
+        choices=[
+            (0, 'Strictly Business'),
+            (1, 'Minimal Friendliness'),
+            (2, 'Friendly but Bounded'),
+            (3, 'More Friendly'),
+        ],
+        help_text="Maximum chattiness level for cost control (0-3)"
+    )
+    payment_methods_enabled = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Enabled payment methods: {'mpesa_stk': True, 'mpesa_c2b': True, 'pesapal_card': False}"
+    )
+    escalation_rules = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Human escalation rules and triggers configuration"
+    )
+    
     # Custom manager
     objects = TenantManager()
     
@@ -196,6 +253,43 @@ class Tenant(BaseModel):
         from django.utils import timezone
         delta = self.trial_end_date - timezone.now()
         return max(0, delta.days)
+    
+    def get_allowed_languages(self):
+        """Get list of allowed languages, defaulting to English if empty."""
+        if not self.allowed_languages:
+            return ['en']
+        return self.allowed_languages
+    
+    def is_language_allowed(self, language_code):
+        """Check if a language is allowed for this tenant."""
+        return language_code in self.get_allowed_languages()
+    
+    def get_payment_methods(self):
+        """Get enabled payment methods with defaults."""
+        default_methods = {
+            'mpesa_stk': True,
+            'mpesa_c2b': True, 
+            'pesapal_card': False
+        }
+        if not self.payment_methods_enabled:
+            return default_methods
+        return {**default_methods, **self.payment_methods_enabled}
+    
+    def is_payment_method_enabled(self, method):
+        """Check if a specific payment method is enabled."""
+        return self.get_payment_methods().get(method, False)
+    
+    def get_escalation_rules(self):
+        """Get escalation rules with defaults."""
+        default_rules = {
+            'auto_escalate_payment_disputes': True,
+            'auto_escalate_after_failures': 2,
+            'auto_escalate_sensitive_content': True,
+            'escalation_timeout_minutes': 30
+        }
+        if not self.escalation_rules:
+            return default_rules
+        return {**default_rules, **self.escalation_rules}
 
 
 class SubscriptionTier(BaseModel):
@@ -748,6 +842,30 @@ class Customer(BaseModel):
         help_text="Customer payment preferences: {preferred_provider, saved_methods: [{provider, details}]}"
     )
     
+    # Consent and Communication Preferences (for LangGraph Agent)
+    language_preference = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True,
+        choices=[
+            ('en', 'English'),
+            ('sw', 'Swahili'),
+            ('sheng', 'Sheng'),
+            ('mixed', 'Mixed'),
+        ],
+        help_text="Customer's preferred language for conversations"
+    )
+    marketing_opt_in = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text="Customer consent for marketing communications (null=not set, True=opted in, False=opted out)"
+    )
+    consent_flags = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Detailed consent flags: {'marketing': True/False, 'notifications': True/False, 'data_processing': True/False}"
+    )
+    
     # Activity Tracking
     last_seen_at = models.DateTimeField(
         null=True,
@@ -812,6 +930,38 @@ class Customer(BaseModel):
     def has_tag(self, tag):
         """Check if customer has a specific tag."""
         return tag in self.tags
+    
+    def update_consent(self, consent_type, value):
+        """Update a specific consent flag."""
+        if not self.consent_flags:
+            self.consent_flags = {}
+        self.consent_flags[consent_type] = value
+        self.save(update_fields=['consent_flags'])
+    
+    def get_consent(self, consent_type, default=None):
+        """Get a specific consent flag value."""
+        return self.consent_flags.get(consent_type, default)
+    
+    def has_marketing_consent(self):
+        """Check if customer has consented to marketing communications."""
+        # Check both the dedicated field and consent_flags
+        if self.marketing_opt_in is not None:
+            return self.marketing_opt_in
+        return self.get_consent('marketing', False)
+    
+    def opt_out_all(self):
+        """Opt customer out of all communications (STOP/UNSUBSCRIBE)."""
+        self.marketing_opt_in = False
+        self.consent_flags.update({
+            'marketing': False,
+            'notifications': False,
+            'promotional': False
+        })
+        self.save(update_fields=['marketing_opt_in', 'consent_flags'])
+    
+    def get_effective_language(self, tenant_default='en'):
+        """Get the effective language preference for this customer."""
+        return self.language_preference or self.language or tenant_default
 
 
 class TenantWalletManager(models.Manager):

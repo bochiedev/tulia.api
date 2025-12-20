@@ -19,6 +19,9 @@ router = DefaultRouter()
 router.register(r'knowledge', bot_views.KnowledgeEntryViewSet, basename='knowledge')
 
 urlpatterns = [
+    # LangGraph Orchestration (NEW)
+    path('langgraph/', include('apps.bot.langgraph.urls')),
+    
     # Agent Configuration
     path('agent-config', bot_views.AgentConfigurationView.as_view(), name='agent-config'),
     

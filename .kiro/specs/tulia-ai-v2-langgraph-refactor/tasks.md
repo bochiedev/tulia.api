@@ -2,14 +2,14 @@
 
 ## Phase 1 — Foundations
 
-- [ ] 1. Set up tenant-scoped customer identity model
+- [x] 1. Set up tenant-scoped customer identity model
   - Create enhanced Tenant model with bot persona fields (bot_name, tone_style, default_language, allowed_languages, max_chattiness_level, payment_methods_enabled, escalation_rules)
   - Create tenant-scoped Customer model with composite key (tenant_id, phone_e164) and consent fields
   - Implement customer identification using composite key with no global customer identity
   - Add language preference, marketing opt-in, tags, and consent flags to Customer model
   - _Requirements: 3.2, 6.4, 9.2, 9.4_
 
-- [ ] 2. Implement ConversationState schema and management
+- [x] 2. Implement ConversationState schema and management
   - Create canonical ConversationState dataclass with exact fields from design: tenant_id, conversation_id, request_id, customer_id, phone_e164, tenant_name, bot_name, bot_intro, tone_style, default_language, allowed_languages, max_chattiness_level, catalog_link_base, payments_enabled, compliance, handoff, customer_language_pref, marketing_opt_in, notification_prefs, intent, intent_confidence, journey, response_language, language_confidence, governor_classification, governor_confidence, last_catalog_query, last_catalog_filters, last_catalog_results, catalog_total_matches_estimate, selected_item_ids, cart, order_id, order_totals, payment_request_id, payment_status, kb_snippets, escalation_required, escalation_reason, handoff_ticket_id, turn_count, casual_turns, spam_turns, response_text
   - Implement Intent, Journey, Lang, GovernorClass literal types as specified
   - Implement state serialization/deserialization for persistence
@@ -17,18 +17,19 @@
   - Add state validation to ensure required fields are present
   - _Requirements: 2.2, 2.3, 2.5_
 
-- [ ] 3. Create tool contracts with strict tenant isolation
+- [x] 3. Create tool contracts with strict tenant isolation
   - Implement all 15 tool contracts with exact JSON schemas: tenant_get_context, customer_get_or_create, customer_update_preferences, catalog_search, catalog_get_item, order_create, offers_get_applicable, order_apply_coupon, payment_get_methods, payment_get_c2b_instructions, payment_initiate_stk_push, payment_create_pesapal_checkout, order_get_status, kb_retrieve, handoff_create_ticket
   - Ensure all tools require tenant_id, request_id, conversation_id parameters
   - Implement tenant-scoped data access in all tool implementations
   - Add input validation and error handling for all tools
   - _Requirements: 3.1, 3.4, 4.1, 4.2, 4.3_
+  - _Completed: 2025-12-20 - All 15 tools implemented with strict tenant isolation, JSON schemas, validation, and error handling_
 
 - [ ]* 3.1 Write property test for tenant isolation
   - **Property 3: Tenant Isolation Enforcement**
   - **Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5**
 
-- [ ] 4. Set up vector database with tenant namespaces
+- [x] 4. Set up vector database with tenant namespaces
   - Configure vector database with tenant-scoped namespaces
   - Implement tenant-scoped document ingestion for PDF, DOCX, text files
   - Create TenantDocument model with vector embeddings and document types
@@ -41,7 +42,7 @@
 
 ## Phase 2 — Orchestration
 
-- [ ] 5. Set up LangGraph core infrastructure
+- [x] 5. Set up LangGraph core infrastructure
   - Install and configure LangGraph dependencies
   - Create base LangGraph application structure
   - Implement ConversationState as LangGraph state schema
@@ -53,47 +54,51 @@
   - **Property 1: LangGraph Orchestration Universality**
   - **Validates: Requirements 1.1, 2.1**
 
-- [ ] 6. Implement intent classification node
+- [x] 6. Implement intent classification node
   - Create intent_classify LLM node with JSON output schema: {"intent": "...", "confidence": 0-1, "notes": "short", "suggested_journey": "sales|support|orders|offers|prefs|governance"}
   - Implement intent classification with confidence scoring
   - Support exact intents: sales_discovery, product_question, support_question, order_status, discounts_offers, preferences_consent, payment_help, human_request, spam_casual, unknown
   - Add routing logic with EXACT thresholds: IF confidence >= 0.70 THEN route to suggested_journey; IF 0.50 <= confidence < 0.70 THEN ask ONE clarifying question then re-classify; IF confidence < 0.50 THEN route to unknown handler
   - _Requirements: 1.1, 2.1_
+  - _Completed: 2025-12-20 - IntentClassificationNode implemented with exact JSON schema, confidence thresholds, heuristic fallback, and integrated into orchestrator_
 
-- [ ] 7. Implement language policy node
+- [x] 7. Implement language policy node
   - Create language_policy LLM node with JSON output schema: {"response_language": "en|sw|sheng|mixed", "confidence": 0-1, "should_ask_language_question": true|false}
   - Implement language detection with confidence scoring
   - Support exact languages: English (default), Swahili, Sheng
   - Add language switching logic with EXACT threshold: IF confidence >= 0.75 AND language in allowed_languages THEN switch; IF confidence < 0.75 THEN use tenant.default_language
   - Respect customer language preferences (override if explicitly set) and tenant defaults
   - _Requirements: 6.1, 6.2, 6.3, 6.4_
+  - _Completed: 2025-12-20 - LanguagePolicyNode implemented with exact thresholds, heuristic fallback, and integrated into orchestrator_
 
 - [ ]* 7.1 Write property test for language policy compliance
   - **Property 8: Language Policy Compliance**
   - **Validates: Requirements 6.2, 6.3**
 
-- [ ] 8. Implement conversation governor node
+- [x] 8. Implement conversation governor node
   - Create governor_spam_casual LLM node with JSON output schema: {"classification": "business|casual|spam|abuse", "confidence": 0-1, "recommended_action": "proceed|redirect|limit|stop|handoff"}
   - Implement business vs casual/spam classification
   - Add chattiness control with EXACT levels: Level 0 (strictly business), Level 1 (1 short greeting), Level 2 (max 2 casual turns - DEFAULT), Level 3 (max 4 casual turns)
   - Implement EXACT routing: IF classification == "business" THEN proceed; IF "casual" THEN increment casual_turns, allow max per level before redirect; IF "spam" THEN increment spam_turns, after 2 turns disengage; IF "abuse" THEN stop immediately
   - Implement rate limiting per customer per tenant
   - _Requirements: 8.1, 8.2, 8.3, 8.4_
+  - _Completed: 2025-12-20 - ConversationGovernorNode implemented with exact classification schema, chattiness levels, rate limiting, and integrated into orchestrator_
 
 - [ ]* 8.1 Write property test for conversation governance
   - **Property 9: Conversation Governance**
   - **Validates: Requirements 8.1, 8.2, 8.3, 8.4**
 
-- [ ] 9. Create journey router with exact routing conditions
+- [x] 9. Create journey router with exact routing conditions
   - Implement journey routing based on intent classification results
   - Add routing to sales, support, orders, offers, preferences, governance subgraphs
   - Implement unknown intent handler with clarification prompts
   - Add journey transition logic with state updates
   - _Requirements: 2.1, 2.3_
+  - _Completed: 2025-12-20 - ConversationRouter implemented with exact routing thresholds, escalation triggers, journey transitions, and integrated into orchestrator_
 
 ## Phase 3 — Core Journeys
 
-- [ ] 10. Implement Sales Journey subgraph
+- [x] 10. Implement Sales Journey subgraph
   - Create sales_narrow_query LLM node for catalog search or clarification
   - Implement catalog_search tool integration with semantic search and filters
   - Create catalog_present_options LLM node with WhatsApp formatting (max 6 items)
@@ -101,6 +106,7 @@
   - Create product_disambiguate LLM node for order preparation
   - Integrate order_create tool with cart management
   - _Requirements: 1.2, 5.1, 5.4, 5.5, 13.1_
+  - _Completed: 2025-12-20 - Complete sales journey subgraph implemented with all LLM nodes (SalesNarrowQueryNode, CatalogPresentOptionsNode, ProductDisambiguateNode), tool integrations, WhatsApp formatting constraints, and full workflow from discovery to order creation_
 
 - [ ]* 10.1 Write property test for complete sales journey
   - **Property 5: Complete Sales Journey Execution**
