@@ -1,0 +1,173 @@
+{
+    "tenant": {
+        "name": "Scent Safari Perfumes",
+        "slug": "scent-safari-perfumes",
+        "whatsapp_number": "+254722100005",
+        "contact_email": "hello@scentsafari.co.ke",
+        "contact_phone": "+254722100005",
+        "timezone": "Africa/Nairobi",
+        "bot_name": "Aria",
+        "tone_style": "friendly_concise",
+        "default_language": "en",
+        "allowed_languages": [
+            "en"
+        ],
+        "subscription_tier": "Growth",
+        "billing_cycle": "yearly"
+    },
+    "business_info": {
+        "description": "Premium fragrances and perfumes for the modern African consumer",
+        "address": "Online Store - Nairobi Fulfillment Center",
+        "business_hours": {
+            "monday": {
+                "open": "09:00",
+                "close": "18:00"
+            },
+            "tuesday": {
+                "open": "09:00",
+                "close": "18:00"
+            },
+            "wednesday": {
+                "open": "09:00",
+                "close": "18:00"
+            },
+            "thursday": {
+                "open": "09:00",
+                "close": "18:00"
+            },
+            "friday": {
+                "open": "09:00",
+                "close": "18:00"
+            },
+            "saturday": {
+                "open": "10:00",
+                "close": "16:00"
+            },
+            "sunday": {
+                "closed": true
+            }
+        }
+    },
+    "products": [
+        {
+            "name": "Chanel No. 5 Eau de Parfum",
+            "description": "Iconic floral fragrance with notes of ylang-ylang, rose, and sandalwood",
+            "price": 12500.00,
+            "category": "Women's Fragrances",
+            "in_stock": true,
+            "stock_quantity": 25,
+            "variants": [
+                {
+                    "name": "50ml",
+                    "price": 12500.00
+                },
+                {
+                    "name": "100ml",
+                    "price": 18500.00
+                }
+            ]
+        },
+        {
+            "name": "Dior Sauvage Eau de Toilette",
+            "description": "Fresh and raw fragrance with bergamot, pepper, and ambroxan",
+            "price": 9800.00,
+            "category": "Men's Fragrances",
+            "in_stock": true,
+            "stock_quantity": 30,
+            "variants": [
+                {
+                    "name": "60ml",
+                    "price": 9800.00
+                },
+                {
+                    "name": "100ml",
+                    "price": 13500.00
+                }
+            ]
+        },
+        {
+            "name": "Tom Ford Black Orchid",
+            "description": "Luxurious unisex fragrance with black truffle, orchid, and patchouli",
+            "price": 15000.00,
+            "category": "Unisex Fragrances",
+            "in_stock": true,
+            "stock_quantity": 15
+        },
+        {
+            "name": "Versace Bright Crystal",
+            "description": "Fresh and vibrant scent with pomegranate, peony, and musk",
+            "price": 7500.00,
+            "category": "Women's Fragrances",
+            "in_stock": true,
+            "stock_quantity": 40
+        },
+        {
+            "name": "Hugo Boss Bottled",
+            "description": "Sophisticated masculine fragrance with apple, cinnamon, and sandalwood",
+            "price": 6800.00,
+            "category": "Men's Fragrances",
+            "in_stock": true,
+            "stock_quantity": 35
+        },
+        {
+            "name": "Perfume Gift Set - His & Hers",
+            "description": "Romantic gift set with matching fragrances for couples",
+            "price": 8500.00,
+            "category": "Gift Sets",
+            "in_stock": true,
+            "stock_quantity": 20
+        },
+        {
+            "name": "Travel Size Perfume Collection",
+            "description": "Set of 5 travel-size perfumes (10ml each) - perfect for trying new scents",
+            "price": 3500.00,
+            "category": "Travel Size",
+            "in_stock": true,
+            "stock_quantity": 50
+        }
+    ],
+    "services": [
+        {
+            "name": "Fragrance Consultation",
+            "description": "Personal consultation to find your perfect signature scent",
+            "base_price": 1500.00,
+            "duration_minutes": 60,
+            "category": "Consultation"
+        },
+        {
+            "name": "Custom Gift Wrapping",
+            "description": "Luxury gift wrapping service for special occasions",
+            "base_price": 500.00,
+            "duration_minutes": 15,
+            "category": "Gift Services"
+        }
+    ],
+    "documents": {
+        "about": "Scent Safari Perfumes is Kenya's premier online destination for authentic luxury fragrances. We curate the finest perfumes from world-renowned brands, ensuring every bottle is genuine and fresh. Our mission is to make luxury fragrances accessible to the modern African consumer through competitive pricing and exceptional service.",
+        "return_policy": "We offer a 14-day return policy for unopened perfumes in original packaging. Due to hygiene reasons, opened or used perfumes cannot be returned unless defective. If you receive a damaged or incorrect item, contact us within 48 hours for immediate replacement or refund.",
+        "delivery_policy": "Free delivery within Nairobi for orders above KES 5000. Standard delivery (2-3 days) costs KES 500. Express delivery (next day) available for KES 1000. We use secure packaging to prevent damage and ensure authenticity. Signature required on delivery.",
+        "payment_policy": "We accept M-Pesa, card payments, and bank transfers. Payment is required before shipping. For high-value orders (above KES 20,000), we may require additional verification. All transactions are secure and encrypted."
+    },
+    "faqs": [
+        {
+            "question": "How do I know the perfumes are authentic?",
+            "answer": "All our perfumes are sourced directly from authorized distributors and come with authenticity certificates. Each bottle has proper batch codes and packaging. We guarantee 100% authenticity or your money back."
+        },
+        {
+            "question": "Can I try a perfume before buying?",
+            "answer": "We offer sample vials (2ml) for most fragrances at KES 500 each. This lets you test the scent before committing to a full bottle. Sample costs can be deducted from your full-size purchase within 30 days."
+        },
+        {
+            "question": "How should I store my perfumes?",
+            "answer": "Store perfumes in a cool, dry place away from direct sunlight and heat. Avoid bathrooms due to humidity. Keep bottles upright and tightly closed. Proper storage can extend fragrance life to 3-5 years."
+        },
+        {
+            "question": "Do you offer gift cards?",
+            "answer": "Yes! We offer digital gift cards in denominations from KES 2,000 to KES 20,000. Perfect for birthdays, anniversaries, or any special occasion. Gift cards are valid for 12 months from purchase date."
+        },
+        {
+            "question": "What's the difference between Eau de Parfum and Eau de Toilette?",
+            "answer": "Eau de Parfum (EDP) has higher fragrance concentration (15-20%) and lasts 6-8 hours. Eau de Toilette (EDT) has lower concentration (5-15%) and lasts 3-5 hours. EDP is more intense, EDT is lighter and more suitable for daytime wear."
+        }
+    ]
+}

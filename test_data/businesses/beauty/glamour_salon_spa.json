@@ -1,0 +1,190 @@
+{
+    "tenant": {
+        "name": "Glamour Salon & Spa",
+        "slug": "glamour-salon-spa",
+        "whatsapp_number": "+254722100006",
+        "contact_email": "book@glamoursalon.co.ke",
+        "contact_phone": "+254722100006",
+        "timezone": "Africa/Nairobi",
+        "bot_name": "Bella",
+        "tone_style": "friendly_concise",
+        "default_language": "en",
+        "allowed_languages": [
+            "en"
+        ],
+        "subscription_tier": "Growth",
+        "billing_cycle": "monthly"
+    },
+    "business_info": {
+        "description": "Full-service salon and spa offering hair, nails, beauty treatments, and relaxation services",
+        "address": "Yaya Centre, Kilimani, Nairobi",
+        "business_hours": {
+            "monday": {
+                "open": "09:00",
+                "close": "19:00"
+            },
+            "tuesday": {
+                "open": "09:00",
+                "close": "19:00"
+            },
+            "wednesday": {
+                "open": "09:00",
+                "close": "19:00"
+            },
+            "thursday": {
+                "open": "09:00",
+                "close": "19:00"
+            },
+            "friday": {
+                "open": "09:00",
+                "close": "20:00"
+            },
+            "saturday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "sunday": {
+                "open": "10:00",
+                "close": "18:00"
+            }
+        }
+    },
+    "products": [
+        {
+            "name": "Professional Hair Shampoo",
+            "description": "Salon-grade moisturizing shampoo for all hair types",
+            "price": 1200.00,
+            "category": "Hair Care",
+            "in_stock": true,
+            "stock_quantity": 50
+        },
+        {
+            "name": "Nail Polish Set (5 colors)",
+            "description": "Long-lasting nail polish in trending colors",
+            "price": 800.00,
+            "category": "Nail Care",
+            "in_stock": true,
+            "stock_quantity": 30
+        },
+        {
+            "name": "Face Mask - Hydrating",
+            "description": "Professional hydrating face mask for glowing skin",
+            "price": 600.00,
+            "category": "Skincare",
+            "in_stock": true,
+            "stock_quantity": 40
+        },
+        {
+            "name": "Hair Treatment Oil",
+            "description": "Nourishing hair oil for damaged and dry hair",
+            "price": 1500.00,
+            "category": "Hair Care",
+            "in_stock": true,
+            "stock_quantity": 25
+        }
+    ],
+    "services": [
+        {
+            "name": "Hair Cut & Blow Dry",
+            "description": "Professional haircut with styling and blow dry",
+            "base_price": 1500.00,
+            "duration_minutes": 60,
+            "category": "Hair Services"
+        },
+        {
+            "name": "Hair Coloring",
+            "description": "Full hair coloring service with premium products",
+            "base_price": 4500.00,
+            "duration_minutes": 180,
+            "category": "Hair Services"
+        },
+        {
+            "name": "Manicure & Pedicure",
+            "description": "Complete nail care with shaping, cuticle care, and polish",
+            "base_price": 2000.00,
+            "duration_minutes": 90,
+            "category": "Nail Services"
+        },
+        {
+            "name": "Gel Nails",
+            "description": "Long-lasting gel nail application with design options",
+            "base_price": 2500.00,
+            "duration_minutes": 120,
+            "category": "Nail Services"
+        },
+        {
+            "name": "Facial Treatment",
+            "description": "Deep cleansing facial with moisturizing and anti-aging benefits",
+            "base_price": 3000.00,
+            "duration_minutes": 75,
+            "category": "Facial Services"
+        },
+        {
+            "name": "Eyebrow Threading",
+            "description": "Precise eyebrow shaping using threading technique",
+            "base_price": 500.00,
+            "duration_minutes": 20,
+            "category": "Beauty Services"
+        },
+        {
+            "name": "Full Body Massage",
+            "description": "Relaxing full body massage with aromatherapy oils",
+            "base_price": 4000.00,
+            "duration_minutes": 90,
+            "category": "Spa Services"
+        },
+        {
+            "name": "Bridal Package",
+            "description": "Complete bridal beauty package including hair, makeup, and nails",
+            "base_price": 12000.00,
+            "duration_minutes": 300,
+            "category": "Special Packages"
+        },
+        {
+            "name": "Hair Relaxing Treatment",
+            "description": "Chemical hair relaxing for smooth, straight hair",
+            "base_price": 3500.00,
+            "duration_minutes": 150,
+            "category": "Hair Services"
+        },
+        {
+            "name": "Makeup Application",
+            "description": "Professional makeup for events and special occasions",
+            "base_price": 2500.00,
+            "duration_minutes": 60,
+            "category": "Beauty Services"
+        }
+    ],
+    "documents": {
+        "about": "Glamour Salon & Spa is Nairobi's premier destination for beauty and wellness. Our team of experienced stylists and therapists use the latest techniques and premium products to help you look and feel your best. From everyday maintenance to special occasion glamour, we provide personalized service in a luxurious, relaxing environment.",
+        "return_policy": "Due to the nature of our services, we cannot offer refunds once services are completed. However, if you're not satisfied with your service, please speak to our manager immediately. We'll work to address your concerns and may offer complimentary touch-ups or future service credits.",
+        "delivery_policy": "We offer home service for special occasions like weddings and events within Nairobi. Mobile service fee starts at KES 2000 depending on location and services required. Advance booking (48 hours) required for mobile services.",
+        "payment_policy": "We accept cash, M-Pesa, and card payments. A 50% deposit is required for bridal packages and group bookings. Cancellations must be made at least 24 hours in advance to avoid charges. Same-day cancellations are charged 50% of service cost."
+    },
+    "faqs": [
+        {
+            "question": "Do I need an appointment?",
+            "answer": "Yes, we operate by appointment only to ensure you receive our full attention. Walk-ins are welcome but may have to wait depending on availability. We recommend booking in advance, especially for weekends and special services."
+        },
+        {
+            "question": "What products do you use?",
+            "answer": "We use premium professional brands including L'Oréal Professional, Wella, OPI, and Dermalogica. All our products are salon-grade and chosen for their quality and safety. We can accommodate specific product preferences with advance notice."
+        },
+        {
+            "question": "Do you cater to all hair types?",
+            "answer": "Absolutely! Our stylists are trained to work with all hair textures and types, including natural African hair, relaxed hair, and textured hair. We specialize in treatments that celebrate and enhance your natural beauty."
+        },
+        {
+            "question": "Can I bring my own nail polish?",
+            "answer": "Yes, you're welcome to bring your own nail polish if you have a specific color in mind. However, we have an extensive collection of colors and brands, so you'll likely find something you love in our selection."
+        },
+        {
+            "question": "Do you offer group packages?",
+            "answer": "Yes! We offer special group packages for bridal parties, birthdays, and girls' day out. Group discounts start at 10% for 4+ people. We can also arrange private party bookings outside regular hours for an additional fee."
+        },
+        {
+            "question": "What should I do to prepare for my appointment?",
+            "answer": "Come with clean hair for chemical services. Remove nail polish before nail appointments. Arrive 10 minutes early to relax and discuss your preferences. For facial services, avoid sun exposure and new skincare products 24 hours before your appointment."
+        }
+    ]
+}

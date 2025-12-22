@@ -106,8 +106,30 @@ class ConversationState:
     presented_products: List[Dict[str, Any]] = field(default_factory=list)  # Products presented to user
     selected_product_details: Optional[Dict[str, Any]] = None  # Details of selected product
     available_offers: List[Dict[str, Any]] = field(default_factory=list)  # Available offers for order
+    automatic_discounts: List[Dict[str, Any]] = field(default_factory=list)  # Automatic discounts applied
+    needs_coupon_application: bool = False  # Whether coupon application is needed
     available_payment_methods: List[Dict[str, Any]] = field(default_factory=list)  # Available payment methods
     shortlist_rejections: int = 0  # Count of shortlist rejections for catalog link logic
+    
+    # Payment processing specific fields
+    payment_step: Optional[str] = None  # Current step in payment processing
+    payment_amount_confirmed: bool = False  # Whether customer confirmed payment amount
+    selected_payment_method: Optional[str] = None  # Selected payment method (mpesa_stk, mpesa_c2b, card)
+    
+    # Orders journey specific fields
+    orders_step: Optional[str] = None  # Current step in orders journey
+    order_lookup_results: Optional[Dict[str, Any]] = None  # Results from order lookup
+    primary_order_id: Optional[str] = None  # Primary order ID for follow-up
+    disambiguation_question: Optional[str] = None  # Question for order disambiguation
+    
+    # Support journey specific fields
+    support_step: Optional[str] = None  # Current step in support journey
+    
+    # Preferences journey specific fields
+    prefs_step: Optional[str] = None  # Current step in preferences journey
+    
+    # General metadata for storing temporary data across nodes
+    metadata: Dict[str, Any] = field(default_factory=dict)  # Temporary metadata storage
 
     def to_dict(self) -> Dict[str, Any]:
         """

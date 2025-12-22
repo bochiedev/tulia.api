@@ -96,24 +96,12 @@ class Tenant(BaseModel):
         help_text="Free trial end date"
     )
     
-    # Twilio Configuration
+    # Twilio Configuration (DEPRECATED - Use TenantSettings instead)
     whatsapp_number = models.CharField(
         max_length=20,
         unique=True,
         db_index=True,
         help_text="WhatsApp business number (E.164 format)"
-    )
-    twilio_sid = EncryptedCharField(
-        max_length=500,
-        help_text="Encrypted Twilio Account SID"
-    )
-    twilio_token = EncryptedCharField(
-        max_length=500,
-        help_text="Encrypted Twilio Auth Token"
-    )
-    webhook_secret = EncryptedCharField(
-        max_length=500,
-        help_text="Encrypted webhook signature secret"
     )
     
     # API Access

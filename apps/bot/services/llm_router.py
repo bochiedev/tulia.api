@@ -11,7 +11,7 @@ from decimal import Decimal
 from apps.bot.services.llm.factory import LLMProviderFactory
 from apps.bot.services.llm.base import LLMProvider, LLMResponse
 from apps.bot.models import AgentConfiguration
-from apps.bot.models_sales_orchestration import LLMUsageLog
+from apps.bot.models import LLMUsageLog
 from django.db import models
 from apps.tenants.models import Tenant
 

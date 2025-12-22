@@ -11,6 +11,7 @@ from apps.bot.views_agent_interactions import (
     AgentInteractionDetailView,
     AgentInteractionStatsView,
 )
+from apps.bot.views.catalog_return import CatalogReturnWebhookView, CatalogReturnPageView
 
 app_name = 'bot'
 
@@ -21,6 +22,10 @@ router.register(r'knowledge', bot_views.KnowledgeEntryViewSet, basename='knowled
 urlpatterns = [
     # LangGraph Orchestration (NEW)
     path('langgraph/', include('apps.bot.langgraph.urls')),
+    
+    # Catalog Return Handling
+    path('catalog/return/webhook', CatalogReturnWebhookView.as_view(), name='catalog-return-webhook'),
+    path('catalog/return/success', CatalogReturnPageView.as_view(), name='catalog-return-success'),
     
     # Agent Configuration
     path('agent-config', bot_views.AgentConfigurationView.as_view(), name='agent-config'),
@@ -41,6 +46,9 @@ urlpatterns = [
     
     # RAG Document Management
     path('documents/', include('apps.bot.urls_documents')),
+    
+    # Monitoring and Observability
+    path('monitoring/', include('apps.bot.urls_monitoring')),
     
     # Feedback Collection
     path('', include('apps.bot.urls_feedback')),

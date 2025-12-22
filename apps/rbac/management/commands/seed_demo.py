@@ -170,12 +170,15 @@ class Command(BaseCommand):
             trial_start_date=timezone.now(),
             trial_end_date=timezone.now() + timedelta(days=14),
             whatsapp_number='+15555551234',  # Demo number
-            twilio_sid=demo_sid,
-            twilio_token=demo_token,
-            webhook_secret=demo_secret,
             contact_email=owner_email,
             timezone='America/New_York',
         )
+        
+        # Update tenant settings with integration credentials (created by signal)
+        tenant.settings.twilio_sid = demo_sid
+        tenant.settings.twilio_token = demo_token
+        tenant.settings.twilio_webhook_secret = demo_secret
+        tenant.settings.save()
         
         self.stdout.write(
             self.style.SUCCESS(f'   ✓ Created tenant: {tenant.name} ({tenant.slug})')

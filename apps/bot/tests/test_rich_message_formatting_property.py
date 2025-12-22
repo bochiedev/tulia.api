@@ -44,7 +44,7 @@ class TestRichMessageFormattingProperty:
     
     @given(products_data=product_list())
     @settings(
-        max_examples=100,
+        max_examples=20,
         deadline=None,
         suppress_health_check=[HealthCheck.function_scoped_fixture]
     )

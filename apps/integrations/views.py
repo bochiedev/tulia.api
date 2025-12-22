@@ -57,7 +57,7 @@ def verify_twilio_signature(
         >>> url = request.build_absolute_uri()
         >>> params = dict(request.POST.items())
         >>> signature = request.META.get('HTTP_X_TWILIO_SIGNATURE', '')
-        >>> is_valid = verify_twilio_signature(url, params, signature, tenant.twilio_token)
+        >>> is_valid = verify_twilio_signature(url, params, signature, tenant.settings.twilio_token)
         >>> if not is_valid:
         ...     return HttpResponse('Unauthorized', status=403)
     """
@@ -392,11 +392,9 @@ def handle_feedback_button(
                 twilio_sid = settings.twilio_sid
                 twilio_token = settings.twilio_token
             else:
-                twilio_sid = tenant.twilio_sid
-                twilio_token = tenant.twilio_token
-        except AttributeError:
-            twilio_sid = tenant.twilio_sid
-            twilio_token = tenant.twilio_token
+                raise ValueError("Twilio credentials not configured")
+        except (AttributeError, ValueError):
+            raise ValueError("Twilio credentials not configured")
         
         twilio_service = TwilioService(
             account_sid=twilio_sid,
@@ -534,13 +532,10 @@ def twilio_webhook(request):
                 twilio_sid = settings.twilio_sid
                 twilio_token = settings.twilio_token
             else:
-                # Fallback to Tenant model
-                twilio_sid = tenant.twilio_sid
-                twilio_token = tenant.twilio_token
-        except AttributeError:
-            # Fallback to Tenant model
-            twilio_sid = tenant.twilio_sid
-            twilio_token = tenant.twilio_token
+                raise ValueError("Twilio credentials not configured")
+        except (AttributeError, ValueError):
+            webhook_log.mark_failed('Twilio credentials not configured')
+            return HttpResponse('Twilio not configured', status=500)
         
         # Verify signature using the helper function
         if not verify_twilio_signature(full_url, payload, signature, twilio_token):
@@ -704,17 +699,16 @@ def twilio_status_callback(request):
             signature = request.META.get('HTTP_X_TWILIO_SIGNATURE', '')
             full_url = request.build_absolute_uri()
             
-            # Get Twilio credentials from TenantSettings (preferred) or Tenant model (fallback)
+            # Get Twilio credentials from TenantSettings
             try:
                 settings = tenant.settings
                 if settings.has_twilio_configured():
                     twilio_token = settings.twilio_token
                 else:
-                    # Fallback to Tenant model
-                    twilio_token = tenant.twilio_token
-            except AttributeError:
-                # Fallback to Tenant model
-                twilio_token = tenant.twilio_token
+                    raise ValueError("Twilio credentials not configured")
+            except (AttributeError, ValueError):
+                logger.error(f"Twilio credentials not configured for tenant {tenant.id}")
+                return HttpResponse('Twilio not configured', status=500)
             
             # Verify signature using the helper function
             if not verify_twilio_signature(full_url, payload, signature, twilio_token):

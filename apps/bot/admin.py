@@ -9,8 +9,12 @@ from .models import (
     BrowseSession,
     MessageHarmonizationLog,
     ConversationContext,
-    CheckoutSession,
-    ResponseValidationLog,
+    IntentClassificationLog,
+    LLMUsageLog,
+    PaymentRequest,
+    KnowledgeEntry,
+    Document,
+    DocumentChunk,
 )
 
 
@@ -73,28 +77,6 @@ class AgentConfigurationAdmin(admin.ModelAdmin):
                 'enable_feedback_collection',
                 'feedback_frequency'
             )
-        }),
-        ('UX Enhancement Features', {
-            'fields': (
-                'enable_message_harmonization',
-                'harmonization_wait_seconds',
-                'enable_immediate_product_display',
-                'max_products_to_show',
-                'enable_reference_resolution'
-            ),
-            'classes': ('collapse',)
-        }),
-        ('Conversation Flow Fixes', {
-            'fields': (
-                'enable_echo_prevention',
-                'enable_disclaimer_removal',
-                'max_response_sentences',
-                'enable_quick_checkout',
-                'max_checkout_messages',
-                'force_interactive_messages',
-                'fallback_to_text_on_error'
-            ),
-            'classes': ('collapse',)
         }),
         ('Branding', {
             'fields': (
@@ -465,102 +447,213 @@ class ConversationContextAdmin(admin.ModelAdmin):
     is_expired_display.boolean = True
 
 
-# Sales Orchestration Refactor Admin Interfaces
-
-from .models_sales_orchestration import (
-    IntentClassificationLog,
-    LLMUsageLog,
-    PaymentRequest,
-)
-
-
 @admin.register(IntentClassificationLog)
 class IntentClassificationLogAdmin(admin.ModelAdmin):
     """Admin interface for IntentClassificationLog model."""
-    list_display = ['id', 'tenant', 'conversation', 'detected_intent', 'confidence', 'method', 'classification_time_ms', 'created_at']
-    list_filter = ['detected_intent', 'method', 'created_at', 'tenant']
-    search_fields = ['detected_intent', 'conversation__id', 'tenant__name']
-    readonly_fields = ['id', 'created_at', 'updated_at']
-    ordering = ['-created_at']
-    
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('id', 'tenant', 'conversation', 'message', 'created_at', 'updated_at')
-        }),
-        ('Classification', {
-            'fields': ('detected_intent', 'confidence', 'method', 'classification_time_ms')
-        }),
-        ('Extracted Data', {
-            'fields': ('extracted_slots', 'detected_language')
-        }),
-        ('Metadata', {
-            'fields': ('metadata',),
-            'classes': ('collapse',)
-        }),
-    )
-    
-    def has_add_permission(self, request):
-        """Disable manual creation - logs are auto-generated."""
-        return False
-
-
-@admin.register(LLMUsageLog)
-class LLMUsageLogAdmin(admin.ModelAdmin):
-    """Admin interface for LLMUsageLog model."""
-    list_display = ['id', 'tenant', 'model_name', 'task_type', 'total_tokens', 'estimated_cost_usd', 'created_at']
-    list_filter = ['model_name', 'task_type', 'created_at', 'tenant']
-    search_fields = ['model_name', 'task_type', 'tenant__name', 'conversation__id']
-    readonly_fields = ['id', 'created_at', 'updated_at']
+    list_display = [
+        'id',
+        'get_tenant',
+        'conversation',
+        'intent_name',
+        'confidence_score',
+        'model_used',
+        'processing_time_ms',
+        'created_at'
+    ]
+    list_filter = [
+        'intent_name',
+        'model_used',
+        'created_at',
+        'tenant'
+    ]
+    search_fields = [
+        'message_text',
+        'intent_name',
+        'conversation__id',
+        'tenant__name'
+    ]
+    readonly_fields = [
+        'id',
+        'tenant',
+        'conversation',
+        'message_text',
+        'intent_name',
+        'confidence_score',
+        'model_used',
+        'processing_time_ms',
+        'all_intents',
+        'slots',
+        'metadata',
+        'created_at',
+        'updated_at'
+    ]
     ordering = ['-created_at']
     
     fieldsets = (
         ('Basic Information', {
             'fields': ('id', 'tenant', 'conversation', 'created_at', 'updated_at')
         }),
-        ('Model', {
-            'fields': ('model_name', 'task_type')
+        ('Input', {
+            'fields': ('message_text',)
         }),
-        ('Usage', {
-            'fields': ('input_tokens', 'output_tokens', 'total_tokens')
+        ('Classification Results', {
+            'fields': ('intent_name', 'confidence_score', 'all_intents')
         }),
-        ('Cost', {
-            'fields': ('estimated_cost_usd',)
+        ('Processing', {
+            'fields': ('model_used', 'processing_time_ms')
+        }),
+        ('Extracted Data', {
+            'fields': ('slots',)
         }),
         ('Metadata', {
-            'fields': ('prompt_template', 'response_preview', 'metadata'),
+            'fields': ('metadata',),
             'classes': ('collapse',)
         }),
     )
     
-    def has_add_permission(self, request):
-        """Disable manual creation - logs are auto-generated."""
-        return False
+    def get_tenant(self, obj):
+        """Get tenant name."""
+        return obj.tenant.name if obj.tenant else '-'
+    get_tenant.short_description = 'Tenant'
+    get_tenant.admin_order_field = 'tenant__name'
+
+
+@admin.register(LLMUsageLog)
+class LLMUsageLogAdmin(admin.ModelAdmin):
+    """Admin interface for LLMUsageLog model."""
+    list_display = [
+        'id',
+        'get_tenant',
+        'provider',
+        'model',
+        'task_type',
+        'total_tokens',
+        'cost',
+        'success',
+        'created_at'
+    ]
+    list_filter = [
+        'provider',
+        'model',
+        'task_type',
+        'success',
+        'created_at',
+        'tenant'
+    ]
+    search_fields = [
+        'provider',
+        'model',
+        'task_type',
+        'tenant__name'
+    ]
+    readonly_fields = [
+        'id',
+        'tenant',
+        'conversation',
+        'provider',
+        'model',
+        'task_type',
+        'input_tokens',
+        'output_tokens',
+        'total_tokens',
+        'cost',
+        'response_time_ms',
+        'success',
+        'error_message',
+        'metadata',
+        'created_at',
+        'updated_at'
+    ]
+    ordering = ['-created_at']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'tenant', 'conversation', 'created_at', 'updated_at')
+        }),
+        ('Provider Information', {
+            'fields': ('provider', 'model', 'task_type')
+        }),
+        ('Usage Metrics', {
+            'fields': ('input_tokens', 'output_tokens', 'total_tokens', 'cost')
+        }),
+        ('Performance', {
+            'fields': ('response_time_ms', 'success', 'error_message')
+        }),
+        ('Metadata', {
+            'fields': ('metadata',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_tenant(self, obj):
+        """Get tenant name."""
+        return obj.tenant.name if obj.tenant else '-'
+    get_tenant.short_description = 'Tenant'
+    get_tenant.admin_order_field = 'tenant__name'
 
 
 @admin.register(PaymentRequest)
 class PaymentRequestAdmin(admin.ModelAdmin):
     """Admin interface for PaymentRequest model."""
-    list_display = ['id', 'tenant', 'customer', 'amount', 'currency', 'payment_method', 'status', 'created_at']
-    list_filter = ['payment_method', 'status', 'currency', 'created_at', 'tenant']
-    search_fields = ['provider_reference', 'phone_number', 'customer__phone_e164', 'tenant__name']
-    readonly_fields = ['id', 'created_at', 'updated_at', 'callback_received_at']
-    ordering = ['-created_at']
+    list_display = [
+        'id',
+        'get_tenant',
+        'conversation',
+        'amount',
+        'currency',
+        'status',
+        'payment_provider',
+        'initiated_at',
+        'completed_at'
+    ]
+    list_filter = [
+        'status',
+        'payment_provider',
+        'currency',
+        'initiated_at',
+        'tenant'
+    ]
+    search_fields = [
+        'provider_transaction_id',
+        'conversation__id',
+        'tenant__name'
+    ]
+    readonly_fields = [
+        'id',
+        'tenant',
+        'conversation',
+        'order',
+        'amount',
+        'currency',
+        'status',
+        'payment_provider',
+        'provider_transaction_id',
+        'initiated_at',
+        'completed_at',
+        'error_code',
+        'error_message',
+        'metadata',
+        'processing_time_display',
+        'created_at',
+        'updated_at'
+    ]
+    ordering = ['-initiated_at']
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('id', 'tenant', 'customer', 'order', 'appointment', 'created_at', 'updated_at')
+            'fields': ('id', 'tenant', 'conversation', 'order', 'created_at', 'updated_at')
         }),
-        ('Payment Details', {
-            'fields': ('amount', 'currency', 'payment_method', 'phone_number', 'payment_link')
+        ('Payment Information', {
+            'fields': ('amount', 'currency', 'status')
         }),
-        ('Status', {
-            'fields': ('status',)
+        ('Provider Information', {
+            'fields': ('payment_provider', 'provider_transaction_id')
         }),
-        ('Provider Details', {
-            'fields': ('provider_reference', 'provider_response')
+        ('Timing', {
+            'fields': ('initiated_at', 'completed_at', 'processing_time_display')
         }),
-        ('Callback', {
-            'fields': ('callback_received_at', 'callback_data'),
+        ('Error Information', {
+            'fields': ('error_code', 'error_message'),
             'classes': ('collapse',)
         }),
         ('Metadata', {
@@ -569,167 +662,115 @@ class PaymentRequestAdmin(admin.ModelAdmin):
         }),
     )
     
-    actions = ['mark_as_success', 'mark_as_failed', 'mark_as_cancelled']
+    def get_tenant(self, obj):
+        """Get tenant name."""
+        return obj.tenant.name if obj.tenant else '-'
+    get_tenant.short_description = 'Tenant'
+    get_tenant.admin_order_field = 'tenant__name'
     
-    def mark_as_success(self, request, queryset):
-        """Mark selected payment requests as successful."""
-        updated = queryset.update(status='SUCCESS')
-        self.message_user(request, f'{updated} payment request(s) marked as successful.')
-    mark_as_success.short_description = 'Mark as successful'
-    
-    def mark_as_failed(self, request, queryset):
-        """Mark selected payment requests as failed."""
-        updated = queryset.update(status='FAILED')
-        self.message_user(request, f'{updated} payment request(s) marked as failed.')
-    mark_as_failed.short_description = 'Mark as failed'
-    
-    def mark_as_cancelled(self, request, queryset):
-        """Mark selected payment requests as cancelled."""
-        updated = queryset.update(status='CANCELLED')
-        self.message_user(request, f'{updated} payment request(s) marked as cancelled.')
-    mark_as_cancelled.short_description = 'Mark as cancelled'
+    def processing_time_display(self, obj):
+        """Display processing time."""
+        time_seconds = obj.get_processing_time_seconds()
+        if time_seconds is not None:
+            return f"{time_seconds:.2f}s"
+        return '-'
+    processing_time_display.short_description = 'Processing Time'
 
 
-# Bot Conversation Flow Fixes Admin Interfaces
-
-@admin.register(CheckoutSession)
-class CheckoutSessionAdmin(admin.ModelAdmin):
-    """Admin interface for CheckoutSession model."""
+@admin.register(KnowledgeEntry)
+class KnowledgeEntryAdmin(admin.ModelAdmin):
+    """Admin interface for KnowledgeEntry model."""
     list_display = [
         'id',
-        'tenant',
-        'conversation',
-        'customer',
-        'state',
-        'message_count',
-        'started_at',
-        'completed_at',
-        'is_active_display'
+        'get_tenant',
+        'title',
+        'entry_type',
+        'category',
+        'priority',
+        'is_active',
+        'version',
+        'created_at'
     ]
     list_filter = [
-        'state',
-        'started_at',
-        'completed_at',
-        'abandoned_at',
+        'entry_type',
+        'category',
+        'is_active',
+        'priority',
+        'created_at',
         'tenant'
     ]
     search_fields = [
-        'conversation__id',
-        'customer__phone_e164',
+        'title',
+        'content',
+        'keywords',
         'tenant__name'
     ]
     readonly_fields = [
         'id',
-        'conversation',
-        'customer',
-        'tenant',
-        'started_at',
-        'completed_at',
-        'abandoned_at',
-        'is_active_display',
-        'is_completed_display',
-        'is_abandoned_display',
+        'embedding',
+        'version',
         'created_at',
         'updated_at'
     ]
-    ordering = ['-started_at']
+    ordering = ['-priority', '-created_at']
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('id', 'tenant', 'conversation', 'customer', 'created_at', 'updated_at')
+            'fields': ('id', 'tenant', 'created_at', 'updated_at')
         }),
-        ('State', {
-            'fields': ('state', 'message_count')
+        ('Classification', {
+            'fields': ('entry_type', 'category', 'priority', 'is_active')
         }),
-        ('Data', {
-            'fields': ('selected_product', 'quantity', 'order', 'payment_request')
+        ('Content', {
+            'fields': ('title', 'content', 'keywords')
         }),
-        ('Timing', {
-            'fields': (
-                'started_at',
-                'completed_at',
-                'abandoned_at',
-                'is_active_display',
-                'is_completed_display',
-                'is_abandoned_display'
-            )
+        ('Search Optimization', {
+            'fields': ('embedding',),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('metadata', 'version'),
+            'classes': ('collapse',)
         }),
     )
     
-    def is_active_display(self, obj):
-        """Display whether checkout is active."""
-        return obj.is_active()
-    is_active_display.short_description = 'Is Active'
-    is_active_display.boolean = True
-    
-    def is_completed_display(self, obj):
-        """Display whether checkout is completed."""
-        return obj.is_completed()
-    is_completed_display.short_description = 'Is Completed'
-    is_completed_display.boolean = True
-    
-    def is_abandoned_display(self, obj):
-        """Display whether checkout is abandoned."""
-        return obj.is_abandoned()
-    is_abandoned_display.short_description = 'Is Abandoned'
-    is_abandoned_display.boolean = True
-    
-    actions = ['mark_as_abandoned']
-    
-    def mark_as_abandoned(self, request, queryset):
-        """Mark selected checkout sessions as abandoned."""
-        count = 0
-        for session in queryset:
-            if session.is_active():
-                session.mark_abandoned()
-                count += 1
-        self.message_user(request, f'{count} checkout session(s) marked as abandoned.')
-    mark_as_abandoned.short_description = 'Mark as abandoned'
+    def get_tenant(self, obj):
+        """Get tenant name."""
+        return obj.tenant.name if obj.tenant else '-'
+    get_tenant.short_description = 'Tenant'
+    get_tenant.admin_order_field = 'tenant__name'
 
 
-@admin.register(ResponseValidationLog)
-class ResponseValidationLogAdmin(admin.ModelAdmin):
-    """Admin interface for ResponseValidationLog model."""
+@admin.register(Document)
+class DocumentAdmin(admin.ModelAdmin):
+    """Admin interface for Document model."""
     list_display = [
         'id',
         'get_tenant',
-        'conversation',
-        'had_echo',
-        'had_disclaimer',
-        'exceeded_length',
-        'missing_cta',
-        'validation_time_ms',
-        'issue_count_display',
+        'file_name',
+        'file_type',
+        'status',
+        'processing_progress',
+        'chunk_count',
+        'total_tokens',
         'created_at'
     ]
     list_filter = [
-        'had_echo',
-        'had_disclaimer',
-        'exceeded_length',
-        'missing_cta',
+        'file_type',
+        'status',
         'created_at',
-        'conversation__tenant'
+        'tenant'
     ]
     search_fields = [
-        'conversation__id',
-        'conversation__tenant__name',
-        'original_response',
-        'cleaned_response'
+        'file_name',
+        'tenant__name'
     ]
     readonly_fields = [
         'id',
-        'conversation',
-        'message',
-        'had_echo',
-        'had_disclaimer',
-        'exceeded_length',
-        'missing_cta',
-        'original_response',
-        'cleaned_response',
-        'validation_time_ms',
-        'issues_found',
-        'issue_count_display',
-        'has_any_issues_display',
+        'file_path',
+        'file_size',
+        'chunk_count',
+        'total_tokens',
         'created_at',
         'updated_at'
     ]
@@ -737,44 +778,76 @@ class ResponseValidationLogAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('id', 'conversation', 'message', 'created_at', 'updated_at')
+            'fields': ('id', 'tenant', 'created_at', 'updated_at')
         }),
-        ('Validation Results', {
-            'fields': (
-                'had_echo',
-                'had_disclaimer',
-                'exceeded_length',
-                'missing_cta',
-                'has_any_issues_display',
-                'issue_count_display'
-            )
+        ('File Information', {
+            'fields': ('file_name', 'file_type', 'file_path', 'file_size')
         }),
-        ('Content', {
-            'fields': ('original_response', 'cleaned_response')
+        ('Processing Status', {
+            'fields': ('status', 'processing_progress', 'error_message')
         }),
-        ('Metadata', {
-            'fields': ('validation_time_ms', 'issues_found'),
-            'classes': ('collapse',)
+        ('Statistics', {
+            'fields': ('chunk_count', 'total_tokens')
         }),
     )
     
     def get_tenant(self, obj):
-        """Get tenant from conversation relationship."""
-        return obj.conversation.tenant.name if obj.conversation and obj.conversation.tenant else '-'
+        """Get tenant name."""
+        return obj.tenant.name if obj.tenant else '-'
     get_tenant.short_description = 'Tenant'
-    get_tenant.admin_order_field = 'conversation__tenant__name'
+    get_tenant.admin_order_field = 'tenant__name'
+
+
+@admin.register(DocumentChunk)
+class DocumentChunkAdmin(admin.ModelAdmin):
+    """Admin interface for DocumentChunk model."""
+    list_display = [
+        'id',
+        'get_document',
+        'chunk_index',
+        'token_count',
+        'created_at'
+    ]
+    list_filter = [
+        'document__file_type',
+        'created_at',
+        'document__tenant'
+    ]
+    search_fields = [
+        'content',
+        'document__file_name',
+        'document__tenant__name'
+    ]
+    readonly_fields = [
+        'id',
+        'document',
+        'chunk_index',
+        'content',
+        'token_count',
+        'embedding',
+        'created_at',
+        'updated_at'
+    ]
+    ordering = ['document', 'chunk_index']
     
-    def issue_count_display(self, obj):
-        """Display count of issues found."""
-        return obj.get_issue_count()
-    issue_count_display.short_description = 'Issue Count'
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('id', 'document', 'chunk_index', 'created_at', 'updated_at')
+        }),
+        ('Content', {
+            'fields': ('content', 'token_count')
+        }),
+        ('Embedding', {
+            'fields': ('embedding',),
+            'classes': ('collapse',)
+        }),
+    )
     
-    def has_any_issues_display(self, obj):
-        """Display whether any issues were found."""
-        return obj.has_any_issues()
-    has_any_issues_display.short_description = 'Has Issues'
-    has_any_issues_display.boolean = True
-    
-    def has_add_permission(self, request):
-        """Disable manual creation - logs are auto-generated."""
-        return False
+    def get_document(self, obj):
+        """Get document file name."""
+        return obj.document.file_name if obj.document else '-'
+    get_document.short_description = 'Document'
+    get_document.admin_order_field = 'document__file_name'
+
+
+# End of admin configuration

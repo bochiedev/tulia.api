@@ -1,0 +1,210 @@
+{
+    "tenant": {
+        "name": "Spice Route Indian Restaurant",
+        "slug": "spice-route-indian",
+        "whatsapp_number": "+254722100009",
+        "contact_email": "orders@spiceroute.co.ke",
+        "contact_phone": "+254722100009",
+        "timezone": "Africa/Nairobi",
+        "bot_name": "Priya",
+        "tone_style": "friendly_concise",
+        "default_language": "en",
+        "allowed_languages": [
+            "en"
+        ],
+        "subscription_tier": "Growth",
+        "billing_cycle": "monthly"
+    },
+    "business_info": {
+        "description": "Authentic Indian cuisine with traditional spices and modern presentation",
+        "address": "Parklands, Nairobi",
+        "business_hours": {
+            "monday": {
+                "open": "12:00",
+                "close": "22:00"
+            },
+            "tuesday": {
+                "open": "12:00",
+                "close": "22:00"
+            },
+            "wednesday": {
+                "open": "12:00",
+                "close": "22:00"
+            },
+            "thursday": {
+                "open": "12:00",
+                "close": "22:00"
+            },
+            "friday": {
+                "open": "12:00",
+                "close": "23:00"
+            },
+            "saturday": {
+                "open": "12:00",
+                "close": "23:00"
+            },
+            "sunday": {
+                "open": "12:00",
+                "close": "22:00"
+            }
+        }
+    },
+    "products": [
+        {
+            "name": "Butter Chicken",
+            "description": "Tender chicken in rich tomato and cream sauce with aromatic spices",
+            "price": 1400.00,
+            "category": "Main Course",
+            "in_stock": true,
+            "stock_quantity": 30,
+            "variants": [
+                {
+                    "name": "Mild",
+                    "price": 1400.00
+                },
+                {
+                    "name": "Medium",
+                    "price": 1400.00
+                },
+                {
+                    "name": "Hot",
+                    "price": 1400.00
+                }
+            ]
+        },
+        {
+            "name": "Biryani",
+            "description": "Fragrant basmati rice with spices, served with raita and pickle",
+            "price": 1200.00,
+            "category": "Rice Dishes",
+            "in_stock": true,
+            "stock_quantity": 25,
+            "variants": [
+                {
+                    "name": "Vegetable Biryani",
+                    "price": 1000.00
+                },
+                {
+                    "name": "Chicken Biryani",
+                    "price": 1200.00
+                },
+                {
+                    "name": "Mutton Biryani",
+                    "price": 1500.00
+                }
+            ]
+        },
+        {
+            "name": "Palak Paneer",
+            "description": "Fresh cottage cheese in creamy spinach curry",
+            "price": 1100.00,
+            "category": "Vegetarian",
+            "in_stock": true,
+            "stock_quantity": 35
+        },
+        {
+            "name": "Tandoori Chicken",
+            "description": "Marinated chicken cooked in traditional clay oven",
+            "price": 1300.00,
+            "category": "Tandoori",
+            "in_stock": true,
+            "stock_quantity": 20,
+            "variants": [
+                {
+                    "name": "Half Chicken",
+                    "price": 1300.00
+                },
+                {
+                    "name": "Full Chicken",
+                    "price": 2200.00
+                }
+            ]
+        },
+        {
+            "name": "Naan Bread",
+            "description": "Fresh baked Indian bread from tandoor oven",
+            "price": 200.00,
+            "category": "Breads",
+            "in_stock": true,
+            "stock_quantity": 100,
+            "variants": [
+                {
+                    "name": "Plain Naan",
+                    "price": 200.00
+                },
+                {
+                    "name": "Garlic Naan",
+                    "price": 250.00
+                },
+                {
+                    "name": "Cheese Naan",
+                    "price": 300.00
+                }
+            ]
+        },
+        {
+            "name": "Mango Lassi",
+            "description": "Traditional yogurt drink with fresh mango",
+            "price": 350.00,
+            "category": "Beverages",
+            "in_stock": true,
+            "stock_quantity": 50
+        },
+        {
+            "name": "Gulab Jamun",
+            "description": "Sweet milk dumplings in cardamom syrup",
+            "price": 400.00,
+            "category": "Desserts",
+            "in_stock": true,
+            "stock_quantity": 40
+        }
+    ],
+    "services": [
+        {
+            "name": "Indian Cooking Class",
+            "description": "Learn to cook authentic Indian dishes with our chef",
+            "base_price": 2500.00,
+            "duration_minutes": 180,
+            "category": "Classes"
+        },
+        {
+            "name": "Catering Service",
+            "description": "Full Indian catering for weddings, parties, and corporate events",
+            "base_price": 800.00,
+            "duration_minutes": 240,
+            "category": "Catering"
+        }
+    ],
+    "documents": {
+        "about": "Spice Route brings the authentic flavors of India to Nairobi. Our experienced chefs use traditional recipes and the finest spices imported directly from India. From mild and creamy to fiery hot, we cater to all spice preferences while maintaining the authentic taste of Indian cuisine.",
+        "return_policy": "We guarantee the quality and authenticity of our food. If you're not satisfied with your meal, please let us know within 30 minutes of delivery and we'll gladly replace it or provide a full refund. We take food allergies seriously - please inform us of any dietary restrictions.",
+        "delivery_policy": "Free delivery within 8km for orders above KES 1500. Delivery fee is KES 300 for smaller orders. We deliver hot and fresh within 45-60 minutes. Special packaging ensures your food arrives at the perfect temperature.",
+        "payment_policy": "We accept cash, M-Pesa, and card payments. For catering orders above KES 10,000, we require 50% advance payment. Corporate accounts available with monthly billing. Group discounts available for orders above KES 5000."
+    },
+    "faqs": [
+        {
+            "question": "How spicy is your food?",
+            "answer": "We offer three spice levels: Mild (suitable for everyone), Medium (moderately spicy), and Hot (very spicy). We can also customize the spice level to your preference. Just let us know when ordering!"
+        },
+        {
+            "question": "Do you have vegan options?",
+            "answer": "Yes! We have many vegan dishes including dal, vegetable curries, and rice dishes. We use coconut milk instead of dairy in vegan preparations. Please specify 'vegan' when ordering and we'll ensure no dairy products are used."
+        },
+        {
+            "question": "Is your meat halal?",
+            "answer": "Yes, all our meat is halal certified. We source from certified halal suppliers and maintain strict halal standards in our kitchen preparation."
+        },
+        {
+            "question": "Can you cater for large groups?",
+            "answer": "Absolutely! We specialize in catering for weddings, corporate events, and parties. We can serve from 20 to 500+ people. Contact us at least 48 hours in advance for large orders."
+        },
+        {
+            "question": "Do you offer cooking classes?",
+            "answer": "Yes! Our chef conducts cooking classes every Saturday. Learn to make popular dishes like butter chicken, biryani, and naan. Classes include ingredients, recipes, and a meal. Book in advance as spaces are limited."
+        },
+        {
+            "question": "What's included in your biryani?",
+            "answer": "Our biryani comes with fragrant basmati rice, your choice of protein/vegetables, raita (yogurt sauce), pickle, and papadum. It's a complete meal that serves 1-2 people depending on appetite."
+        }
+    ]
+}

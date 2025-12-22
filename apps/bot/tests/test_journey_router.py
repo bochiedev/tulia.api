@@ -202,8 +202,8 @@ class TestJourneyRouter:
         
         assert escalation_decision is not None
         assert escalation_decision.journey == "governance"
-        assert "Explicit human request detected" in escalation_decision.reason
-        assert escalation_decision.metadata["escalation_trigger"] == "explicit_human_request"
+        assert "explicit_request" in escalation_decision.reason
+        assert escalation_decision.metadata["escalation_trigger"] == "explicit_request"
         assert escalation_decision.metadata["escalation_required"] is True
     
     def test_escalation_payment_dispute(self):
@@ -216,7 +216,7 @@ class TestJourneyRouter:
         
         assert escalation_decision is not None
         assert escalation_decision.journey == "governance"
-        assert "Payment dispute or delivery complaint detected" in escalation_decision.reason
+        assert "payment_dispute" in escalation_decision.reason
         assert escalation_decision.metadata["escalation_trigger"] == "payment_dispute"
         assert escalation_decision.metadata["escalation_required"] is True
     
@@ -230,7 +230,7 @@ class TestJourneyRouter:
         
         assert escalation_decision is not None
         assert escalation_decision.journey == "governance"
-        assert "Sensitive/legal/medical content detected" in escalation_decision.reason
+        assert "sensitive_content" in escalation_decision.reason
         assert escalation_decision.metadata["escalation_trigger"] == "sensitive_content"
         assert escalation_decision.metadata["escalation_required"] is True
     
@@ -245,7 +245,7 @@ class TestJourneyRouter:
         
         assert escalation_decision is not None
         assert escalation_decision.journey == "governance"
-        assert "User frustration detected with multiple turns" in escalation_decision.reason
+        assert "user_frustration" in escalation_decision.reason
         assert escalation_decision.metadata["escalation_trigger"] == "user_frustration"
         assert escalation_decision.metadata["escalation_required"] is True
     
@@ -317,7 +317,7 @@ class TestJourneyRouter:
         
         # Escalation should override normal routing
         assert decision.journey == "governance"
-        assert "Explicit human request detected" in decision.reason
+        assert "explicit_request" in decision.reason
         assert decision.metadata["escalation_required"] is True
 
 

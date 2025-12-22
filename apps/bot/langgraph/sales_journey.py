@@ -298,6 +298,11 @@ Return JSON with exact schema:
             # Prepare clarification response
             state.response_text = result.get("clarification_question", "What can I help you find?")
             
+            # Track clarifying questions asked
+            if 'clarifying_questions_asked' not in state.metadata:
+                state.metadata['clarifying_questions_asked'] = 0
+            state.metadata['clarifying_questions_asked'] += 1
+            
             # Set next step to wait for clarification
             state.sales_step = "awaiting_clarification"
         
@@ -309,7 +314,8 @@ Return JSON with exact schema:
                 "request_id": state.request_id,
                 "action": action,
                 "search_query": state.last_catalog_query,
-                "reasoning": result.get("reasoning", "")
+                "reasoning": result.get("reasoning", ""),
+                "clarifying_questions_asked": state.metadata.get('clarifying_questions_asked', 0)
             }
         )
         
@@ -411,6 +417,8 @@ Return JSON with exact schema:
         Returns:
             Formatted input for LLM
         """
+        from apps.bot.services.catalog_fallback_service import CatalogFallbackService
+        
         context_parts = [
             f"Search query: {state.last_catalog_query}",
             f"Total matches found: {state.catalog_total_matches_estimate or 0}",
@@ -431,14 +439,17 @@ Return JSON with exact schema:
         else:
             context_parts.append("No search results available")
         
-        # Add catalog link context
-        if state.catalog_total_matches_estimate and state.catalog_total_matches_estimate >= 50:
-            context_parts.append(f"Large catalog ({state.catalog_total_matches_estimate} total matches) - consider catalog link")
+        # Check if catalog link should be shown using the fallback service
+        clarifying_questions = state.metadata.get('clarifying_questions_asked', 0)
+        should_show_link, reason = CatalogFallbackService.should_show_catalog_link(
+            state=state,
+            message=state.incoming_message,
+            search_results=state.last_catalog_results,
+            clarifying_questions_asked=clarifying_questions
+        )
         
-        # Add rejection history if available
-        rejection_count = getattr(state, 'shortlist_rejections', 0)
-        if rejection_count >= 2:
-            context_parts.append(f"Customer rejected {rejection_count} previous shortlists - consider catalog link")
+        if should_show_link:
+            context_parts.append(f"CATALOG LINK RECOMMENDED: {reason}")
         
         return "\n".join(context_parts)
     
@@ -580,14 +591,24 @@ Return JSON with exact schema:
         
         presentation_lines.append("\nWhich one interests you? Just reply with the number.")
         
-        # Check if catalog link should be shown
-        total_matches = state.catalog_total_matches_estimate or 0
-        show_catalog_link = total_matches >= 50 or len(products_to_show) < 3
+        # Check if catalog link should be shown using the fallback service
+        from apps.bot.services.catalog_fallback_service import CatalogFallbackService
+        
+        clarifying_questions = state.metadata.get('clarifying_questions_asked', 0)
+        show_catalog_link, catalog_link_reason = CatalogFallbackService.should_show_catalog_link(
+            state=state,
+            message=state.incoming_message,
+            search_results=state.last_catalog_results,
+            clarifying_questions_asked=clarifying_questions
+        )
+        
+        # Get total matches from state or estimate from results
+        total_matches = state.catalog_total_matches_estimate or len(state.last_catalog_results)
         
         return {
             "presentation_text": "\n".join(presentation_lines),
             "show_catalog_link": show_catalog_link,
-            "catalog_link_reason": "Large catalog or few results" if show_catalog_link else "",
+            "catalog_link_reason": catalog_link_reason,
             "selected_products": selected_products,
             "total_shown": len(selected_products),
             "has_more_results": total_matches > len(products_to_show)
@@ -604,16 +625,25 @@ Return JSON with exact schema:
         Returns:
             Updated conversation state
         """
+        from apps.bot.services.catalog_fallback_service import CatalogFallbackService
+        
         # Set response text
         presentation_text = result["presentation_text"]
         
-        # Add catalog link if needed
-        if result.get("show_catalog_link", False) and state.catalog_link_base:
-            catalog_url = f"{state.catalog_link_base}?tenant_id={state.tenant_id}"
-            if state.last_catalog_query:
-                catalog_url += f"&search={state.last_catalog_query}"
+        # Add catalog link if needed using the fallback service
+        if result.get("show_catalog_link", False):
+            catalog_url = CatalogFallbackService.generate_catalog_url(
+                state=state,
+                search_query=state.last_catalog_query
+            )
             
-            presentation_text += f"\n\n🌐 Or browse our full catalog: {catalog_url}"
+            if catalog_url:
+                reason = result.get("catalog_link_reason", "")
+                catalog_message = CatalogFallbackService.format_catalog_link_message(
+                    catalog_url=catalog_url,
+                    reason=reason
+                )
+                presentation_text += f"\n\n{catalog_message}"
         
         state.response_text = presentation_text
         
@@ -1000,6 +1030,10 @@ class SalesJourneySubgraph:
                 }
             )
             
+            # Handle None or empty step - default to start
+            if not current_step:
+                current_step = 'start'
+            
             if current_step == 'start':
                 return await self._step_narrow_query(state)
             elif current_step == 'catalog_search':
@@ -1020,6 +1054,15 @@ class SalesJourneySubgraph:
                 return await self._step_payment_methods(state)
             elif current_step == 'payment_routing':
                 return await self._step_payment_routing(state)
+            elif current_step in ['awaiting_amount_confirmation', 'awaiting_method_selection']:
+                # Handle payment confirmations and selections
+                return await self._step_payment_routing(state)
+            elif current_step.startswith('initiate_'):
+                # Handle payment initiation
+                return await self._execute_payment_initiation(state)
+            elif current_step in ['stk_pending', 'c2b_pending', 'card_pending']:
+                # Payment is pending - check status or provide updates
+                return await self._handle_pending_payment(state)
             else:
                 # Default to narrow query for unknown steps
                 return await self._step_narrow_query(state)
@@ -1106,6 +1149,8 @@ class SalesJourneySubgraph:
     
     async def _step_handle_selection(self, state: ConversationState) -> ConversationState:
         """Handle user product selection."""
+        from apps.bot.services.catalog_fallback_service import CatalogFallbackService
+        
         message = (state.incoming_message or "").strip()
         
         # Try to parse selection number
@@ -1114,7 +1159,9 @@ class SalesJourneySubgraph:
             presented_products = getattr(state, 'presented_products', [])
             
             if 1 <= selection_num <= len(presented_products):
-                # Valid selection
+                # Valid selection - reset shortlist rejections
+                CatalogFallbackService.reset_shortlist_rejections(state)
+                
                 selected_product = presented_products[selection_num - 1]
                 state.selected_item_ids = [selected_product["product_id"]]
                 state.sales_step = 'get_item_details'
@@ -1127,13 +1174,19 @@ class SalesJourneySubgraph:
             # Not a number - check for other selection patterns
             message_lower = message.lower()
             
-            # Check for "see all" or catalog requests
-            if any(phrase in message_lower for phrase in ["see all", "catalog", "more options", "browse"]):
-                if state.catalog_link_base:
-                    catalog_url = f"{state.catalog_link_base}?tenant_id={state.tenant_id}"
-                    if state.last_catalog_query:
-                        catalog_url += f"&search={state.last_catalog_query}"
-                    state.response_text = f"Browse our full catalog here: {catalog_url}\n\nOr let me know if you'd like to search for something specific!"
+            # Check for "see all" or catalog requests using the fallback service
+            if CatalogFallbackService._is_see_all_request(message):
+                catalog_url = CatalogFallbackService.generate_catalog_url(
+                    state=state,
+                    search_query=state.last_catalog_query
+                )
+                
+                if catalog_url:
+                    catalog_message = CatalogFallbackService.format_catalog_link_message(
+                        catalog_url=catalog_url,
+                        reason="User requested to see all items"
+                    )
+                    state.response_text = catalog_message
                 else:
                     state.response_text = "Let me search for more options. What specifically are you looking for?"
                     state.sales_step = 'start'  # Restart search process
@@ -1141,9 +1194,37 @@ class SalesJourneySubgraph:
             
             # Check for new search request
             elif any(phrase in message_lower for phrase in ["search", "find", "looking for", "want"]):
-                # New search request
+                # New search request - reset rejections
+                CatalogFallbackService.reset_shortlist_rejections(state)
                 state.sales_step = 'start'
                 return await self._step_narrow_query(state)
+            
+            # Check for rejection patterns
+            elif any(phrase in message_lower for phrase in ["no", "not interested", "none", "different", "other"]):
+                # User rejected the shortlist - increment rejection counter
+                CatalogFallbackService.increment_shortlist_rejection(state)
+                
+                # Check if we should show catalog link due to repeated rejections
+                should_show_link, reason = CatalogFallbackService.should_show_catalog_link(state)
+                
+                if should_show_link:
+                    catalog_url = CatalogFallbackService.generate_catalog_url(
+                        state=state,
+                        search_query=state.last_catalog_query
+                    )
+                    
+                    if catalog_url:
+                        catalog_message = CatalogFallbackService.format_catalog_link_message(
+                            catalog_url=catalog_url,
+                            reason=reason
+                        )
+                        state.response_text = catalog_message
+                        return state
+                
+                # Ask for more specific requirements
+                state.response_text = "I understand these options don't match what you're looking for. Could you tell me more specifically what you need?"
+                state.sales_step = 'start'
+                return state
             
             else:
                 # Invalid selection
@@ -1264,48 +1345,42 @@ Let me check for any available offers and payment options..."""
             return state
     
     async def _step_handle_offers(self, state: ConversationState) -> ConversationState:
-        """Handle offers and coupons."""
-        from apps.bot.tools.registry import get_tool
+        """Handle offers and coupons using the offers journey subgraph."""
+        from apps.bot.langgraph.offers_journey import offers_journey_entry
         
         if not state.order_id:
             state.response_text = "I need to create your order first."
             state.sales_step = 'ready_for_order'
             return state
         
-        # Get offers tool
-        offers_tool = get_tool("offers_get_applicable")
-        if not offers_tool:
-            # Skip offers if tool not available
+        # Execute offers journey subgraph
+        try:
+            state = await offers_journey_entry(state)
+            
+            # After offers journey, proceed to payment
+            state.sales_step = 'offers_handled'
+            
+            # If offers journey didn't set a response, proceed to payment
+            if not state.response_text or "proceed" in state.response_text.lower():
+                return await self._step_payment_methods(state)
+            
+            return state
+            
+        except Exception as e:
+            logger.error(
+                f"Offers journey failed: {e}",
+                extra={
+                    "tenant_id": state.tenant_id,
+                    "conversation_id": state.conversation_id,
+                    "request_id": state.request_id
+                },
+                exc_info=True
+            )
+            
+            # Fallback to payment if offers journey fails
+            state.response_text = "I'm having trouble with offers right now. Let's proceed to payment."
             state.sales_step = 'offers_handled'
             return await self._step_payment_methods(state)
-        
-        # Get applicable offers
-        offers_result = offers_tool.execute(
-            tenant_id=state.tenant_id,
-            request_id=state.request_id,
-            conversation_id=state.conversation_id,
-            order_id=state.order_id
-        )
-        
-        if offers_result.success and offers_result.data.get("offers"):
-            # Present available offers
-            offers = offers_result.data["offers"]
-            offers_text = []
-            
-            for offer in offers[:3]:  # Limit to 3 offers
-                discount_text = f"{offer.get('discount_percent', 0)}%" if offer.get('discount_percent') else f"KES {offer.get('discount_amount', 0)}"
-                offers_text.append(f"• {offer.get('name', 'Special Offer')} - {discount_text} off")
-            
-            if offers_text:
-                state.response_text += f"\n\n🎉 Available offers:\n{chr(10).join(offers_text)}\n\nWould you like to apply any of these offers? Or shall we proceed to payment?"
-                state.available_offers = offers
-                # Stay in offers_handled step to wait for user response
-                state.sales_step = 'offers_handled'
-                return state
-        
-        # No offers or offers failed - proceed to payment
-        state.sales_step = 'offers_handled'
-        return await self._step_payment_methods(state)
     
     async def _step_payment_methods(self, state: ConversationState) -> ConversationState:
         """Get available payment methods."""
@@ -1334,35 +1409,312 @@ Let me check for any available offers and payment options..."""
             return state
     
     async def _step_payment_routing(self, state: ConversationState) -> ConversationState:
-        """Route to appropriate payment method."""
+        """Route to appropriate payment method using payment router prompt node."""
+        from apps.bot.langgraph.payment_nodes import PaymentRouterPromptNode
+        
         if not state.available_payment_methods:
             state.response_text = "No payment methods are available right now. Please contact support for assistance."
             state.set_escalation("No payment methods available")
             return state
         
-        # Present payment options
-        methods_text = []
-        for i, method in enumerate(state.available_payment_methods, 1):
-            method_name = method.get('name', 'Payment Method')
-            methods_text.append(f"{i}. {method_name}")
+        # Create and execute payment router prompt node
+        payment_router_node = PaymentRouterPromptNode()
+        updated_state = await payment_router_node.execute(state)
         
-        total = state.order_totals.get('total', 0)
-        currency = state.order_totals.get('currency', 'KES')
+        # Check what action was decided
+        payment_step = getattr(updated_state, 'payment_step', '')
         
-        payment_text = f"""💳 Choose your payment method:
+        if payment_step.startswith('initiate_'):
+            # Payment initiation requested - execute the payment tool
+            return await self._execute_payment_initiation(updated_state)
+        else:
+            # Waiting for confirmation or selection - response already set
+            return updated_state
+    
+    async def _execute_payment_initiation(self, state: ConversationState) -> ConversationState:
+        """Execute the appropriate payment initiation tool."""
+        from apps.bot.tools.registry import get_tool
+        
+        payment_step = getattr(state, 'payment_step', '')
+        selected_method = getattr(state, 'selected_payment_method', '')
+        
+        if not state.order_id:
+            state.response_text = "I need to create your order first before processing payment."
+            return state
+        
+        try:
+            if payment_step == 'initiate_mpesa_stk':
+                # Initiate STK push
+                stk_tool = get_tool("payment_initiate_stk_push")
+                if not stk_tool:
+                    state.response_text = "STK push payment is not available right now. Please try another method."
+                    return state
+                
+                # Need phone number for STK push
+                if not state.phone_e164:
+                    state.response_text = "I need your phone number to send the STK push. Please provide your M-PESA registered number."
+                    state.payment_step = "awaiting_phone_number"
+                    return state
+                
+                result = stk_tool.execute(
+                    tenant_id=state.tenant_id,
+                    request_id=state.request_id,
+                    conversation_id=state.conversation_id,
+                    order_id=state.order_id,
+                    phone_number=state.phone_e164
+                )
+                
+                if result.success:
+                    data = result.data
+                    state.payment_request_id = data.get("payment_request_id")
+                    state.payment_status = "pending"
+                    
+                    total = state.order_totals.get('total', 0)
+                    currency = state.order_totals.get('currency', 'KES')
+                    
+                    state.response_text = f"""📱 STK Push sent to {state.phone_e164}!
 
-{chr(10).join(methods_text)}
+Amount: {currency} {total:,.0f}
+Reference: {data.get('reference', 'N/A')}
 
-Total to pay: {currency} {total:,.0f}
+Please check your phone and enter your M-PESA PIN to complete the payment.
 
-Reply with the number of your preferred payment method."""
+I'll notify you once the payment is confirmed."""
+                    
+                    state.payment_step = "stk_pending"
+                else:
+                    state.response_text = f"STK push failed: {result.error}. Would you like to try M-PESA C2B instructions instead?"
+                    state.payment_step = "stk_failed"
+            
+            elif payment_step == 'initiate_mpesa_c2b':
+                # Get C2B instructions
+                c2b_tool = get_tool("payment_get_c2b_instructions")
+                if not c2b_tool:
+                    state.response_text = "C2B payment instructions are not available right now. Please try another method."
+                    return state
+                
+                result = c2b_tool.execute(
+                    tenant_id=state.tenant_id,
+                    request_id=state.request_id,
+                    conversation_id=state.conversation_id,
+                    order_id=state.order_id
+                )
+                
+                if result.success:
+                    data = result.data
+                    instructions = data.get("instructions", [])
+                    
+                    total = state.order_totals.get('total', 0)
+                    currency = state.order_totals.get('currency', 'KES')
+                    
+                    instructions_text = "\n".join([f"{i+1}. {step}" for i, step in enumerate(instructions)])
+                    
+                    state.response_text = f"""💰 M-PESA Payment Instructions
+
+Amount: {currency} {total:,.0f}
+Reference: {data.get('reference', 'N/A')}
+
+{instructions_text}
+
+Once you've completed the payment, I'll confirm it automatically. This usually takes 1-2 minutes."""
+                    
+                    state.payment_step = "c2b_pending"
+                    state.payment_status = "pending"
+                else:
+                    state.response_text = f"Could not generate payment instructions: {result.error}. Please try another method."
+                    state.payment_step = "c2b_failed"
+            
+            elif payment_step == 'initiate_card':
+                # Create PesaPal checkout
+                card_tool = get_tool("payment_create_pesapal_checkout")
+                if not card_tool:
+                    state.response_text = "Card payment is not available right now. Please try another method."
+                    return state
+                
+                result = card_tool.execute(
+                    tenant_id=state.tenant_id,
+                    request_id=state.request_id,
+                    conversation_id=state.conversation_id,
+                    order_id=state.order_id
+                )
+                
+                if result.success:
+                    data = result.data
+                    checkout_url = data.get("checkout_url")
+                    
+                    total = state.order_totals.get('total', 0)
+                    currency = state.order_totals.get('currency', 'KES')
+                    
+                    state.response_text = f"""💳 Secure Card Payment
+
+Amount: {currency} {total:,.0f}
+
+Click the link below to complete your payment securely:
+{checkout_url}
+
+This link will take you to our secure payment page where you can pay with your card safely.
+
+I'll notify you once the payment is confirmed."""
+                    
+                    state.payment_step = "card_pending"
+                    state.payment_status = "pending"
+                    state.payment_request_id = data.get("payment_request_id")
+                else:
+                    state.response_text = f"Could not create card payment: {result.error}. Please try another method."
+                    state.payment_step = "card_failed"
+            
+            else:
+                state.response_text = "I'm not sure how to process that payment method. Please select a valid option."
+                state.payment_step = "method_selection_failed"
         
-        state.response_text = payment_text
-        
-        # Sales journey complete - payment selection will be handled by payment journey
-        state.journey = "payment"  # Transition to payment journey
+        except Exception as e:
+            logger.error(
+                f"Payment initiation failed: {e}",
+                extra={
+                    "tenant_id": state.tenant_id,
+                    "conversation_id": state.conversation_id,
+                    "request_id": state.request_id,
+                    "payment_step": payment_step,
+                    "selected_method": selected_method
+                },
+                exc_info=True
+            )
+            
+            state.response_text = "I encountered an error while processing your payment. Please try again or contact support."
+            state.set_escalation(f"Payment initiation error: {str(e)}")
         
         return state
+    
+    async def _handle_pending_payment(self, state: ConversationState) -> ConversationState:
+        """Handle pending payment status checks."""
+        from apps.bot.tools.registry import get_tool
+        
+        if not state.order_id:
+            state.response_text = "I can't check payment status without an order. Please contact support."
+            return state
+        
+        # Get order status to check payment
+        status_tool = get_tool("order_get_status")
+        if not status_tool:
+            state.response_text = "I can't check payment status right now. Please try again later."
+            return state
+        
+        try:
+            result = status_tool.execute(
+                tenant_id=state.tenant_id,
+                request_id=state.request_id,
+                conversation_id=state.conversation_id,
+                order_id=state.order_id
+            )
+            
+            if result.success:
+                data = result.data
+                payment_status = data.get("payment_status", "unknown")
+                order_status = data.get("order_status", "unknown")
+                
+                if payment_status == "paid":
+                    # Payment successful
+                    state.payment_status = "paid"
+                    total = state.order_totals.get('total', 0)
+                    currency = state.order_totals.get('currency', 'KES')
+                    
+                    state.response_text = f"""✅ Payment Confirmed!
+
+Amount: {currency} {total:,.0f}
+Order: #{data.get('order_reference', state.order_id)}
+Status: {order_status.title()}
+
+Thank you for your purchase! Your order is being processed and you'll receive updates on its progress.
+
+Is there anything else I can help you with?"""
+                    
+                    # Sales journey complete
+                    state.sales_step = "payment_completed"
+                    state.journey = "completed"
+                    
+                elif payment_status == "failed":
+                    # Payment failed
+                    state.payment_status = "failed"
+                    state.response_text = """❌ Payment Failed
+
+Your payment could not be processed. This could be due to:
+• Insufficient funds
+• Network issues
+• Cancelled transaction
+
+Would you like to try again with the same method or choose a different payment option?"""
+                    
+                    state.sales_step = "payment_failed"
+                    
+                elif payment_status == "pending":
+                    # Still pending
+                    payment_step = getattr(state, 'payment_step', '')
+                    
+                    if payment_step == 'stk_pending':
+                        state.response_text = "Your STK push is still pending. Please check your phone and enter your M-PESA PIN if you haven't already."
+                    elif payment_step == 'c2b_pending':
+                        state.response_text = "I'm still waiting for your M-PESA payment. Please complete the payment using the instructions I provided."
+                    elif payment_step == 'card_pending':
+                        state.response_text = "Your card payment is still being processed. Please complete the payment on the secure page if you haven't already."
+                    else:
+                        state.response_text = "Your payment is still being processed. I'll update you once it's confirmed."
+                
+                else:
+                    # Unknown status
+                    state.response_text = f"Payment status: {payment_status}. Let me check with our payment team for an update."
+                    state.set_escalation(f"Unknown payment status: {payment_status}")
+            
+            else:
+                state.response_text = f"I couldn't check your payment status: {result.error}. Please try again or contact support."
+        
+        except Exception as e:
+            logger.error(
+                f"Payment status check failed: {e}",
+                extra={
+                    "tenant_id": state.tenant_id,
+                    "conversation_id": state.conversation_id,
+                    "request_id": state.request_id,
+                    "order_id": state.order_id
+                },
+                exc_info=True
+            )
+            
+            state.response_text = "I encountered an error checking your payment status. Please contact support for assistance."
+            state.set_escalation(f"Payment status check error: {str(e)}")
+        
+        return state
+    
+    async def handle_catalog_return(
+        self,
+        state: ConversationState,
+        selected_product_id: str,
+        return_message: Optional[str] = None
+    ) -> ConversationState:
+        """
+        Handle customer return from web catalog with selected product.
+        
+        This method processes the deep-link return from the web catalog when a customer
+        selects a product and returns to the WhatsApp conversation.
+        
+        Args:
+            state: Current conversation state
+            selected_product_id: Product ID selected from catalog
+            return_message: Optional return message from catalog
+            
+        Returns:
+            Updated conversation state with product selection
+        """
+        from apps.bot.services.catalog_fallback_service import CatalogFallbackService
+        
+        # Use the catalog fallback service to handle the return
+        updated_state = CatalogFallbackService.handle_catalog_return(
+            state=state,
+            selected_product_id=selected_product_id,
+            return_message=return_message
+        )
+        
+        # Continue with getting item details
+        return await self._step_get_item_details(updated_state)
 
 
 # Sales journey entry function for LangGraph integration

@@ -1,0 +1,193 @@
+{
+    "tenant": {
+        "name": "Urban Eats Restaurant",
+        "slug": "urban-eats-restaurant",
+        "whatsapp_number": "+254722100008",
+        "contact_email": "orders@urbaneats.co.ke",
+        "contact_phone": "+254722100008",
+        "timezone": "Africa/Nairobi",
+        "bot_name": "Chef Alex",
+        "tone_style": "friendly_concise",
+        "default_language": "en",
+        "allowed_languages": [
+            "en"
+        ],
+        "subscription_tier": "Growth",
+        "billing_cycle": "yearly"
+    },
+    "business_info": {
+        "description": "Contemporary restaurant serving fusion cuisine with local and international flavors",
+        "address": "Westlands, Nairobi",
+        "business_hours": {
+            "monday": {
+                "open": "11:00",
+                "close": "23:00"
+            },
+            "tuesday": {
+                "open": "11:00",
+                "close": "23:00"
+            },
+            "wednesday": {
+                "open": "11:00",
+                "close": "23:00"
+            },
+            "thursday": {
+                "open": "11:00",
+                "close": "23:00"
+            },
+            "friday": {
+                "open": "11:00",
+                "close": "24:00"
+            },
+            "saturday": {
+                "open": "10:00",
+                "close": "24:00"
+            },
+            "sunday": {
+                "open": "10:00",
+                "close": "22:00"
+            }
+        }
+    },
+    "products": [
+        {
+            "name": "Truffle Mushroom Risotto",
+            "description": "Creamy arborio rice with wild mushrooms and truffle oil",
+            "price": 1800.00,
+            "category": "Main Course",
+            "in_stock": true,
+            "stock_quantity": 20
+        },
+        {
+            "name": "Grilled Salmon Teriyaki",
+            "description": "Fresh salmon fillet with teriyaki glaze, served with jasmine rice",
+            "price": 2200.00,
+            "category": "Main Course",
+            "in_stock": true,
+            "stock_quantity": 15
+        },
+        {
+            "name": "Wagyu Beef Burger",
+            "description": "Premium wagyu beef patty with artisan bun and hand-cut fries",
+            "price": 2500.00,
+            "category": "Burgers",
+            "in_stock": true,
+            "stock_quantity": 25
+        },
+        {
+            "name": "Caesar Salad",
+            "description": "Crisp romaine lettuce with parmesan, croutons, and Caesar dressing",
+            "price": 1200.00,
+            "category": "Salads",
+            "in_stock": true,
+            "stock_quantity": 30,
+            "variants": [
+                {
+                    "name": "Regular",
+                    "price": 1200.00
+                },
+                {
+                    "name": "With Grilled Chicken",
+                    "price": 1600.00
+                },
+                {
+                    "name": "With Grilled Shrimp",
+                    "price": 1800.00
+                }
+            ]
+        },
+        {
+            "name": "Chocolate Lava Cake",
+            "description": "Warm chocolate cake with molten center, served with vanilla ice cream",
+            "price": 800.00,
+            "category": "Desserts",
+            "in_stock": true,
+            "stock_quantity": 40
+        },
+        {
+            "name": "Craft Beer Selection",
+            "description": "Local and imported craft beers",
+            "price": 450.00,
+            "category": "Beverages",
+            "in_stock": true,
+            "stock_quantity": 100,
+            "variants": [
+                {
+                    "name": "White Cap Lager",
+                    "price": 350.00
+                },
+                {
+                    "name": "Tusker Malt",
+                    "price": 400.00
+                },
+                {
+                    "name": "Imported IPA",
+                    "price": 600.00
+                }
+            ]
+        },
+        {
+            "name": "Fresh Fruit Smoothie",
+            "description": "Blend of seasonal fruits with yogurt or coconut milk",
+            "price": 500.00,
+            "category": "Beverages",
+            "in_stock": true,
+            "stock_quantity": 50
+        }
+    ],
+    "services": [
+        {
+            "name": "Private Dining Experience",
+            "description": "Exclusive private dining room for special occasions",
+            "base_price": 8000.00,
+            "duration_minutes": 180,
+            "category": "Private Events"
+        },
+        {
+            "name": "Chef's Table Experience",
+            "description": "Interactive dining experience with the chef",
+            "base_price": 5000.00,
+            "duration_minutes": 150,
+            "category": "Special Experiences"
+        },
+        {
+            "name": "Corporate Lunch Catering",
+            "description": "Professional catering for corporate meetings and events",
+            "base_price": 1500.00,
+            "duration_minutes": 120,
+            "category": "Catering"
+        }
+    ],
+    "documents": {
+        "about": "Urban Eats Restaurant brings together the best of local and international cuisine in a contemporary setting. Our chef-driven menu features fresh, locally-sourced ingredients prepared with modern techniques. Whether you're here for a business lunch, romantic dinner, or celebration with friends, we provide an exceptional dining experience.",
+        "return_policy": "We stand behind the quality of our food. If you're not satisfied with your meal, please let us know immediately and we'll gladly replace it or remove it from your bill. Due to food safety regulations, we cannot accept returns of partially consumed items.",
+        "delivery_policy": "We offer delivery within 10km of our restaurant through our delivery partners. Minimum order is KES 1000. Delivery fee varies by distance (KES 200-500). We also offer pickup service with 15% discount on total bill.",
+        "payment_policy": "We accept cash, M-Pesa, card payments, and mobile banking. For large groups (8+ people), we add an 18% service charge. Corporate accounts available with monthly billing. Reservations recommended for dinner service."
+    },
+    "faqs": [
+        {
+            "question": "Do you accommodate dietary restrictions?",
+            "answer": "Absolutely! We can accommodate vegetarian, vegan, gluten-free, and other dietary needs. Please inform us when making your reservation or ordering, and our chef will prepare something special for you."
+        },
+        {
+            "question": "Do you take reservations?",
+            "answer": "Yes, we highly recommend reservations, especially for dinner service and weekends. You can book via WhatsApp, phone, or our website. Walk-ins are welcome but may have to wait during busy periods."
+        },
+        {
+            "question": "Is there a dress code?",
+            "answer": "We have a smart casual dress code. No flip-flops, shorts, or sleeveless shirts for men during dinner service. During lunch, we're more relaxed. We want everyone to feel comfortable while maintaining our upscale atmosphere."
+        },
+        {
+            "question": "Do you have a kids menu?",
+            "answer": "Yes! We have a special kids menu with smaller portions and kid-friendly options like pasta, grilled chicken, and fish fingers. All kids meals come with a drink and dessert for KES 800."
+        },
+        {
+            "question": "Can I host a private event?",
+            "answer": "Yes! We have a private dining room that seats up to 20 people. We also offer full restaurant buyouts for larger events. Contact us to discuss your requirements and we'll create a custom package."
+        },
+        {
+            "question": "Do you offer cooking classes?",
+            "answer": "We occasionally offer cooking classes and wine pairing events. Follow us on social media or join our WhatsApp updates to be notified of upcoming special events and classes."
+        }
+    ]
+}

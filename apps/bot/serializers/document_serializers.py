@@ -153,4 +153,8 @@ class DocumentStatusSerializer(serializers.ModelSerializer):
             'created_at',
             'processed_at',
         ]
-        read_only_fields = '__all__'
+        read_only_fields = [
+            'id', 'tenant', 'tenant_name', 'title', 'content_type',
+            'file_size', 'status', 'error_message', 'chunk_count',
+            'created_at', 'processed_at'
+        ]
