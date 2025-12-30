@@ -1,0 +1,19 @@
+Verify Your Email Address - {{ platform_name }}
+
+Hi {{ user_name }},
+
+We need to verify your email address to ensure the security of your {{ platform_name }} account.
+
+Please visit this link to verify your email address:
+{{ verification_url }}
+
+SECURITY NOTICE: This verification link will expire in 24 hours. If you didn't request this verification, please ignore this email.
+
+Best regards,
+The {{ platform_name }} Team
+
+---
+{{ platform_name }} - Conversational Commerce Platform
+{{ platform_url }}
+
+Questions? Contact us at {{ support_email }}

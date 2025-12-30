@@ -1,0 +1,53 @@
+{% extends "emails/base.html" %}
+
+{% block title %}Welcome to {{ platform_name }} - Verify Your Email{% endblock %}
+
+{% block content %}
+<h1>Welcome to {{ platform_name }}! 🎉</h1>
+
+<p>Hi {{ user_name }},</p>
+
+<p>
+    Thank you for joining {{ platform_name }}! We're excited to help you build amazing 
+    conversational commerce experiences with WhatsApp.
+</p>
+
+<div class="success">
+    <strong>Your account has been created successfully!</strong><br>
+    Email: {{ user_email }}
+</div>
+
+<p>
+    To get started, please verify your email address by clicking the button below:
+</p>
+
+<p style="text-align: center;">
+    <a href="{{ verification_url }}" class="button">Verify Email Address</a>
+</p>
+
+<p>
+    Or copy and paste this link into your browser:<br>
+    <code style="background-color: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 12px;">{{ verification_url }}</code>
+</p>
+
+<div class="highlight">
+    <h3>What's Next?</h3>
+    <p>Once you verify your email, you can:</p>
+    <ul>
+        <li>🔧 Configure your WhatsApp integration</li>
+        <li>🛍️ Add your products and services</li>
+        <li>🤖 Train your AI bot with your business knowledge</li>
+        <li>📱 Start selling through WhatsApp conversations</li>
+    </ul>
+</div>
+
+<div class="warning">
+    <strong>Important:</strong> This verification link will expire in 24 hours. 
+    If you didn't create this account, please ignore this email.
+</div>
+
+<p>
+    Welcome aboard!<br>
+    The {{ platform_name }} Team
+</p>
+{% endblock %}

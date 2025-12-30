@@ -1,0 +1,29 @@
+Welcome to {{ platform_name }}!
+
+Hi {{ user_name }},
+
+Thank you for joining {{ platform_name }}! We're excited to help you build amazing conversational commerce experiences with WhatsApp.
+
+Your account has been created successfully!
+Email: {{ user_email }}
+
+To get started, please verify your email address by visiting this link:
+{{ verification_url }}
+
+What's Next?
+Once you verify your email, you can:
+- Configure your WhatsApp integration
+- Add your products and services  
+- Train your AI bot with your business knowledge
+- Start selling through WhatsApp conversations
+
+IMPORTANT: This verification link will expire in 24 hours. If you didn't create this account, please ignore this email.
+
+Welcome aboard!
+The {{ platform_name }} Team
+
+---
+{{ platform_name }} - Conversational Commerce Platform
+{{ platform_url }}
+
+Questions? Contact us at {{ support_email }}

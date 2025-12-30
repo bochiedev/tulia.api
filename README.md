@@ -2,7 +2,7 @@
 
 > **Multi-tenant WhatsApp commerce platform** that enables businesses to sell products and services through AI-powered conversations.
 
-[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![Django](https://img.shields.io/badge/Django-4.2+-green.svg)](https://www.djangoproject.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-blue.svg)](https://www.postgresql.org/)
 
@@ -16,7 +16,7 @@
 # 1. Clone and setup
 git clone <repository-url>
 cd tulia.api
-python -m venv venv
+python3.11 -m venv venv  # OR python -m venv venv if 3.11 is default
 source venv/bin/activate
 
 # 2. Choose your installation type:
@@ -28,6 +28,7 @@ pip install -r requirements.txt
 pip install -r requirements-minimal.txt
 
 # OR development installation (includes testing tools)
+pip install -r requirements-dev.txt
 pip install -r requirements-dev.txt
 
 # 2. Configure (see SETUP.md for details)

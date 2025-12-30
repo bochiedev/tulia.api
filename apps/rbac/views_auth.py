@@ -177,32 +177,23 @@ class RegistrationView(APIView):
             
             # Send verification email
             verification_url = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
+            
+            # Use our enhanced email service
+            from apps.core.services.email_service import send_welcome_email
+            
             try:
-                send_mail(
-                    subject='Verify your email address',
-                    message=f'''
-Welcome to Tulia AI!
-
-Please verify your email address by clicking the link below:
-
-{verification_url}
-
-This link will expire in 24 hours.
-
-If you didn't create this account, please ignore this email.
-
-Best regards,
-The Tulia AI Team
-                    ''',
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[user.email],
-                    fail_silently=True,
+                email_sent = send_welcome_email(
+                    user_email=user.email,
+                    user_name=user.get_full_name(),
+                    verification_url=verification_url
                 )
+                
+                if not email_sent:
+                    logger.warning(f"Failed to send welcome email to {user.email}")
+                    
             except Exception as e:
                 # Log error but don't fail registration
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Failed to send verification email: {e}")
+                logger.error(f"Failed to send welcome email to {user.email}: {e}")
             
             # Return response
             return Response(
