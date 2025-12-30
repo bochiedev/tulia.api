@@ -2,13 +2,15 @@
 LangGraph Routing Infrastructure.
 
 This module provides routing logic for the LangGraph orchestration system,
-including journey routing and conversation flow control.
+including journey routing and conversation flow control with enhanced
+escalation rules and human handoff management.
 """
 import logging
 from typing import Dict, Any, Optional, Literal
 from dataclasses import dataclass, field
 
 from apps.bot.conversation_state import ConversationState, Intent, Journey, GovernorClass
+from apps.bot.services.escalation_service import EscalationService, EscalationContext
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,8 @@ class ConversationRouter:
     Implements the routing logic based on intent classification,
     confidence thresholds, and conversation governance rules with
     exact routing conditions as specified in the design.
+    
+    Enhanced with comprehensive escalation rules and human handoff management.
     """
     
     # Routing thresholds as specified in design (EXACT)
@@ -51,8 +55,10 @@ class ConversationRouter:
     LANGUAGE_CONFIDENCE_THRESHOLD = 0.75
     
     def __init__(self):
-        """Initialize conversation router."""
+        """Initialize conversation router with escalation service."""
         self.logger = logging.getLogger(__name__)
+        self.escalation_service = EscalationService()
+        self._escalation_contexts = {}  # Track escalation context per conversation
     
     def route_conversation(self, state: ConversationState) -> RouteDecision:
         """
@@ -244,6 +250,9 @@ class ConversationRouter:
         """
         Check for EXACT escalation triggers that require immediate human handoff.
         
+        Enhanced implementation using EscalationService for comprehensive
+        escalation detection and context tracking.
+        
         Escalate immediately if ANY is true:
         - User explicitly asks for human ("agent", "human", "call me")
         - Payment disputes ("I paid but..."), chargebacks, refunds, delivery complaints beyond policy
@@ -258,94 +267,156 @@ class ConversationRouter:
         Returns:
             RouteDecision for escalation or None if no escalation needed
         """
-        message = (state.incoming_message or "").lower()
+        # Get or create escalation context for this conversation
+        escalation_context = self._get_escalation_context(state.conversation_id)
         
-        # 1. Explicit human request
-        human_keywords = ['agent', 'human', 'person', 'call me', 'speak to someone', 'representative', 'manager', 'supervisor']
-        if any(keyword in message for keyword in human_keywords):
+        # Check escalation triggers using enhanced service
+        should_escalate, reason, priority, category = self.escalation_service.check_escalation_triggers(
+            state, escalation_context
+        )
+        
+        if should_escalate:
+            # Log escalation decision
+            self.logger.info(
+                f"Escalation triggered for conversation {state.conversation_id}: "
+                f"reason={reason}, priority={priority}, category={category}"
+            )
+            
+            # Create escalation log entry
+            self._log_escalation_decision(state, reason, escalation_context)
+            
             return RouteDecision(
                 journey="governance",
-                reason="Explicit human request detected",
+                reason=f"Escalation required: {reason}",
                 confidence=1.0,
                 metadata={
-                    "escalation_trigger": "explicit_human_request",
+                    "escalation_trigger": reason,
                     "escalation_required": True,
-                    "keywords_found": [kw for kw in human_keywords if kw in message]
-                }
-            )
-        
-        # 2. Payment disputes and complaints
-        payment_dispute_keywords = [
-            'i paid but', 'already paid', 'charged twice', 'wrong amount', 'refund',
-            'chargeback', 'dispute', 'fraud', 'unauthorized', 'delivery problem',
-            'never received', 'damaged', 'broken on arrival', 'wrong item'
-        ]
-        if any(keyword in message for keyword in payment_dispute_keywords):
-            return RouteDecision(
-                journey="governance",
-                reason="Payment dispute or delivery complaint detected",
-                confidence=0.9,
-                metadata={
-                    "escalation_trigger": "payment_dispute",
-                    "escalation_required": True,
-                    "keywords_found": [kw for kw in payment_dispute_keywords if kw in message]
-                }
-            )
-        
-        # 3. Check if escalation is already flagged in state
-        if state.escalation_required:
-            return RouteDecision(
-                journey="governance",
-                reason=f"Escalation already required: {state.escalation_reason}",
-                confidence=1.0,
-                metadata={
-                    "escalation_trigger": "state_flagged",
-                    "escalation_required": True,
-                    "escalation_reason": state.escalation_reason
-                }
-            )
-        
-        # 4. Sensitive/legal/medical content (basic detection)
-        sensitive_keywords = [
-            'legal', 'lawyer', 'attorney', 'court', 'sue', 'lawsuit',
-            'medical', 'doctor', 'hospital', 'emergency', 'urgent',
-            'death', 'died', 'suicide', 'depression', 'mental health'
-        ]
-        if any(keyword in message for keyword in sensitive_keywords):
-            return RouteDecision(
-                journey="governance",
-                reason="Sensitive/legal/medical content detected",
-                confidence=0.8,
-                metadata={
-                    "escalation_trigger": "sensitive_content",
-                    "escalation_required": True,
-                    "keywords_found": [kw for kw in sensitive_keywords if kw in message]
-                }
-            )
-        
-        # 5. User frustration indicators
-        frustration_keywords = [
-            'frustrated', 'angry', 'upset', 'terrible', 'awful', 'horrible',
-            'useless', 'stupid', 'waste of time', 'not helping', 'doesnt work',
-            'fed up', 'sick of', 'enough', 'ridiculous'
-        ]
-        if any(keyword in message for keyword in frustration_keywords):
-            # Check if we've had multiple turns without resolution
-            if state.turn_count >= 3:
-                return RouteDecision(
-                    journey="governance",
-                    reason="User frustration detected with multiple turns",
-                    confidence=0.7,
-                    metadata={
-                        "escalation_trigger": "user_frustration",
-                        "escalation_required": True,
-                        "turn_count": state.turn_count,
-                        "keywords_found": [kw for kw in frustration_keywords if kw in message]
+                    "escalation_reason": reason,
+                    "escalation_priority": priority,
+                    "escalation_category": category,
+                    "escalation_context": {
+                        "consecutive_tool_errors": escalation_context.consecutive_tool_errors,
+                        "clarification_loops": escalation_context.clarification_loops,
+                        "turn_count": state.turn_count
                     }
-                )
+                }
+            )
         
         # No escalation triggers found
         return None
+    
+    def _get_escalation_context(self, conversation_id: str) -> EscalationContext:
+        """
+        Get or create escalation context for a conversation.
+        
+        Args:
+            conversation_id: Conversation identifier
+            
+        Returns:
+            EscalationContext for the conversation
+        """
+        if conversation_id not in self._escalation_contexts:
+            self._escalation_contexts[conversation_id] = EscalationContext()
+        
+        return self._escalation_contexts[conversation_id]
+    
+    def track_tool_failure(self, conversation_id: str, tool_name: str, error_message: str):
+        """
+        Track tool failure for escalation decision making.
+        
+        Args:
+            conversation_id: Conversation identifier
+            tool_name: Name of the failed tool
+            error_message: Error message from tool failure
+        """
+        escalation_context = self._get_escalation_context(conversation_id)
+        self.escalation_service.track_tool_failure(escalation_context, tool_name, error_message)
+    
+    def track_clarification_loop(self, conversation_id: str):
+        """
+        Track clarification loop for escalation decision making.
+        
+        Args:
+            conversation_id: Conversation identifier
+        """
+        escalation_context = self._get_escalation_context(conversation_id)
+        self.escalation_service.track_clarification_loop(escalation_context)
+    
+    def reset_failure_counters(self, conversation_id: str):
+        """
+        Reset failure counters after successful action.
+        
+        Args:
+            conversation_id: Conversation identifier
+        """
+        escalation_context = self._get_escalation_context(conversation_id)
+        self.escalation_service.reset_failure_counters(escalation_context)
+    
+    def _log_escalation_decision(
+        self, 
+        state: ConversationState, 
+        reason: str, 
+        escalation_context: EscalationContext
+    ):
+        """
+        Log escalation decision for analytics and debugging.
+        
+        Args:
+            state: Current conversation state
+            reason: Escalation reason
+            escalation_context: Escalation context
+        """
+        try:
+            from apps.bot.models import EscalationLog
+            from apps.tenants.models import Customer
+            
+            # Get customer if available
+            customer = None
+            if state.customer_id:
+                try:
+                    customer = Customer.objects.get(id=state.customer_id, tenant_id=state.tenant_id)
+                except Customer.DoesNotExist:
+                    pass
+            
+            # Create escalation log
+            EscalationLog.objects.create(
+                tenant_id=state.tenant_id,
+                customer=customer,
+                conversation_id=state.conversation_id,
+                request_id=state.request_id,
+                escalation_trigger=reason,
+                escalation_reason=f"Escalation triggered: {reason}",
+                journey=state.journey,
+                journey_step=getattr(state, f"{state.journey}_step", "unknown"),
+                turn_count=state.turn_count,
+                intent=state.intent,
+                intent_confidence=state.intent_confidence,
+                consecutive_tool_errors=escalation_context.consecutive_tool_errors,
+                clarification_loops=escalation_context.clarification_loops,
+                escalation_successful=True,
+                metadata={
+                    "escalation_context": {
+                        "conversation_summary": escalation_context.conversation_summary,
+                        "current_journey": escalation_context.current_journey,
+                        "current_step": escalation_context.current_step,
+                        "escalation_triggers": escalation_context.escalation_triggers
+                    }
+                }
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Failed to log escalation decision: {str(e)}")
+    
+    def cleanup_escalation_context(self, conversation_id: str):
+        """
+        Clean up escalation context when conversation ends.
+        
+        Args:
+            conversation_id: Conversation identifier
+        """
+        if conversation_id in self._escalation_contexts:
+            del self._escalation_contexts[conversation_id]
     
     def _intent_to_journey(self, intent: Intent) -> Journey:
         """

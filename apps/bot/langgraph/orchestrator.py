@@ -2,9 +2,11 @@
 LangGraph Orchestrator - Core state machine for conversation management.
 
 This module implements the central LangGraph orchestrator that manages
-all conversation flows through structured state transitions.
+all conversation flows through structured state transitions with
+comprehensive error handling and observability.
 """
 import logging
+import time
 from typing import Dict, Any, Optional, List, Callable
 from dataclasses import asdict
 
@@ -15,6 +17,17 @@ from langchain_core.runnables import RunnableConfig
 from apps.bot.conversation_state import ConversationState, ConversationStateManager
 from apps.bot.langgraph.nodes import NodeRegistry
 from apps.bot.langgraph.routing import RouteDecision, ConversationRouter
+from apps.bot.services.escalation_service import EscalationService
+from apps.bot.services.conversation_logger import conversation_logger
+from apps.bot.services.orchestrator_error_handler import (
+    orchestrator_error_handler, with_node_error_handling
+)
+from apps.bot.services.observability import (
+    observability_service, ConversationTracker, track_performance
+)
+from apps.bot.services.error_handling import ComponentType
+from apps.bot.services.logging_service import enhanced_logging_service, performance_tracking
+from apps.bot.services.metrics_collector import metrics_collector
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +42,14 @@ class LangGraphOrchestrator:
     """
     
     def __init__(self):
-        """Initialize the orchestrator with node registry and routing."""
+        """Initialize the orchestrator with node registry, routing, and escalation service."""
         # Register default nodes first to ensure LLM nodes are available
         from apps.bot.langgraph.nodes import register_default_nodes
         register_default_nodes()
         
         self.node_registry = NodeRegistry()
         self.router = ConversationRouter()
+        self.escalation_service = EscalationService()
         self._graph: Optional[CompiledStateGraph] = None
         self._setup_graph()
     
@@ -148,66 +162,110 @@ class LangGraphOrchestrator:
         if not self._graph:
             raise RuntimeError("LangGraph not initialized")
         
-        # Create or update conversation state
-        if existing_state:
-            state = existing_state
-            state.request_id = request_id
-        else:
-            state = ConversationStateManager.create_initial_state(
-                tenant_id=tenant_id,
-                conversation_id=conversation_id,
-                request_id=request_id,
-                customer_id=customer_id,
-                phone_e164=phone_e164
-            )
-        
-        # Add incoming message context
-        state.incoming_message = message_text
-        
-        try:
-            # Execute the graph
-            config = RunnableConfig(
-                configurable={
-                    "tenant_id": tenant_id,
-                    "conversation_id": conversation_id,
-                    "request_id": request_id
-                }
+        # Set up comprehensive logging context
+        with enhanced_logging_service.request_context(
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            customer_id=customer_id,
+            phone_e164=phone_e164
+        ) as request_context:
+            
+            # Log conversation start
+            conversation_logger.log_conversation_start(state, message_text)
+            enhanced_logging_service.log_conversation_start(
+                tenant_id, conversation_id, request_id, customer_id, phone_e164, message_text
             )
             
-            # Convert state to dict for LangGraph processing
-            state_dict = asdict(state)
-            
-            # Run the graph
-            result = await self._graph.ainvoke(state_dict, config=config)
-            
-            # Convert result back to ConversationState
-            updated_state = ConversationState.from_dict(result)
-            updated_state.validate()
-            
-            logger.info(
-                f"Message processed successfully",
-                extra={
-                    "tenant_id": tenant_id,
-                    "conversation_id": conversation_id,
-                    "request_id": request_id,
-                    "intent": updated_state.intent,
-                    "journey": updated_state.journey
-                }
-            )
-            
-            return updated_state
-            
-        except Exception as e:
-            logger.error(
-                f"Graph execution failed: {e}",
-                extra={
-                    "tenant_id": tenant_id,
-                    "conversation_id": conversation_id,
-                    "request_id": request_id
-                },
-                exc_info=True
-            )
-            raise RuntimeError(f"Graph execution failed: {e}")
+            # Track conversation metrics
+            with ConversationTracker(tenant_id, conversation_id, request_id, customer_id):
+                
+                # Create or update conversation state
+                if existing_state:
+                    state = existing_state
+                    state.request_id = request_id
+                else:
+                    state = ConversationStateManager.create_initial_state(
+                        tenant_id=tenant_id,
+                        conversation_id=conversation_id,
+                        request_id=request_id,
+                        customer_id=customer_id,
+                        phone_e164=phone_e164
+                    )
+                
+                # Add incoming message context
+                state.incoming_message = message_text
+                
+                try:
+                    # Track performance of entire orchestration
+                    with performance_tracking("orchestrator_process_message", conversation_id):
+                        
+                        # Execute the graph
+                        config = RunnableConfig(
+                            configurable={
+                                "tenant_id": tenant_id,
+                                "conversation_id": conversation_id,
+                                "request_id": request_id
+                            }
+                        )
+                        
+                        # Convert state to dict for LangGraph processing
+                        state_dict = asdict(state)
+                        
+                        # Run the graph
+                        result = await self._graph.ainvoke(state_dict, config=config)
+                        
+                        # Convert result back to ConversationState
+                        updated_state = ConversationState.from_dict(result)
+                        updated_state.validate()
+                        
+                        # Log successful completion
+                        logger.info(
+                            f"Message processed successfully",
+                            extra={
+                                "tenant_id": tenant_id,
+                                "conversation_id": conversation_id,
+                                "request_id": request_id,
+                                "intent": updated_state.intent,
+                                "journey": updated_state.journey,
+                                "processing_duration": time.time() - request_context.start_time
+                            }
+                        )
+                        
+                        # Track business events
+                        if updated_state.journey != state.journey:
+                            enhanced_logging_service.log_journey_transition(
+                                conversation_id, state.journey, updated_state.journey,
+                                "orchestrator_routing", updated_state.intent_confidence
+                            )
+                        
+                        return updated_state
+                        
+                except Exception as e:
+                    # Log comprehensive error information
+                    enhanced_logging_service.log_error(
+                        conversation_id, 
+                        type(e).__name__, 
+                        str(e),
+                        "orchestrator",
+                        context={
+                            "tenant_id": tenant_id,
+                            "request_id": request_id,
+                            "message_length": len(message_text),
+                            "existing_state": existing_state is not None
+                        }
+                    )
+                    
+                    logger.error(
+                        f"Graph execution failed: {e}",
+                        extra={
+                            "tenant_id": tenant_id,
+                            "conversation_id": conversation_id,
+                            "request_id": request_id
+                        },
+                        exc_info=True
+                    )
+                    raise RuntimeError(f"Graph execution failed: {e}")
     
     def _route_to_journey(self, state: Dict[str, Any]) -> str:
         """
@@ -289,6 +347,7 @@ class LangGraphOrchestrator:
         logger.debug(f"Resolving customer for tenant_id: {state.get('tenant_id')}")
         return state
     
+    @with_node_error_handling("intent_classify", ComponentType.LLM_NODE)
     async def _intent_classify_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Classify user intent with confidence scoring and routing logic."""
         from apps.bot.langgraph.llm_nodes import IntentClassificationNode
@@ -296,32 +355,71 @@ class LangGraphOrchestrator:
         # Convert dict state to ConversationState for node processing
         conv_state = ConversationState.from_dict(state)
         
-        # Create and execute intent classification node
-        intent_node = IntentClassificationNode()
+        # Track node execution start
+        observability_service.track_journey_start(conv_state.conversation_id, "intent_classification")
+        
+        # Track performance
+        start_time = time.time()
+        success = False
         
         try:
+            # Create and execute intent classification node
+            intent_node = IntentClassificationNode()
+            
             # Execute the intent classification
             updated_state = await intent_node.execute(conv_state)
+            success = True
+            
+            # Log intent classification result with enhanced logging
+            enhanced_logging_service.log_node_execution(
+                "intent_classify",
+                conv_state.conversation_id,
+                time.time() - start_time,
+                success,
+                input_data={"message": conv_state.incoming_message},
+                output_data={
+                    "intent": updated_state.intent,
+                    "confidence": updated_state.intent_confidence
+                }
+            )
+            
+            logger.info(
+                f"Intent classified: {updated_state.intent} (confidence: {updated_state.intent_confidence})",
+                extra={
+                    'tenant_id': updated_state.tenant_id,
+                    'conversation_id': updated_state.conversation_id,
+                    'request_id': updated_state.request_id,
+                    'intent': updated_state.intent,
+                    'confidence': updated_state.intent_confidence
+                }
+            )
+            
+            # Track successful completion
+            observability_service.track_journey_completion(
+                conv_state.conversation_id, "intent_classification", True
+            )
             
             # Convert back to dict for LangGraph
             return asdict(updated_state)
             
         except Exception as e:
-            logger.error(
-                f"Intent classification node failed: {e}",
-                extra={
-                    "tenant_id": conv_state.tenant_id,
-                    "conversation_id": conv_state.conversation_id,
-                    "request_id": conv_state.request_id
-                },
-                exc_info=True
+            # Log node execution failure
+            enhanced_logging_service.log_node_execution(
+                "intent_classify",
+                conv_state.conversation_id,
+                time.time() - start_time,
+                False,
+                error=str(e)
             )
             
-            # Fallback to unknown intent
-            conv_state.update_intent("unknown", 0.0)
-            conv_state.journey = "unknown"
-            return asdict(conv_state)
+            # Track failed completion
+            observability_service.track_journey_completion(
+                conv_state.conversation_id, "intent_classification", False
+            )
+            
+            raise
     
+    @with_node_error_handling("language_policy", ComponentType.LLM_NODE)
     async def _language_policy_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Determine response language based on detection confidence."""
         from apps.bot.langgraph.llm_nodes import LanguagePolicyNode
@@ -329,30 +427,55 @@ class LangGraphOrchestrator:
         # Convert dict state to ConversationState for node processing
         conv_state = ConversationState.from_dict(state)
         
-        # Create and execute language policy node
-        language_node = LanguagePolicyNode()
+        # Track performance
+        start_time = time.time()
+        success = False
         
         try:
+            # Create and execute language policy node
+            language_node = LanguagePolicyNode()
+            
             # Execute the language policy determination
             updated_state = await language_node.execute(conv_state)
+            success = True
+            
+            # Log language policy result with enhanced logging
+            enhanced_logging_service.log_node_execution(
+                "language_policy",
+                conv_state.conversation_id,
+                time.time() - start_time,
+                success,
+                input_data={"message": conv_state.incoming_message},
+                output_data={
+                    "response_language": updated_state.response_language,
+                    "confidence": updated_state.language_confidence
+                }
+            )
+            
+            logger.info(
+                f"Language policy applied: {updated_state.response_language} (confidence: {updated_state.language_confidence})",
+                extra={
+                    'tenant_id': updated_state.tenant_id,
+                    'conversation_id': updated_state.conversation_id,
+                    'request_id': updated_state.request_id,
+                    'response_language': updated_state.response_language,
+                    'confidence': updated_state.language_confidence
+                }
+            )
             
             # Convert back to dict for LangGraph
             return asdict(updated_state)
             
         except Exception as e:
-            logger.error(
-                f"Language policy node failed: {e}",
-                extra={
-                    "tenant_id": conv_state.tenant_id,
-                    "conversation_id": conv_state.conversation_id,
-                    "request_id": conv_state.request_id
-                },
-                exc_info=True
+            # Log node execution failure
+            enhanced_logging_service.log_node_execution(
+                "language_policy",
+                conv_state.conversation_id,
+                time.time() - start_time,
+                False,
+                error=str(e)
             )
-            
-            # Fallback to tenant default language
-            conv_state.update_language(conv_state.default_language, 0.5)
-            return asdict(conv_state)
+            raise
     
     async def _governor_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Apply conversation governance (spam/casual detection) with EXACT routing logic."""
@@ -472,31 +595,97 @@ class LangGraphOrchestrator:
     
     async def _support_journey_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Handle support journey workflow."""
-        # TODO: Implement support journey subgraph
+        from apps.bot.langgraph.support_journey import execute_support_journey_node
+        
         logger.debug("Processing support journey")
-        state["response_text"] = "Support journey processing (placeholder)"
-        return state
+        
+        try:
+            # Execute support journey subgraph
+            updated_state = await execute_support_journey_node(state)
+            return updated_state
+            
+        except Exception as e:
+            logger.error(f"Support journey node failed: {e}", exc_info=True)
+            state["response_text"] = "I'm having trouble processing your support request. Let me connect you with our support team."
+            state["escalation_required"] = True
+            state["escalation_reason"] = "Support journey execution error"
+            return state
     
     async def _orders_journey_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Handle orders journey workflow."""
-        # TODO: Implement orders journey subgraph
+        from apps.bot.langgraph.orders_journey import execute_orders_journey_node
+        
         logger.debug("Processing orders journey")
-        state["response_text"] = "Orders journey processing (placeholder)"
-        return state
+        
+        try:
+            # Execute orders journey subgraph
+            updated_state = await execute_orders_journey_node(state)
+            return updated_state
+            
+        except Exception as e:
+            logger.error(
+                f"Orders journey execution failed: {e}",
+                extra={
+                    "tenant_id": state.get("tenant_id"),
+                    "conversation_id": state.get("conversation_id"),
+                    "request_id": state.get("request_id")
+                },
+                exc_info=True
+            )
+            
+            # Fallback response
+            state["response_text"] = "I'm having trouble retrieving your order information right now. Let me connect you with someone who can help."
+            state["escalation_required"] = True
+            state["escalation_reason"] = "Orders journey execution error"
+            return state
     
     async def _offers_journey_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Handle offers journey workflow."""
-        # TODO: Implement offers journey subgraph
+        from apps.bot.langgraph.offers_journey import offers_journey_entry
+        
         logger.debug("Processing offers journey")
-        state["response_text"] = "Offers journey processing (placeholder)"
-        return state
+        
+        # Convert dict state to ConversationState
+        conversation_state = ConversationState.from_dict(state)
+        
+        # Execute offers journey
+        updated_state = await offers_journey_entry(conversation_state)
+        
+        # Convert back to dict and return
+        return updated_state.to_dict()
     
     async def _preferences_journey_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Handle preferences journey workflow."""
-        # TODO: Implement preferences journey subgraph
+        from apps.bot.langgraph.preferences_journey import preferences_journey_entry
+        
         logger.debug("Processing preferences journey")
-        state["response_text"] = "Preferences journey processing (placeholder)"
-        return state
+        
+        try:
+            # Convert dict state to ConversationState for journey processing
+            conv_state = ConversationState.from_dict(state)
+            
+            # Execute preferences journey subgraph
+            updated_state = await preferences_journey_entry(conv_state)
+            
+            # Convert back to dict for LangGraph
+            return asdict(updated_state)
+            
+        except Exception as e:
+            logger.error(
+                f"Preferences journey execution failed: {e}",
+                extra={
+                    "tenant_id": state.get("tenant_id"),
+                    "conversation_id": state.get("conversation_id"),
+                    "request_id": state.get("request_id")
+                },
+                exc_info=True
+            )
+            
+            # Fallback response
+            state["response_text"] = "I'm having trouble updating your preferences right now. Please try again later or contact support."
+            state["escalation_required"] = True
+            state["escalation_reason"] = "Preferences journey execution error"
+            return state
     
     async def _governance_response_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -523,26 +712,20 @@ class LangGraphOrchestrator:
         
         # Generate appropriate governance response based on action
         if governance_action == "redirect_to_business":
-            # Exceeded casual limit - redirect to business
-            if max_chattiness_level == 0:
-                response = "I'm here to help with your shopping needs. What can I assist you with today?"
-            else:
-                response = "Thanks for the chat! How can I help you with our products or services today?"
+            # Exceeded casual limit - redirect to business with varied responses
+            response = self._get_business_redirect_response(casual_turns, max_chattiness_level, conv_state)
         
         elif governance_action == "friendly_casual_response":
-            # Within casual limit - acknowledge and gently guide
-            if casual_turns == 1:
-                response = "Hello! I'm here to help you with shopping. What are you looking for today?"
-            else:
-                response = "Nice to chat! Is there anything I can help you find or any questions about our products?"
+            # Within casual limit - acknowledge and gently guide with variety
+            response = self._get_friendly_casual_response(casual_turns, conv_state)
         
         elif governance_action == "spam_warning":
-            # First spam warning
-            response = "I'd be happy to help you find what you're looking for. What products or services can I assist you with?"
+            # First spam warning with varied responses
+            response = self._get_spam_warning_response(spam_turns, conv_state)
         
         elif governance_action == "disengage":
-            # Disengage after 2 spam turns
-            response = "I'm here to help with your shopping needs. Please let me know if you have any questions about our products or services."
+            # Disengage after 2 spam turns with graceful messages
+            response = self._get_graceful_disengagement_response(conv_state)
         
         elif governance_action == "abuse_stop":
             # Stop immediately for abuse
@@ -551,11 +734,9 @@ class LangGraphOrchestrator:
             conv_state.set_escalation("Abusive content detected")
         
         elif governance_action in ["escalation", "proceed_to_journey"]:
-            # Handle escalation or unexpected governance routing
+            # Handle escalation using enhanced escalation service
             if state.get("escalation_required", False):
-                escalation_reason = state.get("escalation_reason", "Escalation required")
-                response = "Let me connect you with someone who can better assist you. Please hold on."
-                conv_state.set_escalation(escalation_reason)
+                return await self._handle_escalation(state, conv_state)
             else:
                 # Fallback for unexpected governance routing
                 response = "How can I help you today?"
@@ -584,6 +765,91 @@ class LangGraphOrchestrator:
         )
         
         return state
+    
+    async def _handle_escalation(self, state: Dict[str, Any], conv_state: ConversationState) -> Dict[str, Any]:
+        """
+        Handle escalation with comprehensive ticket creation and message generation.
+        
+        Args:
+            state: Current state dictionary
+            conv_state: Conversation state object
+            
+        Returns:
+            Updated state with escalation response
+        """
+        try:
+            escalation_reason = state.get("escalation_reason", "Escalation required")
+            escalation_metadata = state.get("escalation_metadata", {})
+            
+            # Set escalation in conversation state
+            conv_state.set_escalation(escalation_reason)
+            
+            # Create handoff ticket using escalation service
+            ticket_result = await self.escalation_service.create_handoff_ticket(
+                conv_state, 
+                self.router._get_escalation_context(conv_state.conversation_id)
+            )
+            
+            if ticket_result["success"]:
+                # Generate handoff message with ticket information
+                handoff_message = self.escalation_service.generate_handoff_message(
+                    ticket_result["ticket_data"],
+                    ticket_result["escalation_reason"],
+                    ticket_result["priority"]
+                )
+                
+                # Update conversation state with ticket ID
+                if "ticket_data" in ticket_result and "ticket_id" in ticket_result["ticket_data"]:
+                    conv_state.handoff_ticket_id = ticket_result["ticket_data"]["ticket_id"]
+                
+                state["response_text"] = handoff_message
+                
+                logger.info(
+                    f"Escalation handled successfully: {ticket_result['ticket_data'].get('ticket_number', 'N/A')}",
+                    extra={
+                        "tenant_id": conv_state.tenant_id,
+                        "conversation_id": conv_state.conversation_id,
+                        "request_id": conv_state.request_id,
+                        "escalation_reason": escalation_reason,
+                        "ticket_id": ticket_result["ticket_data"].get("ticket_id"),
+                        "ticket_number": ticket_result["ticket_data"].get("ticket_number"),
+                        "priority": ticket_result["priority"],
+                        "category": ticket_result["category"]
+                    }
+                )
+            else:
+                # Fallback message if ticket creation failed
+                fallback_message = ticket_result.get(
+                    "fallback_message", 
+                    "I'm having trouble connecting you with support right now. Please contact us directly for assistance."
+                )
+                state["response_text"] = fallback_message
+                
+                logger.error(
+                    f"Failed to create escalation ticket: {ticket_result.get('error', 'Unknown error')}",
+                    extra={
+                        "tenant_id": conv_state.tenant_id,
+                        "conversation_id": conv_state.conversation_id,
+                        "request_id": conv_state.request_id,
+                        "escalation_reason": escalation_reason,
+                        "error": ticket_result.get("error")
+                    }
+                )
+            
+            # Update state with conversation state changes
+            state.update(asdict(conv_state))
+            
+            return state
+            
+        except Exception as e:
+            logger.error(f"Error handling escalation: {str(e)}", exc_info=True)
+            
+            # Fallback response
+            state["response_text"] = "I'm experiencing technical difficulties. Please contact our support team directly for assistance."
+            conv_state.set_escalation(f"Escalation handler error: {str(e)}")
+            state.update(asdict(conv_state))
+            
+            return state
     
     def _get_max_casual_turns(self, chattiness_level: int) -> int:
         """
@@ -759,6 +1025,141 @@ class LangGraphOrchestrator:
         # TODO: Implement state persistence
         logger.debug("Persisting conversation state")
         return state
+    
+    def _get_business_redirect_response(self, casual_turns: int, max_chattiness_level: int, state: ConversationState) -> str:
+        """
+        Generate varied business redirect responses based on context.
+        
+        Args:
+            casual_turns: Number of casual turns taken
+            max_chattiness_level: Tenant's chattiness level
+            state: Current conversation state
+            
+        Returns:
+            Business redirect response message
+        """
+        bot_name = state.bot_name or "I"
+        
+        # Responses based on chattiness level
+        if max_chattiness_level == 0:
+            # Level 0: Strictly business
+            responses = [
+                f"{bot_name}'m here to help with your shopping needs. What can I assist you with today?",
+                f"How can {bot_name} help you find what you're looking for?",
+                f"What products or services can {bot_name} help you with today?",
+                f"Let me help you with your shopping. What are you interested in?"
+            ]
+        elif casual_turns <= 2:
+            # Early redirect - friendly but focused
+            responses = [
+                f"Thanks for the chat! How can {bot_name} help you with our products or services today?",
+                f"Nice to connect! What can {bot_name} help you find or learn about?",
+                f"Great to chat with you! How can {bot_name} assist with your shopping needs?",
+                f"Thanks for saying hello! What products or services interest you today?"
+            ]
+        else:
+            # Later redirect - more direct but still friendly
+            responses = [
+                f"{bot_name} can help with products, orders, payments, offers, and support. What interests you?",
+                f"Let's focus on how {bot_name} can help you shop or get support. What do you need?",
+                f"{bot_name}'m here for shopping assistance. What can {bot_name} help you find or resolve?",
+                f"How about we explore our products or services? What are you looking for?"
+            ]
+        
+        # Use turn count to vary responses (simple rotation)
+        response_index = (state.turn_count - 1) % len(responses)
+        return responses[response_index]
+    
+    def _get_friendly_casual_response(self, casual_turns: int, state: ConversationState) -> str:
+        """
+        Generate friendly casual responses that gently guide to business.
+        
+        Args:
+            casual_turns: Number of casual turns taken
+            state: Current conversation state
+            
+        Returns:
+            Friendly casual response message
+        """
+        bot_name = state.bot_name or "I"
+        
+        if casual_turns == 1:
+            # First casual turn - warm greeting with business hint
+            responses = [
+                f"Hello! {bot_name}'m here to help you with shopping. What are you looking for today?",
+                f"Hi there! {bot_name} can help you find products or answer questions. What interests you?",
+                f"Great to meet you! {bot_name}'m here to assist with shopping and support. How can {bot_name} help?",
+                f"Hello! {bot_name} love helping customers find what they need. What can {bot_name} show you?"
+            ]
+        else:
+            # Later casual turns - acknowledge but guide to business
+            responses = [
+                f"Nice to chat! Is there anything {bot_name} can help you find or any questions about our products?",
+                f"Thanks for the friendly conversation! What can {bot_name} help you discover today?",
+                f"It's great connecting with you! How can {bot_name} assist with your shopping or support needs?",
+                f"Lovely chatting! What products or services can {bot_name} help you explore?"
+            ]
+        
+        # Use turn count to vary responses
+        response_index = (state.turn_count - 1) % len(responses)
+        return responses[response_index]
+    
+    def _get_spam_warning_response(self, spam_turns: int, state: ConversationState) -> str:
+        """
+        Generate spam warning responses that redirect to business.
+        
+        Args:
+            spam_turns: Number of spam turns detected
+            state: Current conversation state
+            
+        Returns:
+            Spam warning response message
+        """
+        bot_name = state.bot_name or "I"
+        
+        if spam_turns == 1:
+            # First spam warning - helpful redirect
+            responses = [
+                f"{bot_name}'d be happy to help you find what you're looking for. What products or services can {bot_name} assist you with?",
+                f"Let me help you with something specific. What are you interested in shopping for today?",
+                f"{bot_name} can help you find products, check orders, or answer questions. What do you need?",
+                f"How can {bot_name} assist you with shopping or support today? What are you looking for?"
+            ]
+        else:
+            # Second spam warning - more direct
+            responses = [
+                f"{bot_name}'m here to help with shopping, orders, and support. What can {bot_name} assist you with?",
+                f"Let's focus on how {bot_name} can help you. What products or services interest you?",
+                f"{bot_name} can help with finding products or answering questions. What do you need assistance with?",
+                f"What specific shopping or support needs can {bot_name} help you with today?"
+            ]
+        
+        # Use turn count to vary responses
+        response_index = (state.turn_count - 1) % len(responses)
+        return responses[response_index]
+    
+    def _get_graceful_disengagement_response(self, state: ConversationState) -> str:
+        """
+        Generate graceful disengagement responses after spam limit exceeded.
+        
+        Args:
+            state: Current conversation state
+            
+        Returns:
+            Graceful disengagement response message
+        """
+        bot_name = state.bot_name or "I"
+        
+        responses = [
+            f"{bot_name}'m here to help with your shopping needs. Please let me know if you have any questions about our products or services.",
+            f"When you're ready to shop or need support, {bot_name}'ll be here to help. What can {bot_name} assist you with?",
+            f"{bot_name}'m available to help with products, orders, or questions whenever you're ready. How can {bot_name} assist?",
+            f"Feel free to ask about our products or services anytime. {bot_name}'m here to help with your shopping needs."
+        ]
+        
+        # Use turn count to vary responses
+        response_index = (state.turn_count - 1) % len(responses)
+        return responses[response_index]
 
 
 # Global orchestrator instance

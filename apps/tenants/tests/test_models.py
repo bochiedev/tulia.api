@@ -106,14 +106,23 @@ class TestTenant(TestCase):
         self.assertEqual(self.tenant.status, 'trial')
     
     def test_encrypted_fields(self):
-        """Test that sensitive fields are encrypted."""
+        """Test that sensitive fields are encrypted in TenantSettings."""
+        # Create TenantSettings with encrypted fields
+        from apps.tenants.models import TenantSettings
+        settings = TenantSettings.objects.create(
+            tenant=self.tenant,
+            twilio_sid='test_sid',
+            twilio_token='test_token',
+            twilio_webhook_secret='test_secret'
+        )
+        
         # Retrieve from database
-        tenant = Tenant.objects.get(id=self.tenant.id)
+        settings = TenantSettings.objects.get(tenant=self.tenant)
         
         # Should be decrypted when accessed
-        self.assertEqual(tenant.twilio_sid, 'test_sid')
-        self.assertEqual(tenant.twilio_token, 'test_token')
-        self.assertEqual(tenant.webhook_secret, 'test_secret')
+        self.assertEqual(settings.twilio_sid, 'test_sid')
+        self.assertEqual(settings.twilio_token, 'test_token')
+        self.assertEqual(settings.twilio_webhook_secret, 'test_secret')
     
     def test_is_active_with_trial(self):
         """Test is_active returns True for valid trial."""

@@ -5,6 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![Django](https://img.shields.io/badge/Django-4.2+-green.svg)](https://www.djangoproject.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-blue.svg)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7+-red.svg)](https://redis.io/)
 
 ---
 
@@ -56,13 +57,12 @@ python manage.py runserver
 
 **Tulia AI** is a **multi-tenant SaaS platform** that transforms WhatsApp into a complete commerce channel. Businesses can:
 
-- 🛍️ **Sell products** - Sync catalogs from WooCommerce/Shopify or manage natively
-- 📅 **Book services** - Schedule appointments with availability management
-- 💬 **Automate conversations** - AI bot handles customer inquiries 24/7
-- 💳 **Process payments** - Integrated wallet with M-Pesa, Paystack, Stripe, Pesapal
-- 📊 **Track analytics** - Comprehensive metrics on sales, conversations, customer behavior
-- 🌍 **Multi-language** - English, Swahili, Sheng with automatic detection
-- 🔐 **Enterprise RBAC** - Role-based access control with scope-based permissions
+- 🛍️ **Sell products & services** - Complete catalog management with intelligent recommendations
+- 💬 **Automate conversations** - Advanced AI handles customer inquiries with human-like intelligence  
+- 💳 **Process payments** - Integrated payment processing with multiple providers
+- 📊 **Track performance** - Comprehensive analytics and business intelligence
+- 🌍 **Scale globally** - Multi-language support with automatic detection
+- 🔐 **Enterprise security** - Role-based access control with audit trails
 
 ---
 
@@ -84,7 +84,7 @@ Choose the appropriate requirements file for your use case:
 | `requirements-minimal.txt` | **Basic API only** | Core Django API without AI features |
 | `requirements-dev.txt` | **Development** | Includes testing tools and dev dependencies |
 
-**Python 3.12.4 Compatible** - All versions tested for compatibility and minimal conflicts.
+**Python 3.11 Compatible** - All versions tested for compatibility and minimal conflicts.
 
 ### Installation Examples
 
@@ -156,6 +156,7 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ### Authentication
 ```bash
+<<<<<<< HEAD
 # Login to get JWT token
 curl -X POST http://localhost:8000/v1/auth/login \
   -H "Content-Type: application/json" \

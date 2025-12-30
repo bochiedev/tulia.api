@@ -3,11 +3,21 @@ info:
   title: Tulia AI WhatsApp Commerce API
   version: 1.0.0
   description: "\nMulti-tenant WhatsApp commerce and services platform with comprehensive\
-    \ RBAC.\n\n## Authentication\n\nAll API requests require authentication via headers:\n\
-    - `X-TENANT-ID`: UUID of the tenant context\n- `X-TENANT-API-KEY`: API key for\
-    \ the tenant\n\n## Authorization (RBAC)\n\nThe platform implements Role-Based\
-    \ Access Control (RBAC) with the following components:\n\n### Permissions\nGranular\
-    \ capabilities identified by codes (e.g., `catalog:view`, `finance:withdraw:approve`).\n\
+    \ RBAC.\n\n## Authentication\n\nAll API requests require JWT authentication:\n\
+    - `Authorization: Bearer <token>` - JWT token obtained from `/v1/auth/login` or\
+    \ `/v1/auth/register`\n- `X-TENANT-ID`: UUID of the tenant context (required for\
+    \ tenant-scoped operations)\n\n**Note:** Webhooks are public endpoints verified\
+    \ by signature, not by JWT tokens.\n\n## Rate Limiting\n\nAuthentication endpoints\
+    \ are rate limited to prevent abuse:\n\n| Endpoint | Rate Limit | Key Type |\n\
+    |----------|-----------|----------|\n| `POST /v1/auth/register` | 3/hour | IP\
+    \ address |\n| `POST /v1/auth/login` | 5/min per IP, 10/hour per email | IP +\
+    \ Email |\n| `POST /v1/auth/verify-email` | 10/hour | IP address |\n| `POST /v1/auth/forgot-password`\
+    \ | 3/hour | IP address |\n| `POST /v1/auth/reset-password` | 5/hour | IP address\
+    \ |\n\nWhen rate limit is exceeded, the API returns `429 Too Many Requests` with\
+    \ a `Retry-After` header.\n\nSee the [Rate Limiting Guide](/docs/RATE_LIMITING.md)\
+    \ for complete documentation.\n\n## Authorization (RBAC)\n\nThe platform implements\
+    \ Role-Based Access Control (RBAC) with the following components:\n\n### Permissions\n\
+    Granular capabilities identified by codes (e.g., `catalog:view`, `finance:withdraw:approve`).\n\
     See the `/v1/permissions` endpoint for the complete list.\n\n### Roles\nCollections\
     \ of permissions that can be assigned to users. Each tenant has default roles:\n\
     - **Owner**: All permissions\n- **Admin**: All permissions except `finance:withdraw:approve`\n\
@@ -39,6 +49,7 @@ info:
     \ withdrawal requests | Finance |\n| `finance:reconcile` | Perform financial reconciliation\
     \ | Finance |\n| `integrations:manage` | Manage external integrations | Integrations\
     \ |\n| `users:manage` | Invite users, assign roles, manage permissions | Users\
+<<<<<<< HEAD
     \ |\n\n## Example Workflows\n\n### Invite a User and Assign Roles\n```bash\n#\
     \ 1. Invite user (requires users:manage scope)\ncurl -X POST https://api.trytulia.com/v1/memberships/{tenant_id}/invite\
     \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
@@ -55,10 +66,34 @@ info:
     ,\n    \"granted\": true,\n    \"reason\": \"Temporary access for Q4 audit\"\n\
     \  }'\n\n# Deny a permission (even if granted by role)\ncurl -X POST https://api.trytulia.com/v1/users/{user_id}/permissions\
     \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+=======
+    \ |\n\n## Example Workflows\n\n### Login and Get JWT Token\n```bash\n# Login to\
+    \ get JWT token\ncurl -X POST https://api.tulia.ai/v1/auth/login \\\n  -H \"Content-Type:\
+    \ application/json\" \\\n  -d '{\n    \"email\": \"user@example.com\",\n    \"\
+    password\": \"your-password\"\n  }'\n# Returns: {\"token\": \"eyJ...\", \"user\"\
+    : {...}}\n\n# Use the token in subsequent requests\nexport TOKEN=\"eyJ...\"\n\
+    ```\n\n### Invite a User and Assign Roles\n```bash\n# 1. Invite user (requires\
+    \ users:manage scope)\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite\
+    \ \\\n  -H \"Authorization: Bearer $TOKEN\" \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
+    \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"email\": \"newuser@example.com\"\
+    ,\n    \"role_ids\": [\"role-uuid-1\", \"role-uuid-2\"]\n  }'\n\n# 2. User accepts\
+    \ invitation and logs in\n\n# 3. Assign additional roles\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/{user_id}/roles\
+    \ \\\n  -H \"Authorization: Bearer $TOKEN\" \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
+    \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"role_ids\": [\"\
+    role-uuid-3\"]\n  }'\n```\n\n### Grant User-Specific Permission Override\n```bash\n\
+    # Grant a specific permission to a user (overrides role permissions)\ncurl -X\
+    \ POST https://api.tulia.ai/v1/users/{user_id}/permissions \\\n  -H \"Authorization:\
+    \ Bearer $TOKEN\" \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"Content-Type:\
+    \ application/json\" \\\n  -d '{\n    \"permission_code\": \"finance:reconcile\"\
+    ,\n    \"granted\": true,\n    \"reason\": \"Temporary access for Q4 audit\"\n\
+    \  }'\n\n# Deny a permission (even if granted by role)\ncurl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions\
+    \ \\\n  -H \"Authorization: Bearer $TOKEN\" \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
+>>>>>>> c52311f3e9d950558892ab4cd8fc5d5367b69d65
     \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"permission_code\"\
     : \"catalog:edit\",\n    \"granted\": false,\n    \"reason\": \"Suspended pending\
     \ investigation\"\n  }'\n```\n\n### Four-Eyes Withdrawal Approval\n```bash\n#\
     \ 1. User A initiates withdrawal (requires finance:withdraw:initiate)\ncurl -X\
+<<<<<<< HEAD
     \ POST https://api.trytulia.com/v1/wallet/withdraw \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
     \ \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\n  -H \"Content-Type: application/json\"\
     \ \\\n  -d '{\n    \"amount\": 1000.00,\n    \"currency\": \"USD\",\n    \"destination\"\
@@ -66,6 +101,15 @@ info:
     status\": \"pending_approval\"}\n\n# 2. User B approves withdrawal (requires finance:withdraw:approve,\
     \ must be different user)\ncurl -X POST https://api.trytulia.com/v1/wallet/withdrawals/{transaction_id}/approve\
     \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
+=======
+    \ POST https://api.tulia.ai/v1/wallet/withdraw \\\n  -H \"Authorization: Bearer\
+    \ $TOKEN_USER_A\" \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"Content-Type:\
+    \ application/json\" \\\n  -d '{\n    \"amount\": 1000.00,\n    \"currency\":\
+    \ \"USD\",\n    \"destination\": \"bank_account_123\"\n  }'\n# Returns: {\"transaction_id\"\
+    : \"txn-uuid\", \"status\": \"pending_approval\"}\n\n# 2. User B approves withdrawal\
+    \ (requires finance:withdraw:approve, must be different user)\ncurl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve\
+    \ \\\n  -H \"Authorization: Bearer $TOKEN_USER_B\" \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
+>>>>>>> c52311f3e9d950558892ab4cd8fc5d5367b69d65
     \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"notes\": \"Approved\
     \ for monthly payout\"\n  }'\n# Returns: {\"transaction_id\": \"txn-uuid\", \"\
     status\": \"approved\"}\n\n# If User A tries to approve their own withdrawal:\n\
@@ -114,9 +158,6 @@ paths:
       tags:
       - Admin - Tenants
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -152,9 +193,6 @@ paths:
       tags:
       - Admin - Tenants
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -209,9 +247,6 @@ paths:
               $ref: '#/components/schemas/AdminSubscriptionChangeRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -277,9 +312,6 @@ paths:
               $ref: '#/components/schemas/AdminSubscriptionWaiverRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -346,9 +378,6 @@ paths:
               $ref: '#/components/schemas/WithdrawalProcessRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -410,9 +439,6 @@ paths:
       tags:
       - analytics
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -435,12 +461,11 @@ paths:
 
         Example:
             GET /v1/analytics/daily?start_date=2025-11-01&end_date=2025-11-10
+
+        Required scope: analytics:view
       tags:
       - analytics
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -464,9 +489,6 @@ paths:
       tags:
       - analytics
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -490,9 +512,6 @@ paths:
       tags:
       - analytics
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -513,12 +532,11 @@ paths:
 
         Example:
             GET /v1/analytics/overview?range=30d
+
+        Required scope: analytics:view
       tags:
       - analytics
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -581,9 +599,6 @@ paths:
       tags:
       - RBAC - Audit
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -604,7 +619,7 @@ paths:
       operationId: auth_forgot_password_create
       description: "\nRequest password reset for a user account.\n\nSends password\
         \ reset email with token valid for 24 hours.\n\n**No authentication required**\
-        \ - this is a public endpoint.\n\n**Rate limit**: 5 requests/minute per IP\n\
+        \ - this is a public endpoint.\n\n**Rate limit**: 3 requests/hour per IP\n\
         \    "
       summary: Request password reset
       tags:
@@ -621,7 +636,6 @@ paths:
                 summary: Password Reset Request
         required: true
       security:
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -654,8 +668,8 @@ paths:
       operationId: auth_login_create
       description: "\nAuthenticate user with email and password.\n\nReturns JWT token\
         \ for API authentication and user information.\n\n**No authentication required**\
-        \ - this is a public endpoint.\n\n**Rate limit**: 10 requests/minute per IP\n\
-        \    "
+        \ - this is a public endpoint.\n\n**Rate limits**:\n- 5 requests/minute per\
+        \ IP address\n- 10 requests/hour per email address\n    "
       summary: Login user
       tags:
       - Authentication
@@ -672,7 +686,6 @@ paths:
                 summary: Login Request
         required: true
       security:
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -717,22 +730,58 @@ paths:
                 RateLimitExceeded:
                   value:
                     error: Rate limit exceeded. Please try again later.
+                    code: RATE_LIMIT_EXCEEDED
                   summary: Rate Limit Exceeded
+          description: ''
+  /v1/auth/logout:
+    post:
+      operationId: auth_logout_create
+      description: "\nLogout the authenticated user.\n\nSince JWT tokens are stateless,\
+        \ this endpoint primarily serves as a client-side signal\nto clear the token.\
+        \ The token will remain valid until expiration.\n\nFor enhanced security,\
+        \ consider implementing a token blacklist if needed.\n\nRequires valid JWT\
+        \ token in Authorization header.\n    "
+      summary: Logout user
+      tags:
+      - Authentication
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                SuccessResponse:
+                  value:
+                    message: Logout successful
+                  summary: Success Response
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
           description: ''
   /v1/auth/me:
     get:
       operationId: auth_me_retrieve
-      description: "\nGet profile information for the authenticated user.\n\nRequires\
-        \ valid JWT token in Authorization header.\n    "
+      description: "\nGet comprehensive profile information for the authenticated\
+        \ user.\n\nReturns complete user data including:\n- Basic profile information\
+        \ (name, email, phone)\n- Account status (active, verified, 2FA enabled)\n\
+        - All tenant memberships with roles and permissions\n- Pending tenant invitations\n\
+        - Activity timestamps\n\nThis endpoint is useful for:\n- Displaying user profile\
+        \ in the UI\n- Building tenant switcher (workspace selector)\n- Checking user\
+        \ permissions across tenants\n- Managing pending invitations\n\nRequires valid\
+        \ JWT token in Authorization header.\n    "
       summary: Get current user profile
       tags:
       - Authentication
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -749,11 +798,74 @@ paths:
                     full_name: John Doe
                     phone: '+1234567890'
                     is_active: true
+                    is_superuser: false
                     email_verified: true
                     two_factor_enabled: false
                     last_login_at: '2025-01-15T10:30:00Z'
                     created_at: '2025-01-01T00:00:00Z'
                     updated_at: '2025-01-15T10:30:00Z'
+                    total_tenants: 2
+                    tenants:
+                    - membership_id: 456e4567-e89b-12d3-a456-426614174001
+                      tenant:
+                        id: 789e4567-e89b-12d3-a456-426614174002
+                        name: Acme Corp
+                        slug: acme-corp
+                        status: active
+                        subscription:
+                          tier: professional
+                          status: active
+                          trial_ends_at: null
+                      roles:
+                      - id: abc12345-e89b-12d3-a456-426614174003
+                        name: Owner
+                        description: Full access to all features
+                        is_system: true
+                      scopes:
+                      - analytics:view
+                      - catalog:edit
+                      - catalog:view
+                      - conversations:view
+                      - finance:view
+                      - integrations:manage
+                      - orders:edit
+                      - orders:view
+                      - users:manage
+                      joined_at: '2025-01-01T00:00:00Z'
+                      last_seen_at: '2025-01-15T10:30:00Z'
+                    - membership_id: 456e4567-e89b-12d3-a456-426614174004
+                      tenant:
+                        id: 789e4567-e89b-12d3-a456-426614174005
+                        name: Beta Inc
+                        slug: beta-inc
+                        status: active
+                        subscription:
+                          tier: trial
+                          status: active
+                          trial_ends_at: '2025-02-01T00:00:00Z'
+                      roles:
+                      - id: def12345-e89b-12d3-a456-426614174006
+                        name: Catalog Manager
+                        description: Manage products and services
+                        is_system: true
+                      scopes:
+                      - analytics:view
+                      - catalog:edit
+                      - catalog:view
+                      - services:edit
+                      - services:view
+                      joined_at: '2025-01-10T00:00:00Z'
+                      last_seen_at: '2025-01-14T15:20:00Z'
+                    pending_invites:
+                    - id: ghi12345-e89b-12d3-a456-426614174007
+                      tenant:
+                        id: jkl12345-e89b-12d3-a456-426614174008
+                        name: Gamma LLC
+                        slug: gamma-llc
+                      invited_by:
+                        email: admin@gamma-llc.com
+                        name: Jane Admin
+                      invited_at: '2025-01-14T12:00:00Z'
                   summary: Success Response
           description: ''
         '401':
@@ -765,17 +877,19 @@ paths:
           description: ''
     put:
       operationId: auth_me_update
-      description: "\nGet profile information for the authenticated user.\n\nRequires\
-        \ valid JWT token in Authorization header.\n    "
+      description: "\nGet comprehensive profile information for the authenticated\
+        \ user.\n\nReturns complete user data including:\n- Basic profile information\
+        \ (name, email, phone)\n- Account status (active, verified, 2FA enabled)\n\
+        - All tenant memberships with roles and permissions\n- Pending tenant invitations\n\
+        - Activity timestamps\n\nThis endpoint is useful for:\n- Displaying user profile\
+        \ in the UI\n- Building tenant switcher (workspace selector)\n- Checking user\
+        \ permissions across tenants\n- Managing pending invitations\n\nRequires valid\
+        \ JWT token in Authorization header.\n    "
       summary: Get current user profile
       tags:
       - Authentication
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -792,11 +906,106 @@ paths:
                     full_name: John Doe
                     phone: '+1234567890'
                     is_active: true
+                    is_superuser: false
                     email_verified: true
                     two_factor_enabled: false
                     last_login_at: '2025-01-15T10:30:00Z'
                     created_at: '2025-01-01T00:00:00Z'
                     updated_at: '2025-01-15T10:30:00Z'
+                    total_tenants: 2
+                    tenants:
+                    - membership_id: 456e4567-e89b-12d3-a456-426614174001
+                      tenant:
+                        id: 789e4567-e89b-12d3-a456-426614174002
+                        name: Acme Corp
+                        slug: acme-corp
+                        status: active
+                        subscription:
+                          tier: professional
+                          status: active
+                          trial_ends_at: null
+                      roles:
+                      - id: abc12345-e89b-12d3-a456-426614174003
+                        name: Owner
+                        description: Full access to all features
+                        is_system: true
+                      scopes:
+                      - analytics:view
+                      - catalog:edit
+                      - catalog:view
+                      - conversations:view
+                      - finance:view
+                      - integrations:manage
+                      - orders:edit
+                      - orders:view
+                      - users:manage
+                      joined_at: '2025-01-01T00:00:00Z'
+                      last_seen_at: '2025-01-15T10:30:00Z'
+                    - membership_id: 456e4567-e89b-12d3-a456-426614174004
+                      tenant:
+                        id: 789e4567-e89b-12d3-a456-426614174005
+                        name: Beta Inc
+                        slug: beta-inc
+                        status: active
+                        subscription:
+                          tier: trial
+                          status: active
+                          trial_ends_at: '2025-02-01T00:00:00Z'
+                      roles:
+                      - id: def12345-e89b-12d3-a456-426614174006
+                        name: Catalog Manager
+                        description: Manage products and services
+                        is_system: true
+                      scopes:
+                      - analytics:view
+                      - catalog:edit
+                      - catalog:view
+                      - services:edit
+                      - services:view
+                      joined_at: '2025-01-10T00:00:00Z'
+                      last_seen_at: '2025-01-14T15:20:00Z'
+                    pending_invites:
+                    - id: ghi12345-e89b-12d3-a456-426614174007
+                      tenant:
+                        id: jkl12345-e89b-12d3-a456-426614174008
+                        name: Gamma LLC
+                        slug: gamma-llc
+                      invited_by:
+                        email: admin@gamma-llc.com
+                        name: Jane Admin
+                      invited_at: '2025-01-14T12:00:00Z'
+                  summary: Success Response
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/auth/refresh-token:
+    post:
+      operationId: auth_refresh_token_create
+      description: "\nRefresh JWT token for authenticated user.\n\nReturns a new JWT\
+        \ token with extended expiration.\n\nRequires valid JWT token in Authorization\
+        \ header.\n    "
+      summary: Refresh JWT token
+      tags:
+      - Authentication
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                SuccessResponse:
+                  value:
+                    token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                    message: Token refreshed successfully
                   summary: Success Response
           description: ''
         '401':
@@ -814,7 +1023,7 @@ paths:
         \ membership with Owner role\n- TenantSettings with defaults\n- Email verification\
         \ token\n\nReturns JWT token for immediate login and tenant information.\n\
         \n**No authentication required** - this is a public endpoint.\n\n**Rate limit**:\
-        \ 10 requests/minute per IP\n    "
+        \ 3 requests/hour per IP\n    "
       summary: Register new user
       tags:
       - Authentication
@@ -834,7 +1043,6 @@ paths:
                 summary: Registration Request
         required: true
       security:
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -895,7 +1103,7 @@ paths:
       operationId: auth_reset_password_create
       description: "\nReset user password with reset token.\n\nToken is sent via email\
         \ and is valid for 24 hours.\n\n**No authentication required** - this is a\
-        \ public endpoint.\n    "
+        \ public endpoint.\n\n**Rate limit**: 5 requests/hour per IP\n    "
       summary: Reset password
       tags:
       - Authentication
@@ -912,7 +1120,6 @@ paths:
                 summary: Password Reset Request
         required: true
       security:
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -939,12 +1146,26 @@ paths:
                     error: Invalid or expired reset token
                   summary: Invalid Token
           description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                RateLimitExceeded:
+                  value:
+                    error: Rate limit exceeded. Please try again later.
+                    code: RATE_LIMIT_EXCEEDED
+                  summary: Rate Limit Exceeded
+          description: ''
   /v1/auth/verify-email:
     post:
       operationId: auth_verify_email_create
       description: "\nVerify user email address with verification token.\n\nToken\
         \ is sent via email during registration and is valid for 24 hours.\n\n**No\
-        \ authentication required** - this is a public endpoint.\n    "
+        \ authentication required** - this is a public endpoint.\n\n**Rate limit**:\
+        \ 10 requests/hour per IP\n    "
       summary: Verify email address
       tags:
       - Authentication
@@ -960,7 +1181,6 @@ paths:
                 summary: Verification Request
         required: true
       security:
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -987,6 +1207,1290 @@ paths:
                     error: Invalid or expired verification token
                   summary: Invalid Token
           description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                RateLimitExceeded:
+                  value:
+                    error: Rate limit exceeded. Please try again later.
+                    code: RATE_LIMIT_EXCEEDED
+                  summary: Rate Limit Exceeded
+          description: ''
+  /v1/bot/agent-config:
+    get:
+      operationId: bot_agent_config_retrieve
+      description: Retrieve the AI agent configuration for the authenticated tenant.
+        If no configuration exists, returns default configuration.
+      summary: Get agent configuration
+      tags:
+      - Bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfiguration'
+          description: ''
+        '403':
+          description: Forbidden - Missing required scope 'integrations:manage'
+        '404':
+          description: Not found - Tenant does not exist
+    put:
+      operationId: bot_agent_config_update
+      description: Update the AI agent configuration for the authenticated tenant.
+        Supports partial updates - only provided fields will be updated.
+      summary: Update agent configuration
+      tags:
+      - Bot
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentConfigurationUpdateRequest'
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfiguration'
+          description: ''
+        '400':
+          description: Bad request - Invalid configuration data
+        '403':
+          description: Forbidden - Missing required scope 'integrations:manage'
+        '404':
+          description: Not found - Tenant does not exist
+        '429':
+          description: Too many requests - Rate limit exceeded
+  /v1/bot/analytics/conversations:
+    get:
+      operationId: bot_analytics_conversations_retrieve
+      description: Retrieve statistics about AI agent conversations including total
+        interactions, average confidence scores, response times, and message type
+        distribution.
+      summary: Get conversation statistics
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+        description: 'End date for analytics (YYYY-MM-DD). Default: today'
+      - in: query
+        name: start_date
+        schema:
+          type: string
+        description: 'Start date for analytics (YYYY-MM-DD). Default: 30 days ago'
+      tags:
+      - Bot - Analytics
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_interactions:
+                    type: integer
+                  total_conversations:
+                    type: integer
+                  average_confidence:
+                    type: number
+                  average_processing_time_ms:
+                    type: number
+                  high_confidence_rate:
+                    type: number
+                  low_confidence_rate:
+                    type: number
+                  message_type_distribution:
+                    type: object
+                    properties:
+                      text:
+                        type: integer
+                      button:
+                        type: integer
+                      list:
+                        type: integer
+                      media:
+                        type: integer
+                  model_usage:
+                    type: object
+                    additionalProperties:
+                      type: integer
+          description: Conversation statistics
+        '403':
+          description: Forbidden - Missing required scope 'analytics:view'
+  /v1/bot/analytics/costs:
+    get:
+      operationId: bot_analytics_costs_retrieve
+      description: Retrieve cost analytics including total token usage, estimated
+        costs by model, and cost trends over time.
+      summary: Get cost tracking analytics
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+        description: 'End date for analytics (YYYY-MM-DD). Default: today'
+      - in: query
+        name: group_by
+        schema:
+          type: string
+        description: 'Group results by: day, week, month, model. Default: model'
+      - in: query
+        name: start_date
+        schema:
+          type: string
+        description: 'Start date for analytics (YYYY-MM-DD). Default: 30 days ago'
+      tags:
+      - Bot - Analytics
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_tokens:
+                    type: integer
+                  total_cost:
+                    type: string
+                  average_cost_per_interaction:
+                    type: string
+                  cost_by_model:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        total_tokens:
+                          type: integer
+                        total_cost:
+                          type: string
+                        interaction_count:
+                          type: integer
+          description: Cost analytics
+        '403':
+          description: Forbidden - Missing required scope 'analytics:view'
+  /v1/bot/analytics/handoffs:
+    get:
+      operationId: bot_analytics_handoffs_retrieve
+      description: Retrieve analytics about handoffs to human agents including handoff
+        rate, reasons, and trends over time.
+      summary: Get handoff analytics
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+        description: 'End date for analytics (YYYY-MM-DD). Default: today'
+      - in: query
+        name: start_date
+        schema:
+          type: string
+        description: 'Start date for analytics (YYYY-MM-DD). Default: 30 days ago'
+      tags:
+      - Bot - Analytics
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_handoffs:
+                    type: integer
+                  handoff_rate:
+                    type: number
+                  handoff_reasons:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                  average_attempts_before_handoff:
+                    type: number
+          description: Handoff analytics
+        '403':
+          description: Forbidden - Missing required scope 'analytics:view'
+  /v1/bot/analytics/topics:
+    get:
+      operationId: bot_analytics_topics_retrieve
+      description: Retrieve analytics about common topics and intents detected in
+        customer messages.
+      summary: Get common topics and intents
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+        description: 'End date for analytics (YYYY-MM-DD). Default: today'
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: 'Maximum number of topics to return. Default: 10'
+      - in: query
+        name: start_date
+        schema:
+          type: string
+        description: 'Start date for analytics (YYYY-MM-DD). Default: 30 days ago'
+      tags:
+      - Bot - Analytics
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  common_intents:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        intent:
+                          type: string
+                        count:
+                          type: integer
+                        percentage:
+                          type: number
+                  total_unique_intents:
+                    type: integer
+          description: Topic analytics
+        '403':
+          description: Forbidden - Missing required scope 'analytics:view'
+  /v1/bot/catalog/return/success:
+    get:
+      operationId: bot_catalog_return_success_retrieve
+      description: |-
+        Show catalog return success page.
+
+        Query parameters:
+        - tenant_id: Tenant identifier
+        - conversation_id: Conversation identifier
+        - product_id: Selected product identifier
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /v1/bot/catalog/return/webhook:
+    post:
+      operationId: bot_catalog_return_webhook_create
+      description: |-
+        Handle catalog return webhook.
+
+        Expected payload:
+        {
+            "tenant_id": "uuid",
+            "conversation_id": "uuid",
+            "selected_product_id": "uuid",
+            "return_message": "optional message from catalog"
+        }
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /v1/bot/corrections/:
+    get:
+      operationId: bot_corrections_list
+      description: |-
+        Manage human corrections to bot responses.
+
+        Required scopes:
+        - GET: analytics:view
+        - POST/PUT/DELETE: users:manage
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedHumanCorrectionList'
+          description: ''
+    post:
+      operationId: bot_corrections_create
+      description: |-
+        Manage human corrections to bot responses.
+
+        Required scopes:
+        - GET: analytics:view
+        - POST/PUT/DELETE: users:manage
+      tags:
+      - bot
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HumanCorrectionRequest'
+        required: true
+      security:
+      - JWTAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanCorrection'
+          description: ''
+  /v1/bot/corrections/{id}/:
+    get:
+      operationId: bot_corrections_retrieve
+      description: |-
+        Manage human corrections to bot responses.
+
+        Required scopes:
+        - GET: analytics:view
+        - POST/PUT/DELETE: users:manage
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanCorrection'
+          description: ''
+    put:
+      operationId: bot_corrections_update
+      description: |-
+        Manage human corrections to bot responses.
+
+        Required scopes:
+        - GET: analytics:view
+        - POST/PUT/DELETE: users:manage
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bot
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HumanCorrectionRequest'
+        required: true
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanCorrection'
+          description: ''
+    patch:
+      operationId: bot_corrections_partial_update
+      description: |-
+        Manage human corrections to bot responses.
+
+        Required scopes:
+        - GET: analytics:view
+        - POST/PUT/DELETE: users:manage
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bot
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedHumanCorrectionRequest'
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanCorrection'
+          description: ''
+    delete:
+      operationId: bot_corrections_destroy
+      description: |-
+        Manage human corrections to bot responses.
+
+        Required scopes:
+        - GET: analytics:view
+        - POST/PUT/DELETE: users:manage
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '204':
+          description: No response body
+  /v1/bot/corrections/{id}/approve/:
+    post:
+      operationId: bot_corrections_approve_create
+      description: Approve or reject correction for training
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bot
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorrectionApprovalRequest'
+        required: true
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanCorrection'
+          description: ''
+  /v1/bot/corrections/approved/:
+    get:
+      operationId: bot_corrections_approved_list
+      description: Get corrections approved for training
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedHumanCorrectionList'
+          description: ''
+  /v1/bot/documents/:
+    get:
+      operationId: bot_documents_list
+      description: |-
+        List all documents for the tenant.
+
+        Required scope: integrations:manage
+
+        GET /v1/documents
+
+        Query parameters:
+            - status: Filter by status (pending, processing, completed, failed)
+            - file_type: Filter by file type (pdf, txt)
+            - search: Search by file name
+            - ordering: Order by field (created_at, file_name, status)
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentList'
+          description: ''
+  /v1/bot/documents/{document_id}/chunks:
+    get:
+      operationId: bot_documents_chunks_list
+      description: |-
+        List chunks for a document.
+
+        Required scope: integrations:manage
+
+        GET /v1/documents/{document_id}/chunks
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentChunkList'
+          description: ''
+  /v1/bot/documents/{id}:
+    get:
+      operationId: bot_documents_retrieve
+      description: |-
+        Get document details.
+
+        Required scope: integrations:manage
+
+        GET /v1/documents/{id}
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+          description: ''
+  /v1/bot/documents/{id}/status:
+    get:
+      operationId: bot_documents_status_retrieve
+      description: |-
+        Get document status.
+
+        Response:
+            - 200: Status information
+            - 404: Document not found
+            - 403: Missing required scope
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          description: No response body
+  /v1/bot/documents/upload:
+    post:
+      operationId: bot_documents_upload_create
+      description: |-
+        Upload a document.
+
+        Request:
+            - file: Document file (PDF or TXT, max 10MB)
+
+        Response:
+            - 201: Document uploaded successfully
+            - 400: Invalid file or validation error
+            - 403: Missing required scope
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          description: No response body
+  /v1/bot/feedback/:
+    get:
+      operationId: bot_feedback_list
+      description: |-
+        View feedback history and analytics.
+
+        Required scope: analytics:view
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInteractionFeedbackList'
+          description: ''
+  /v1/bot/feedback/{id}/:
+    get:
+      operationId: bot_feedback_retrieve
+      description: |-
+        View feedback history and analytics.
+
+        Required scope: analytics:view
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InteractionFeedback'
+          description: ''
+  /v1/bot/feedback/analytics/:
+    get:
+      operationId: bot_feedback_analytics_retrieve
+      description: Get aggregated feedback analytics
+      parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+        description: 'Number of days to analyze (default: 30)'
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackAnalytics'
+          description: ''
+  /v1/bot/feedback/submit/:
+    post:
+      operationId: bot_feedback_submit_create
+      description: Submit feedback (thumbs up/down) for a bot interaction
+      tags:
+      - bot
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackSubmitRequest'
+        required: true
+      security:
+      - JWTAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InteractionFeedback'
+          description: ''
+  /v1/bot/interactions:
+    get:
+      operationId: bot_interactions_list
+      description: Retrieve all AI agent interactions for the authenticated tenant.
+        Supports filtering by conversation, model, confidence, handoff status, and
+        date range.
+      summary: List agent interactions
+      parameters:
+      - in: query
+        name: conversation_id
+        schema:
+          type: string
+        description: Filter by conversation ID
+      - in: query
+        name: end_date
+        schema:
+          type: string
+        description: End date (YYYY-MM-DD)
+      - in: query
+        name: handoff_triggered
+        schema:
+          type: string
+        description: Filter by handoff status (true/false)
+      - in: query
+        name: max_confidence
+        schema:
+          type: number
+          format: double
+        description: Maximum confidence score (0.0-1.0)
+      - in: query
+        name: min_confidence
+        schema:
+          type: number
+          format: double
+        description: Minimum confidence score (0.0-1.0)
+      - in: query
+        name: model_used
+        schema:
+          type: string
+        description: Filter by model name
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Page size (max 200)
+      - in: query
+        name: start_date
+        schema:
+          type: string
+        description: Start date (YYYY-MM-DD)
+      tags:
+      - Bot - Agent Interactions
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAgentInteractionListList'
+          description: ''
+        '400':
+          description: Bad request - Invalid filter parameters
+        '403':
+          description: Forbidden - Missing required scope 'analytics:view'
+  /v1/bot/interactions/{interaction_id}:
+    get:
+      operationId: bot_interactions_retrieve
+      description: Retrieve detailed information about a specific agent interaction.
+      summary: Get agent interaction details
+      parameters:
+      - in: path
+        name: interaction_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Bot - Agent Interactions
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentInteraction'
+          description: ''
+        '403':
+          description: Forbidden - Missing required scope 'analytics:view'
+        '404':
+          description: Not found - Interaction does not exist
+  /v1/bot/interactions/stats:
+    get:
+      operationId: bot_interactions_stats_retrieve
+      description: Retrieve aggregated statistics about agent interactions including
+        total interactions, costs, confidence scores, handoff rates, and more.
+      summary: Get agent interaction statistics
+      parameters:
+      - in: query
+        name: end_date
+        schema:
+          type: string
+        description: 'End date (YYYY-MM-DD). Default: today'
+      - in: query
+        name: start_date
+        schema:
+          type: string
+        description: 'Start date (YYYY-MM-DD). Default: 30 days ago'
+      tags:
+      - Bot - Agent Interactions
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentInteractionStats'
+          description: ''
+        '400':
+          description: Bad request - Invalid date parameters
+        '403':
+          description: Forbidden - Missing required scope 'analytics:view'
+  /v1/bot/knowledge/:
+    get:
+      operationId: bot_knowledge_list
+      description: Retrieve all knowledge base entries for the authenticated tenant.
+        Supports filtering by entry_type, category, and is_active.
+      summary: List knowledge entries
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: Filter by category
+      - in: query
+        name: entry_type
+        schema:
+          type: string
+        description: Filter by entry type (faq, policy, product_info, service_info,
+          procedure, general)
+      - in: query
+        name: is_active
+        schema:
+          type: string
+        description: 'Filter by active status (true, false, all). Default: true'
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Bot - Knowledge Base
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedKnowledgeEntryList'
+          description: ''
+        '403':
+          description: Forbidden - Missing required scope 'integrations:manage'
+    post:
+      operationId: bot_knowledge_create
+      description: Create a new knowledge base entry. Automatically generates semantic
+        embeddings for search functionality.
+      summary: Create knowledge entry
+      tags:
+      - Bot - Knowledge Base
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeEntryCreateRequest'
+        required: true
+      security:
+      - JWTAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeEntry'
+          description: ''
+        '400':
+          description: Bad request - Invalid entry data
+        '403':
+          description: Forbidden - Missing required scope 'integrations:manage'
+        '429':
+          description: Too many requests - Rate limit exceeded
+  /v1/bot/knowledge/{id}/:
+    get:
+      operationId: bot_knowledge_retrieve
+      description: Retrieve a specific knowledge entry by ID.
+      summary: Get knowledge entry
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - Bot - Knowledge Base
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeEntry'
+          description: ''
+        '403':
+          description: Forbidden - Missing required scope 'integrations:manage'
+        '404':
+          description: Not found - Entry does not exist
+    put:
+      operationId: bot_knowledge_update
+      description: Update a knowledge entry. Regenerates embeddings if title or content
+        changed.
+      summary: Update knowledge entry
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - Bot - Knowledge Base
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeEntryUpdateRequest'
+        required: true
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeEntry'
+          description: ''
+        '400':
+          description: Bad request - Invalid entry data
+        '403':
+          description: Forbidden - Missing required scope 'integrations:manage'
+        '404':
+          description: Not found - Entry does not exist
+    patch:
+      operationId: bot_knowledge_partial_update
+      description: Partially update a knowledge entry. Only provided fields will be
+        updated.
+      summary: Partial update knowledge entry
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - Bot - Knowledge Base
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedKnowledgeEntryUpdateRequest'
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeEntry'
+          description: ''
+        '400':
+          description: Bad request - Invalid entry data
+        '403':
+          description: Forbidden - Missing required scope 'integrations:manage'
+        '404':
+          description: Not found - Entry does not exist
+    delete:
+      operationId: bot_knowledge_destroy
+      description: Soft delete a knowledge entry (sets is_active=False).
+      summary: Delete knowledge entry
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - Bot - Knowledge Base
+      security:
+      - JWTAuth: []
+      responses:
+        '204':
+          description: No content - Entry deleted successfully
+        '403':
+          description: Forbidden - Missing required scope 'integrations:manage'
+        '404':
+          description: Not found - Entry does not exist
+  /v1/bot/knowledge/bulk_import/:
+    post:
+      operationId: bot_knowledge_bulk_import_create
+      description: Import multiple knowledge entries at once. Accepts JSON array or
+        CSV data. Maximum 100 entries per request.
+      summary: Bulk import knowledge entries
+      tags:
+      - Bot - Knowledge Base
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeEntryBulkImportRequest'
+        required: true
+      security:
+      - JWTAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success_count:
+                    type: integer
+                  error_count:
+                    type: integer
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                  created_ids:
+                    type: array
+                    items:
+                      type: string
+          description: Created - Returns summary of import results
+        '400':
+          description: Bad request - Invalid import data
+        '403':
+          description: Forbidden - Missing required scope 'integrations:manage'
+  /v1/bot/knowledge/search/:
+    get:
+      operationId: bot_knowledge_search_list
+      description: Search knowledge base using semantic similarity. Returns entries
+        ranked by relevance.
+      summary: Search knowledge entries
+      parameters:
+      - in: query
+        name: entry_type
+        schema:
+          type: string
+        description: Filter by entry type (comma-separated for multiple)
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: 'Maximum number of results (default: 5, max: 20)'
+      - in: query
+        name: min_similarity
+        schema:
+          type: number
+          format: double
+        description: 'Minimum similarity score 0.0-1.0 (default: 0.7)'
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Search query
+        required: true
+      tags:
+      - Bot - Knowledge Base
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedKnowledgeEntrySearchList'
+          description: ''
+        '400':
+          description: Bad request - Missing or invalid query parameter
+        '403':
+          description: Forbidden - Missing required scope 'integrations:manage'
+        '429':
+          description: Too many requests - Rate limit exceeded
+  /v1/bot/langgraph/health/:
+    get:
+      operationId: bot_langgraph_health_retrieve
+      description: |-
+        Check LangGraph system health.
+
+        Returns:
+            JSON response with system status
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          description: No response body
+  /v1/bot/langgraph/webhook/:
+    post:
+      operationId: bot_langgraph_webhook_create
+      description: |-
+        Process incoming WhatsApp message through LangGraph.
+
+        Expected payload:
+        {
+            "tenant_id": "tenant_uuid",
+            "conversation_id": "conv_uuid",
+            "request_id": "req_uuid",
+            "message_text": "User message",
+            "phone_e164": "+254700000000",
+            "customer_id": "optional_customer_uuid"
+        }
+
+        Returns:
+            JSON response with processed state and response text
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          description: No response body
+  /v1/bot/monitoring/escalations/:
+    get:
+      operationId: bot_monitoring_escalations_retrieve
+      description: Returns detailed escalation frequencies, reasons, and trigger analysis.
+      summary: Get escalation frequency metrics
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          description: Escalation metrics retrieved successfully
+        '403':
+          description: Insufficient permissions
+  /v1/bot/monitoring/health/:
+    get:
+      operationId: bot_monitoring_health_retrieve
+      description: Returns comprehensive system health metrics including journey completion
+        rates, payment success, escalation frequency, and performance data.
+      summary: Get system health metrics
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          description: System health metrics retrieved successfully
+        '403':
+          description: Insufficient permissions
+  /v1/bot/monitoring/journeys/:
+    get:
+      operationId: bot_monitoring_journeys_retrieve
+      description: Returns detailed journey completion rates, durations, and failure
+        analysis.
+      summary: Get journey completion metrics
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          description: Journey metrics retrieved successfully
+        '403':
+          description: Insufficient permissions
+  /v1/bot/monitoring/payments/:
+    get:
+      operationId: bot_monitoring_payments_retrieve
+      description: Returns detailed payment success rates, processing times, and method
+        performance.
+      summary: Get payment success metrics
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          description: Payment metrics retrieved successfully
+        '403':
+          description: Insufficient permissions
+  /v1/bot/monitoring/performance/:
+    get:
+      operationId: bot_monitoring_performance_retrieve
+      description: Returns detailed performance metrics including response times,
+        success rates, and component health.
+      summary: Get system performance metrics
+      tags:
+      - bot
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          description: Performance metrics retrieved successfully
+        '403':
+          description: Insufficient permissions
   /v1/customers:
     get:
       operationId: customers_retrieve
@@ -1027,9 +2531,6 @@ paths:
       tags:
       - Customers
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1060,6 +2561,373 @@ paths:
                   error:
                     type: string
           description: ''
+  /v1/customers/{customer_id}/checkout-options:
+    get:
+      operationId: customers_checkout_options_retrieve
+      description: "\nGet checkout options for customer including preferred method\
+        \ and available providers.\n\n**Required scope**: `conversations:view`\n\n\
+        **Use case**: Present payment options when customer is checking out to pay\
+        \ for products/services.\n        "
+      summary: Get customer checkout options
+      parameters:
+      - in: query
+        name: amount
+        schema:
+          type: number
+          format: double
+        description: Payment amount
+        required: true
+      - in: path
+        name: customer_id
+        schema:
+          type: string
+        description: Customer UUID
+        required: true
+      tags:
+      - Customer Payments
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preferred_provider:
+                    type: string
+                    nullable: true
+                  preferred_method:
+                    type: object
+                    nullable: true
+                  available_providers:
+                    type: array
+                  saved_methods:
+                    type: array
+                  can_change_provider:
+                    type: boolean
+                  amount:
+                    type: number
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Invalid amount
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Customer not found
+          description: ''
+  /v1/customers/{customer_id}/payment-methods:
+    post:
+      operationId: customers_payment_methods_create
+      description: "\nSave a payment method for customer to reuse in future payments.\n\
+        \n**Required scope**: `conversations:view`\n\n**Use case**: After successful\
+        \ payment, save the method for faster checkout next time.\n    "
+      summary: Save customer payment method
+      parameters:
+      - in: path
+        name: customer_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Payments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  enum:
+                  - mpesa
+                  - paystack
+                  - pesapal
+                  - stripe
+                details:
+                  type: object
+                  description: Provider-specific payment method details
+                set_as_default:
+                  type: boolean
+                  default: false
+              required:
+              - provider
+              - details
+            examples:
+              M-Pesa:
+                value:
+                  provider: mpesa
+                  details:
+                    phone_number: '254712345678'
+                  set_as_default: true
+              Paystack:
+                value:
+                  provider: paystack
+                  details:
+                    authorization_code: AUTH_xxx
+                    last4: '1234'
+                    bank: Access Bank
+      security:
+      - JWTAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                description: Payment method saved
+              examples:
+                M-Pesa:
+                  value:
+                    provider: mpesa
+                    details:
+                      phone_number: '254712345678'
+                    set_as_default: true
+                Paystack:
+                  value:
+                    provider: paystack
+                    details:
+                      authorization_code: AUTH_xxx
+                      last4: '1234'
+                      bank: Access Bank
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Invalid method details
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Customer not found
+          description: ''
+  /v1/customers/{customer_id}/payment-methods/{method_id}:
+    delete:
+      operationId: customers_payment_methods_destroy
+      description: "\nRemove a saved payment method.\n\n**Required scope**: `conversations:view`\n\
+        \    "
+      summary: Remove customer payment method
+      parameters:
+      - in: path
+        name: customer_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: method_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - Customer Payments
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Payment method removed
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Method not found
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Customer not found
+          description: ''
+  /v1/customers/{customer_id}/payment-methods/{method_id}/default:
+    put:
+      operationId: customers_payment_methods_default_update
+      description: "\nSet a saved payment method as default for future checkouts.\n\
+        \n**Required scope**: `conversations:view`\n    "
+      summary: Set default payment method
+      parameters:
+      - in: path
+        name: customer_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: method_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - Customer Payments
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Default method updated
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Method not found
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Customer not found
+          description: ''
+  /v1/customers/{customer_id}/payment-preferences:
+    get:
+      operationId: customers_payment_preferences_retrieve
+      description: "\nGet payment preferences for a customer including:\n- Preferred\
+        \ payment provider\n- Saved payment methods\n- Available payment providers\
+        \ for this tenant\n\n**Required scope**: `conversations:view`\n\n**Use case**:\
+        \ Display customer's payment preferences in conversation or checkout.\n  \
+        \      "
+      summary: Get customer payment preferences
+      parameters:
+      - in: path
+        name: customer_id
+        schema:
+          type: string
+        description: Customer UUID
+        required: true
+      tags:
+      - Customer Payments
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preferred_provider:
+                    type: string
+                    nullable: true
+                    enum:
+                    - mpesa
+                    - paystack
+                    - pesapal
+                    - stripe
+                  saved_methods:
+                    type: array
+                    items:
+                      type: object
+                  available_providers:
+                    type: array
+                    items:
+                      type: string
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden - Missing required scope
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Customer not found
+          description: ''
+  /v1/customers/{customer_id}/preferred-provider:
+    put:
+      operationId: customers_preferred_provider_update
+      description: "\nSet customer's preferred payment provider for future checkouts.\n\
+        \n**Required scope**: `conversations:view`\n\n**Use case**: Customer selects\
+        \ their preferred payment method during or after checkout.\n    "
+      summary: Set customer preferred payment provider
+      parameters:
+      - in: path
+        name: customer_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Payments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  enum:
+                  - mpesa
+                  - paystack
+                  - pesapal
+                  - stripe
+              required:
+              - provider
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Preferred provider updated
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Invalid provider or not configured
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Customer not found
+          description: ''
   /v1/customers/{id}:
     get:
       operationId: customers_retrieve_2
@@ -1076,9 +2944,6 @@ paths:
       tags:
       - Customers
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1126,9 +2991,6 @@ paths:
             schema:
               $ref: '#/components/schemas/CustomerExportRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1175,7 +3037,6 @@ paths:
       tags:
       - health
       security:
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1244,9 +3105,6 @@ paths:
               $ref: '#/components/schemas/AssignRolesRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1297,9 +3155,6 @@ paths:
       tags:
       - RBAC - Memberships
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '204':
@@ -1354,9 +3209,6 @@ paths:
                 summary: Invite Request
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -1407,11 +3259,7 @@ paths:
       tags:
       - RBAC - Memberships
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -1462,9 +3310,6 @@ paths:
       tags:
       - Campaigns
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1488,9 +3333,6 @@ paths:
               $ref: '#/components/schemas/MessageCampaignCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -1535,9 +3377,6 @@ paths:
       tags:
       - Campaigns
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1545,6 +3384,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageCampaign'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+          description: ''
+  /v1/messages/campaigns/{campaign_id}/button-click:
+    post:
+      operationId: messages_campaigns_button_click_create
+      description: Record when a customer clicks a button in a campaign message
+      summary: Track campaign button click
+      parameters:
+      - in: path
+        name: campaign_id
+        schema:
+          type: string
+          format: uuid
+        description: Campaign UUID
+        required: true
+      tags:
+      - Campaigns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrackButtonClickRequest'
+        required: true
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignButtonInteraction'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: object
           description: ''
         '404':
           content:
@@ -1577,9 +3466,6 @@ paths:
             schema:
               $ref: '#/components/schemas/CampaignExecuteRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1646,9 +3532,6 @@ paths:
       tags:
       - Campaigns
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1702,9 +3585,6 @@ paths:
       tags:
       - Conversations
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1751,9 +3631,6 @@ paths:
       tags:
       - Conversations
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1801,9 +3678,6 @@ paths:
             schema:
               $ref: '#/components/schemas/ConversationHandoffRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1870,9 +3744,6 @@ paths:
       tags:
       - Conversations
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1938,9 +3809,6 @@ paths:
       tags:
       - Messaging
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -1981,9 +3849,6 @@ paths:
       tags:
       - Messaging
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2022,9 +3887,6 @@ paths:
             schema:
               $ref: '#/components/schemas/CustomerPreferencesUpdateRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2053,17 +3915,14 @@ paths:
                   error:
                     type: string
           description: ''
-  /v1/messages/messages/rate-limit-status:
+  /v1/messages/rate-limit-status:
     get:
-      operationId: messages_messages_rate_limit_status_retrieve
+      operationId: messages_rate_limit_status_retrieve
       description: Get current message rate limit status for the tenant
       summary: Get rate limit status
       tags:
       - Messaging
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2072,9 +3931,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/RateLimitStatus'
           description: ''
-  /v1/messages/messages/schedule:
+  /v1/messages/schedule:
     post:
-      operationId: messages_messages_schedule_create
+      operationId: messages_schedule_create
       description: Schedule a message to be sent at a specific time in the future
       summary: Schedule message for future delivery
       tags:
@@ -2086,9 +3945,6 @@ paths:
               $ref: '#/components/schemas/ScheduleMessageRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -2117,9 +3973,9 @@ paths:
                   error:
                     type: string
           description: ''
-  /v1/messages/messages/send:
+  /v1/messages/send:
     post:
-      operationId: messages_messages_send_create
+      operationId: messages_send_create
       description: Send a message to a customer with consent validation and rate limiting
       summary: Send outbound message
       tags:
@@ -2131,9 +3987,6 @@ paths:
               $ref: '#/components/schemas/SendMessageRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2200,9 +4053,6 @@ paths:
       tags:
       - Messaging
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2226,9 +4076,6 @@ paths:
               $ref: '#/components/schemas/MessageTemplateCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -2296,9 +4143,6 @@ paths:
       tags:
       - orders
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2328,9 +4172,6 @@ paths:
               $ref: '#/components/schemas/OrderCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -2366,9 +4207,6 @@ paths:
       tags:
       - orders
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2409,9 +4247,6 @@ paths:
             schema:
               $ref: '#/components/schemas/OrderUpdateRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2450,9 +4285,6 @@ paths:
       tags:
       - Payment Features
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2527,11 +4359,7 @@ paths:
       tags:
       - RBAC - Permissions
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -2614,9 +4442,6 @@ paths:
       tags:
       - Products
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2652,9 +4477,6 @@ paths:
               $ref: '#/components/schemas/ProductCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -2700,9 +4522,6 @@ paths:
       tags:
       - Products
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2740,9 +4559,6 @@ paths:
             schema:
               $ref: '#/components/schemas/ProductUpdateRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2786,9 +4602,6 @@ paths:
       tags:
       - Products
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '204':
@@ -2817,9 +4630,6 @@ paths:
       tags:
       - Products
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2865,9 +4675,6 @@ paths:
               $ref: '#/components/schemas/ProductVariantCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -2923,9 +4730,6 @@ paths:
       tags:
       - Products
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -2975,9 +4779,6 @@ paths:
               $ref: '#/components/schemas/ProductVariantCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3032,9 +4833,6 @@ paths:
       tags:
       - Products
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '204':
@@ -3069,9 +4867,6 @@ paths:
       tags:
       - Catalog Sync
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '202':
@@ -3126,9 +4921,6 @@ paths:
       tags:
       - Catalog Sync
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '202':
@@ -3202,11 +4994,7 @@ paths:
       tags:
       - RBAC - Roles
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -3231,11 +5019,7 @@ paths:
       tags:
       - RBAC - Roles
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -3266,11 +5050,7 @@ paths:
       tags:
       - RBAC - Roles
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -3315,9 +5095,6 @@ paths:
               $ref: '#/components/schemas/RolePermissionRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3358,9 +5135,6 @@ paths:
               $ref: '#/components/schemas/RoleCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -3427,9 +5201,6 @@ paths:
       tags:
       - services
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3451,9 +5222,6 @@ paths:
               $ref: '#/components/schemas/AppointmentCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -3478,9 +5246,6 @@ paths:
       tags:
       - services
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3514,9 +5279,6 @@ paths:
               $ref: '#/components/schemas/AppointmentDetailRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3549,9 +5311,6 @@ paths:
             schema:
               $ref: '#/components/schemas/PatchedAppointmentDetailRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3579,9 +5338,6 @@ paths:
       tags:
       - services
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '204':
@@ -3605,9 +5361,6 @@ paths:
             schema:
               $ref: '#/components/schemas/AppointmentCancelRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3647,9 +5400,6 @@ paths:
       tags:
       - services
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3672,9 +5422,6 @@ paths:
               $ref: '#/components/schemas/ServiceCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -3699,9 +5446,6 @@ paths:
       tags:
       - services
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3729,9 +5473,6 @@ paths:
               $ref: '#/components/schemas/ServiceCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3758,9 +5499,6 @@ paths:
             schema:
               $ref: '#/components/schemas/PatchedServiceCreateRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3782,9 +5520,6 @@ paths:
       tags:
       - services
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '204':
@@ -3826,9 +5561,6 @@ paths:
       tags:
       - services
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3848,9 +5580,6 @@ paths:
       tags:
       - Settings
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3897,9 +5626,6 @@ paths:
                     ai_enabled: true
                 summary: Update Settings
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -3936,9 +5662,6 @@ paths:
       tags:
       - Settings - API Keys
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4033,9 +5756,6 @@ paths:
                 summary: Generate API Key
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4122,9 +5842,6 @@ paths:
       tags:
       - Settings - API Keys
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4181,9 +5898,6 @@ paths:
       tags:
       - Settings
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4264,9 +5978,6 @@ paths:
                       payment_received: true
                 summary: Update Settings
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4321,9 +6032,6 @@ paths:
       tags:
       - Integrations
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4377,9 +6085,6 @@ paths:
                 summary: Set Credentials
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4423,9 +6128,6 @@ paths:
       tags:
       - Integrations
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4466,8 +6168,8 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
-    put:
-      operationId: settings_integrations_shopify_update
+    post:
+      operationId: settings_integrations_shopify_create
       description: "\nManage Shopify integration credentials with validation.\n\n\
         **GET**: Return masked credentials and configuration status\n**PUT**: Update\
         \ credentials with validation against Shopify API\n**DELETE**: Remove credentials\n\
@@ -4490,9 +6192,6 @@ paths:
                 summary: Update Credentials
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4545,9 +6244,6 @@ paths:
       tags:
       - Integrations
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4588,6 +6284,164 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
+  /v1/settings/integrations/together-ai:
+    get:
+      operationId: settings_integrations_together_ai_retrieve
+      description: "\nManage Together AI integration credentials with optional validation.\n\
+        \n**GET**: Return configuration status\n**POST**: Update credentials with\
+        \ optional validation\n**DELETE**: Remove credentials\n\n**Required scope**:\
+        \ `integrations:manage`\n**Rate limit**: 60 requests/minute for POST/DELETE\n\
+        \n**Requirements**: 14.1, 14.2, 14.4\n    "
+      summary: Manage Together AI credentials
+      tags:
+      - Integrations
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                SuccessResponse:
+                  value:
+                    message: Together AI credentials updated successfully
+                    configured: true
+                    available_models: 7
+                  summary: Success Response
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+    post:
+      operationId: settings_integrations_together_ai_create
+      description: "\nManage Together AI integration credentials with optional validation.\n\
+        \n**GET**: Return configuration status\n**POST**: Update credentials with\
+        \ optional validation\n**DELETE**: Remove credentials\n\n**Required scope**:\
+        \ `integrations:manage`\n**Rate limit**: 60 requests/minute for POST/DELETE\n\
+        \n**Requirements**: 14.1, 14.2, 14.4\n    "
+      summary: Manage Together AI credentials
+      tags:
+      - Integrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+              description: Unspecified request body
+            examples:
+              UpdateCredentials:
+                value:
+                  api_key: together_api_key_here
+                  test_connection: true
+                summary: Update Credentials
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                SuccessResponse:
+                  value:
+                    message: Together AI credentials updated successfully
+                    configured: true
+                    available_models: 7
+                  summary: Success Response
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+    delete:
+      operationId: settings_integrations_together_ai_destroy
+      description: "\nManage Together AI integration credentials with optional validation.\n\
+        \n**GET**: Return configuration status\n**POST**: Update credentials with\
+        \ optional validation\n**DELETE**: Remove credentials\n\n**Required scope**:\
+        \ `integrations:manage`\n**Rate limit**: 60 requests/minute for POST/DELETE\n\
+        \n**Requirements**: 14.1, 14.2, 14.4\n    "
+      summary: Manage Together AI credentials
+      tags:
+      - Integrations
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                SuccessResponse:
+                  value:
+                    message: Together AI credentials updated successfully
+                    configured: true
+                    available_models: 7
+                  summary: Success Response
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
   /v1/settings/integrations/twilio:
     get:
       operationId: settings_integrations_twilio_retrieve
@@ -4600,9 +6454,6 @@ paths:
       tags:
       - Integrations
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4643,8 +6494,8 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
-    put:
-      operationId: settings_integrations_twilio_update
+    post:
+      operationId: settings_integrations_twilio_create
       description: "\nManage Twilio integration credentials with validation.\n\n**GET**:\
         \ Return masked credentials and configuration status\n**PUT**: Update credentials\
         \ with validation against Twilio API\n**DELETE**: Remove credentials\n\n**Required\
@@ -4668,9 +6519,6 @@ paths:
                 summary: Update Credentials
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4722,9 +6570,6 @@ paths:
       tags:
       - Integrations
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4778,9 +6623,6 @@ paths:
       tags:
       - Integrations
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4828,8 +6670,8 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
-    put:
-      operationId: settings_integrations_woocommerce_update
+    post:
+      operationId: settings_integrations_woocommerce_create
       description: "\nManage WooCommerce integration credentials with validation.\n\
         \n**GET**: Return masked credentials and configuration status\n**PUT**: Update\
         \ credentials with validation against WooCommerce API\n**DELETE**: Remove\
@@ -4853,9 +6695,6 @@ paths:
                 summary: Update Credentials
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4915,9 +6754,6 @@ paths:
       tags:
       - Integrations
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -4965,6 +6801,164 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
+  /v1/settings/llm/configuration:
+    get:
+      operationId: settings_llm_configuration_retrieve
+      description: "\nManage LLM provider selection and configuration for the AI agent.\n\
+        \n**GET**: Return current LLM configuration\n**PATCH**: Update LLM configuration\n\
+        \n**Required scope**: `integrations:manage`\n**Rate limit**: 60 requests/minute\
+        \ for PATCH\n\n**Requirements**: 14.1, 14.2, 14.4\n    "
+      summary: Manage LLM configuration
+      tags:
+      - Integrations
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                SuccessResponse:
+                  value:
+                    message: LLM configuration updated successfully
+                    configuration:
+                      llm_provider: together
+                      llm_timeout: 60.0
+                      llm_max_retries: 3
+                  summary: Success Response
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+    patch:
+      operationId: settings_llm_configuration_partial_update
+      description: "\nManage LLM provider selection and configuration for the AI agent.\n\
+        \n**GET**: Return current LLM configuration\n**PATCH**: Update LLM configuration\n\
+        \n**Required scope**: `integrations:manage`\n**Rate limit**: 60 requests/minute\
+        \ for PATCH\n\n**Requirements**: 14.1, 14.2, 14.4\n    "
+      summary: Manage LLM configuration
+      tags:
+      - Integrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+              description: Unspecified request body
+            examples:
+              UpdateConfiguration:
+                value:
+                  llm_provider: together
+                  llm_timeout: 60.0
+                  llm_max_retries: 3
+                summary: Update Configuration
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                SuccessResponse:
+                  value:
+                    message: LLM configuration updated successfully
+                    configuration:
+                      llm_provider: together
+                      llm_timeout: 60.0
+                      llm_max_retries: 3
+                  summary: Success Response
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /v1/settings/llm/providers:
+    get:
+      operationId: settings_llm_providers_retrieve
+      description: "\nGet list of available LLM providers and their configuration\
+        \ status.\n\nReturns information about each provider including:\n- Configuration\
+        \ status\n- Available models\n- Pricing information\n\n**Required scope**:\
+        \ `integrations:view`\n\n**Requirements**: 14.1, 14.2, 14.3\n    "
+      summary: Get available LLM providers
+      tags:
+      - Integrations
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                SuccessResponse:
+                  value:
+                    providers:
+                    - provider: openai
+                      display_name: OpenAI
+                      is_configured: true
+                      available_models:
+                      - name: gpt-4o
+                        display_name: GPT-4o
+                        context_window: 128000
+                        input_cost_per_1k: '0.0025'
+                        output_cost_per_1k: '0.01'
+                    - provider: together
+                      display_name: Together AI
+                      is_configured: false
+                      available_models: []
+                  summary: Success Response
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
   /v1/settings/onboarding:
     get:
       operationId: settings_onboarding_retrieve
@@ -4973,9 +6967,6 @@ paths:
       tags:
       - Settings - Onboarding
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -5000,9 +6991,6 @@ paths:
               $ref: '#/components/schemas/OnboardingCompleteRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -5027,9 +7015,6 @@ paths:
       tags:
       - Finance - Payment Methods
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -5113,9 +7098,6 @@ paths:
                   stripe_token: tok_1234567890abcdef
                 summary: Add Payment Method
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -5194,9 +7176,6 @@ paths:
       tags:
       - Finance - Payment Methods
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -5250,9 +7229,6 @@ paths:
       tags:
       - Finance - Payment Methods
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -5304,9 +7280,6 @@ paths:
       tags:
       - Finance - Payout Methods
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -5385,9 +7358,6 @@ paths:
                     provider: M-Pesa
                 summary: Mobile Money
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -5443,9 +7413,6 @@ paths:
       tags:
       - Finance - Payout Methods
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -5502,11 +7469,7 @@ paths:
       tags:
       - Tenant Management
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -5547,11 +7510,7 @@ paths:
       tags:
       - Tenant Management
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -5602,9 +7561,6 @@ paths:
       tags:
       - Tenant Management
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '204':
@@ -5652,11 +7608,7 @@ paths:
       tags:
       - Tenant Management
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -5710,9 +7662,6 @@ paths:
       tags:
       - Tenant Management
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '204':
@@ -5768,9 +7717,6 @@ paths:
               $ref: '#/components/schemas/TenantMemberInviteRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -5836,9 +7782,6 @@ paths:
             schema:
               $ref: '#/components/schemas/TenantUpdateRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -5908,11 +7851,7 @@ paths:
                 summary: Create Tenant Request
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '201':
           content:
@@ -5996,9 +7935,6 @@ paths:
               - to
               - body
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -6080,11 +8016,7 @@ paths:
       tags:
       - RBAC - Permissions
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -6142,9 +8074,6 @@ paths:
               $ref: '#/components/schemas/UserPermissionCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '201':
@@ -6176,9 +8105,6 @@ paths:
       tags:
       - Wallet
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -6252,9 +8178,6 @@ paths:
       tags:
       - Wallet
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -6309,11 +8232,7 @@ paths:
                 summary: Withdrawal Request
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '201':
           content:
@@ -6348,6 +8267,7 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
+<<<<<<< HEAD
   /v1/wallet/withdrawals/{transaction_id}/approve:
     post:
       operationId: wallet_withdrawals_approve_create
@@ -6374,87 +8294,347 @@ paths:
           type: string
           format: uuid
         required: true
+=======
+  /v1/wallet/withdrawal-options:
+    get:
+      operationId: wallet_withdrawal_options_retrieve
+      description: "\nGet available withdrawal options for tenant including:\n- Available\
+        \ withdrawal methods (based on configured providers)\n- Configured payout\
+        \ method\n- Minimum withdrawal amounts by method\n- Withdrawal fees by method\n\
+        - Current wallet balance\n\n**Required scope**: `finance:view`\n\n**Use case**:\
+        \ Display withdrawal options to tenant before initiating withdrawal.\n   \
+        \     "
+      summary: Get withdrawal options
+>>>>>>> c52311f3e9d950558892ab4cd8fc5d5367b69d65
       tags:
-      - Finance - Withdrawals
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WithdrawalApprovalRequest'
-            examples:
-              ApprovalRequest:
-                value:
-                  notes: Approved for monthly payout
-                summary: Approval Request
+      - Tenant Withdrawals
       security:
-      - cookieAuth: []
-      - basicAuth: []
-      - TenantAuth: []
       - JWTAuth: []
-      - {}
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Transaction'
+                type: object
+                properties:
+                  available_methods:
+                    type: array
+                    items:
+                      type: string
+                  configured_method:
+                    type: object
+                    nullable: true
+                  minimum_amounts:
+                    type: object
+                  fees:
+                    type: object
+                  wallet_balance:
+                    type: number
+                  currency:
+                    type: string
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden - Missing required scope
+          description: ''
+  /v1/wallet/withdrawals:
+    get:
+      operationId: wallet_withdrawals_retrieve
+      description: "\nList withdrawal transactions for tenant with optional filtering.\n\
+        \n**Required scope**: `finance:view`\n\n**Use case**: View withdrawal history\
+        \ and pending approvals.\n        "
+      summary: List withdrawal transactions
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Number of results (default 50)
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Filter by status (pending, completed, failed, canceled)
+      tags:
+      - Tenant Withdrawals
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      type: object
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden
+          description: ''
+    post:
+      operationId: wallet_withdrawals_create
+      description: "\nInitiate a withdrawal request from tenant wallet.\n\n**Required\
+        \ scope**: `finance:withdraw:initiate`\n\n**Four-eyes approval**: Withdrawal\
+        \ must be approved by a different user with `finance:withdraw:approve` scope.\n\
+        \n**Fees**: Tenant pays withdrawal fees (deducted from gross amount).\n\n\
+        **Use case**: Tenant requests withdrawal of their earnings.\n        "
+      summary: Initiate withdrawal request
+      tags:
+      - Tenant Withdrawals
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                  description: Gross withdrawal amount (includes fee)
+                method_type:
+                  type: string
+                  enum:
+                  - mpesa
+                  - bank_transfer
+                  - till
+                  description: Withdrawal method
+                method_details:
+                  type: object
+                  description: Method-specific details
+                notes:
+                  type: string
+                  description: Optional notes
+              required:
+              - amount
+              - method_type
+              - method_details
+            examples:
+              M-PesaWithdrawal:
+                value:
+                  amount: 1000.0
+                  method_type: mpesa
+                  method_details:
+                    phone_number: '254712345678'
+                  notes: Monthly withdrawal
+                summary: M-Pesa Withdrawal
+              BankTransfer:
+                value:
+                  amount: 5000.0
+                  method_type: bank_transfer
+                  method_details:
+                    account_number: '1234567890'
+                    bank_code: '063'
+                    account_name: Business Account
+                summary: Bank Transfer
+              TillWithdrawal:
+                value:
+                  amount: 2000.0
+                  method_type: till
+                  method_details:
+                    till_number: '123456'
+                summary: Till Withdrawal
+      security:
+      - JWTAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  transaction_id:
+                    type: string
+                  status:
+                    type: string
+                  amount:
+                    type: number
+                  fee:
+                    type: number
+                  net_amount:
+                    type: number
               examples:
-                SuccessResponse:
+                M-PesaWithdrawal:
                   value:
-                    id: 123e4567-e89b-12d3-a456-426614174000
-                    transaction_type: withdrawal
                     amount: 1000.0
-                    currency: USD
-                    status: approved
-                    initiated_by:
-                      id: user-uuid-1
-                      email: finance@example.com
-                    approved_by:
-                      id: user-uuid-2
-                      email: manager@example.com
-                    approved_at: '2025-11-10T12:30:00Z'
-                    created_at: '2025-11-10T12:00:00Z'
-                  summary: Success Response
+                    method_type: mpesa
+                    method_details:
+                      phone_number: '254712345678'
+                    notes: Monthly withdrawal
+                  summary: M-Pesa Withdrawal
+                BankTransfer:
+                  value:
+                    amount: 5000.0
+                    method_type: bank_transfer
+                    method_details:
+                      account_number: '1234567890'
+                      bank_code: '063'
+                      account_name: Business Account
+                  summary: Bank Transfer
+                TillWithdrawal:
+                  value:
+                    amount: 2000.0
+                    method_type: till
+                    method_details:
+                      till_number: '123456'
+                  summary: Till Withdrawal
           description: ''
         '400':
           content:
             application/json:
               schema:
+                description: Invalid request or insufficient balance
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                description: Internal server error
+          description: ''
+  /v1/wallet/withdrawals/{transaction_id}/approve:
+    post:
+      operationId: wallet_withdrawals_approve_create
+      description: "\nApprove and process a pending withdrawal request.\n\n**Required\
+        \ scope**: `finance:withdraw:approve`\n\n**Four-eyes approval**: Approver\
+        \ MUST be different from initiator.\n\n**Processing**: Upon approval, the\
+        \ withdrawal is immediately processed through the payment provider.\n\n**Use\
+        \ case**: Finance manager approves withdrawal initiated by another user.\n\
+        \        "
+      summary: Approve withdrawal request
+      parameters:
+      - in: path
+        name: transaction_id
+        schema:
+          type: string
+        description: Transaction UUID
+        required: true
+      tags:
+      - Tenant Withdrawals
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
                 type: object
-                additionalProperties: {}
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  transaction_id:
+                    type: string
+                  amount:
+                    type: number
+                  net_amount:
+                    type: number
+                  fee:
+                    type: number
+                  provider_response:
+                    type: object
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Invalid request or four-eyes violation
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden
           description: ''
         '404':
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: {}
+                description: Transaction not found
           description: ''
-        '409':
+        '500':
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: {}
-              examples:
-                Four-EyesViolation:
-                  value:
-                    error: Four-eyes validation failed
-                    details:
-                      message: Initiator and approver must be different users
-                      initiator_id: user-uuid-1
-                      approver_id: user-uuid-1
-                  summary: Four-Eyes Violation
+                description: Processing failed
+          description: ''
+  /v1/wallet/withdrawals/{transaction_id}/cancel:
+    post:
+      operationId: wallet_withdrawals_cancel_create
+      description: "\nCancel a pending withdrawal request.\n\n**Required scope**:\
+        \ `finance:withdraw:initiate` OR `finance:withdraw:approve`\n\n**Use case**:\
+        \ Cancel a withdrawal before it's approved or if no longer needed.\n     \
+        \   "
+      summary: Cancel withdrawal request
+      parameters:
+      - in: path
+        name: transaction_id
+        schema:
+          type: string
+        description: Transaction UUID
+        required: true
+      tags:
+      - Tenant Withdrawals
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Cancellation reason
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                description: Withdrawal canceled
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Cannot cancel (not pending)
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: Forbidden
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Transaction not found
           description: ''
   /v1/webhooks/mpesa/:
     post:
       operationId: webhooks_mpesa_create
-      description: Receive and process M-Pesa payment webhooks
-      summary: M-Pesa webhook handler
+      description: Receive and process M-Pesa STK Push payment callbacks
+      summary: M-Pesa STK Push callback handler
       tags:
       - webhooks
       security:
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -6463,21 +8643,36 @@ paths:
               schema:
                 description: Webhook processed successfully
           description: ''
-        '501':
+        '400':
           content:
             application/json:
               schema:
-                description: Not implemented
+                description: Invalid webhook payload
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                description: Webhook processing failed
           description: ''
   /v1/webhooks/paystack/:
     post:
       operationId: webhooks_paystack_create
-      description: Receive and process Paystack payment webhooks
+      description: Receive and process Paystack payment webhooks with signature verification
       summary: Paystack webhook handler
       tags:
       - webhooks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event:
+                  type: string
+                data:
+                  type: object
       security:
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -6486,21 +8681,26 @@ paths:
               schema:
                 description: Webhook processed successfully
           description: ''
-        '501':
+        '400':
           content:
             application/json:
               schema:
-                description: Not implemented
+                description: Invalid webhook payload or signature
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                description: Webhook processing failed
           description: ''
   /v1/webhooks/pesapal/:
-    post:
-      operationId: webhooks_pesapal_create
-      description: Receive and process Pesapal payment webhooks
-      summary: Pesapal webhook handler
+    get:
+      operationId: webhooks_pesapal_retrieve
+      description: Receive and process Pesapal Instant Payment Notifications
+      summary: Pesapal IPN handler
       tags:
       - webhooks
       security:
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -6509,12 +8709,28 @@ paths:
               schema:
                 description: Webhook processed successfully
           description: ''
-        '501':
+        '400':
           content:
             application/json:
               schema:
-                description: Not implemented
+                description: Invalid webhook payload
           description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                description: Webhook processing failed
+          description: ''
+    post:
+      operationId: webhooks_pesapal_create
+      description: Process Pesapal IPN (POST method).
+      tags:
+      - webhooks
+      security:
+      - JWTAuth: []
+      responses:
+        '200':
+          description: No response body
   /v1/webhooks/stripe/:
     post:
       operationId: webhooks_stripe_create
@@ -6533,7 +8749,6 @@ paths:
                 data:
                   type: object
       security:
-      - TenantAuth: []
       - JWTAuth: []
       responses:
         '200':
@@ -6860,6 +9075,433 @@ components:
       - updated_at
       - wallet_balance
       - whatsapp_number
+    AgentConfiguration:
+      type: object
+      description: |-
+        Serializer for AgentConfiguration.
+
+        Provides full read/write access to agent configuration fields
+        with validation for all constraints.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        tenant:
+          type: string
+          format: uuid
+          description: Tenant this configuration belongs to
+          readOnly: true
+        tenant_name:
+          type: string
+          readOnly: true
+        agent_name:
+          type: string
+          description: Name of the AI agent (e.g., 'Sarah', 'TechBot')
+          maxLength: 100
+        personality_traits:
+          description: 'Personality traits as key-value pairs (e.g., {''helpful'':
+            true, ''empathetic'': true})'
+        tone:
+          allOf:
+          - $ref: '#/components/schemas/ToneEnum'
+          description: |-
+            Communication tone for the agent
+
+            * `professional` - Professional
+            * `friendly` - Friendly
+            * `casual` - Casual
+            * `formal` - Formal
+        default_model:
+          type: string
+          description: Default LLM model to use (e.g., 'gpt-4o', 'o1-preview', 'o1-mini')
+          maxLength: 50
+        fallback_models:
+          description: List of fallback models to try if default fails (e.g., ['gpt-4o-mini',
+            'gpt-3.5-turbo'])
+        temperature:
+          type: number
+          format: double
+          maximum: 2.0
+          minimum: 0.0
+          description: Temperature for response generation (0.0-2.0, higher = more
+            creative)
+        max_response_length:
+          type: integer
+          maximum: 2000
+          minimum: 50
+          description: Maximum length of agent responses in characters
+        behavioral_restrictions:
+          description: List of topics or behaviors to avoid (e.g., ['politics', 'medical
+            advice'])
+        required_disclaimers:
+          description: List of disclaimers to include in responses (e.g., ['I am an
+            AI assistant'])
+        confidence_threshold:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          description: Minimum confidence score to proceed without handoff (0.0-1.0)
+        auto_handoff_topics:
+          description: Topics that always trigger handoff to human (e.g., ['refund',
+            'complaint'])
+        max_low_confidence_attempts:
+          type: integer
+          maximum: 10
+          minimum: 1
+          description: Number of low-confidence responses before triggering handoff
+        enable_proactive_suggestions:
+          type: boolean
+          description: Enable proactive product/service suggestions
+        enable_spelling_correction:
+          type: boolean
+          description: Enable automatic spelling correction for customer messages
+        enable_rich_messages:
+          type: boolean
+          description: Enable rich WhatsApp messages (buttons, lists, media)
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - created_at
+      - id
+      - tenant
+      - tenant_name
+      - updated_at
+    AgentConfigurationUpdateRequest:
+      type: object
+      description: |-
+        Serializer for updating AgentConfiguration.
+
+        Allows partial updates to agent configuration fields.
+      properties:
+        agent_name:
+          type: string
+          minLength: 1
+          description: Name of the AI agent (e.g., 'Sarah', 'TechBot')
+          maxLength: 100
+        personality_traits:
+          description: 'Personality traits as key-value pairs (e.g., {''helpful'':
+            true, ''empathetic'': true})'
+        tone:
+          allOf:
+          - $ref: '#/components/schemas/ToneEnum'
+          description: |-
+            Communication tone for the agent
+
+            * `professional` - Professional
+            * `friendly` - Friendly
+            * `casual` - Casual
+            * `formal` - Formal
+        default_model:
+          type: string
+          minLength: 1
+          description: Default LLM model to use (e.g., 'gpt-4o', 'o1-preview', 'o1-mini')
+          maxLength: 50
+        fallback_models:
+          description: List of fallback models to try if default fails (e.g., ['gpt-4o-mini',
+            'gpt-3.5-turbo'])
+        temperature:
+          type: number
+          format: double
+          maximum: 2.0
+          minimum: 0.0
+          description: Temperature for response generation (0.0-2.0, higher = more
+            creative)
+        max_response_length:
+          type: integer
+          maximum: 2000
+          minimum: 50
+          description: Maximum length of agent responses in characters
+        behavioral_restrictions:
+          description: List of topics or behaviors to avoid (e.g., ['politics', 'medical
+            advice'])
+        required_disclaimers:
+          description: List of disclaimers to include in responses (e.g., ['I am an
+            AI assistant'])
+        confidence_threshold:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          description: Minimum confidence score to proceed without handoff (0.0-1.0)
+        auto_handoff_topics:
+          description: Topics that always trigger handoff to human (e.g., ['refund',
+            'complaint'])
+        max_low_confidence_attempts:
+          type: integer
+          maximum: 10
+          minimum: 1
+          description: Number of low-confidence responses before triggering handoff
+        enable_proactive_suggestions:
+          type: boolean
+          description: Enable proactive product/service suggestions
+        enable_spelling_correction:
+          type: boolean
+          description: Enable automatic spelling correction for customer messages
+        enable_rich_messages:
+          type: boolean
+          description: Enable rich WhatsApp messages (buttons, lists, media)
+    AgentInteraction:
+      type: object
+      description: |-
+        Serializer for AgentInteraction with full field access.
+
+        Provides read-only access to agent interaction tracking data
+        for analytics and monitoring purposes.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        conversation:
+          type: string
+          format: uuid
+          description: Conversation this interaction belongs to
+          readOnly: true
+        tenant_id:
+          type: string
+          format: uuid
+          readOnly: true
+        tenant_name:
+          type: string
+          readOnly: true
+        customer_phone:
+          type: string
+          readOnly: true
+        customer_message:
+          type: string
+          description: Original customer message text
+        detected_intents:
+          description: List of detected intents with confidence scores
+        intent_names:
+          type: string
+          readOnly: true
+        primary_intent:
+          type: string
+          readOnly: true
+        model_used:
+          type: string
+          readOnly: true
+          description: LLM model used for this interaction (e.g., 'gpt-4o', 'o1-preview')
+        context_size:
+          type: integer
+          description: Size of context provided to the model in tokens
+        processing_time_ms:
+          type: integer
+          description: Time taken to process and generate response in milliseconds
+        agent_response:
+          type: string
+          description: Generated agent response text
+        confidence_score:
+          type: number
+          format: double
+          readOnly: true
+          description: Confidence score for the response (0.0-1.0)
+        handoff_triggered:
+          type: boolean
+          readOnly: true
+          description: Whether this interaction triggered a handoff to human agent
+        handoff_reason:
+          type: string
+          description: Reason for handoff (e.g., 'low_confidence', 'explicit_request',
+            'restricted_topic')
+          maxLength: 100
+        message_type:
+          allOf:
+          - $ref: '#/components/schemas/MessageType352Enum'
+          readOnly: true
+          description: |-
+            Type of message sent to customer
+
+            * `text` - Text
+            * `button` - Button
+            * `list` - List
+            * `media` - Media
+        token_usage:
+          description: 'Token usage breakdown (e.g., {''prompt_tokens'': 100, ''completion_tokens'':
+            50, ''total_tokens'': 150})'
+        total_tokens:
+          type: string
+          readOnly: true
+        estimated_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,6})?$
+          readOnly: true
+          description: Estimated cost in USD for this interaction
+        cost_per_token:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - agent_response
+      - confidence_score
+      - conversation
+      - cost_per_token
+      - created_at
+      - customer_message
+      - customer_phone
+      - estimated_cost
+      - handoff_triggered
+      - id
+      - intent_names
+      - message_type
+      - model_used
+      - primary_intent
+      - tenant_id
+      - tenant_name
+      - total_tokens
+      - updated_at
+    AgentInteractionList:
+      type: object
+      description: |-
+        Simplified serializer for listing agent interactions.
+
+        Provides essential fields for list views without heavy computed fields.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        conversation:
+          type: string
+          format: uuid
+          description: Conversation this interaction belongs to
+          readOnly: true
+        tenant_name:
+          type: string
+          readOnly: true
+        model_used:
+          type: string
+          readOnly: true
+          description: LLM model used for this interaction (e.g., 'gpt-4o', 'o1-preview')
+        confidence_score:
+          type: number
+          format: double
+          readOnly: true
+          description: Confidence score for the response (0.0-1.0)
+        handoff_triggered:
+          type: boolean
+          readOnly: true
+          description: Whether this interaction triggered a handoff to human agent
+        message_type:
+          allOf:
+          - $ref: '#/components/schemas/MessageType352Enum'
+          readOnly: true
+          description: |-
+            Type of message sent to customer
+
+            * `text` - Text
+            * `button` - Button
+            * `list` - List
+            * `media` - Media
+        estimated_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,6})?$
+          readOnly: true
+          description: Estimated cost in USD for this interaction
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+      required:
+      - confidence_score
+      - conversation
+      - created_at
+      - estimated_cost
+      - handoff_triggered
+      - id
+      - message_type
+      - model_used
+      - tenant_name
+    AgentInteractionStats:
+      type: object
+      description: |-
+        Serializer for agent interaction statistics.
+
+        Provides aggregated metrics for analytics dashboards.
+      properties:
+        total_interactions:
+          type: integer
+          readOnly: true
+        total_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,6})?$
+          readOnly: true
+        avg_confidence:
+          type: number
+          format: double
+          readOnly: true
+        handoff_count:
+          type: integer
+          readOnly: true
+        handoff_rate:
+          type: number
+          format: double
+          readOnly: true
+        interactions_by_model:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        cost_by_model:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        interactions_by_type:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        high_confidence_count:
+          type: integer
+          readOnly: true
+        low_confidence_count:
+          type: integer
+          readOnly: true
+        avg_processing_time_ms:
+          type: number
+          format: double
+          readOnly: true
+        avg_tokens:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - avg_confidence
+      - avg_processing_time_ms
+      - avg_tokens
+      - cost_by_model
+      - handoff_count
+      - handoff_rate
+      - high_confidence_count
+      - interactions_by_model
+      - interactions_by_type
+      - low_confidence_count
+      - total_cost
+      - total_interactions
     AppointmentCancelRequest:
       type: object
       description: Serializer for canceling appointments.
@@ -7215,6 +9857,73 @@ components:
         notification_preferences:
           type: object
           additionalProperties: {}
+    ButtonTypeEnum:
+      enum:
+      - reply
+      - url
+      - call
+      type: string
+      description: |-
+        * `reply` - reply
+        * `url` - url
+        * `call` - call
+    CampaignButtonInteraction:
+      type: object
+      description: Serializer for campaign button interactions.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        campaign_id:
+          type: string
+          format: uuid
+          readOnly: true
+        customer_id:
+          type: string
+          format: uuid
+          readOnly: true
+        message_id:
+          type: string
+          format: uuid
+          readOnly: true
+        button_id:
+          type: string
+          readOnly: true
+        button_title:
+          type: string
+          readOnly: true
+        button_type:
+          type: string
+          readOnly: true
+        clicked_at:
+          type: string
+          format: date-time
+          readOnly: true
+        led_to_conversion:
+          type: boolean
+          readOnly: true
+        conversion_type:
+          type: string
+          readOnly: true
+          nullable: true
+        conversion_reference_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+      required:
+      - button_id
+      - button_title
+      - button_type
+      - campaign_id
+      - clicked_at
+      - conversion_reference_id
+      - conversion_type
+      - customer_id
+      - id
+      - led_to_conversion
+      - message_id
     CampaignExecuteRequest:
       type: object
       description: Serializer for executing a campaign.
@@ -7266,8 +9975,11 @@ components:
           readOnly: true
         ab_test:
           readOnly: true
+        button_analytics:
+          readOnly: true
       required:
       - ab_test
+      - button_analytics
       - campaign_id
       - completed_at
       - created_at
@@ -7360,10 +10072,11 @@ components:
           readOnly: true
           description: Reason for the change (if provided)
         changed_by:
-          type: integer
+          type: string
+          format: uuid
+          description: User who made the change (if tenant_updated)
           readOnly: true
           nullable: true
-          description: User who made the change (if tenant_updated)
         changed_by_email:
           type: string
           format: email
@@ -7453,10 +10166,11 @@ components:
           readOnly: true
           description: Count of consecutive low-confidence intents
         last_agent:
-          type: integer
+          type: string
+          format: uuid
+          description: Last human agent assigned
           readOnly: true
           nullable: true
-          description: Last human agent assigned
         handoff_at:
           type: string
           format: date-time
@@ -7520,6 +10234,35 @@ components:
           type: string
           description: Optional reason for handoff
           maxLength: 500
+    CorrectionApprovalRequest:
+      type: object
+      description: Serializer for approving corrections for training.
+      properties:
+        approved:
+          type: boolean
+        quality_score:
+          type: number
+          format: double
+          maximum: 5.0
+          minimum: 0.0
+      required:
+      - approved
+    CorrectionCategoryEnum:
+      enum:
+      - factual_error
+      - tone_inappropriate
+      - missing_information
+      - wrong_intent
+      - poor_recommendation
+      - other
+      type: string
+      description: |-
+        * `factual_error` - Factual Error
+        * `tone_inappropriate` - Inappropriate Tone
+        * `missing_information` - Missing Information
+        * `wrong_intent` - Wrong Intent Detection
+        * `poor_recommendation` - Poor Recommendation
+        * `other` - Other
     CustomerBasic:
       type: object
       description: Basic customer information for conversation listings.
@@ -7706,7 +10449,8 @@ components:
           maxLength: 50
         notes:
           type: string
-          description: Additional notes about preference changes
+          description: Additional notes about preference changes (max 5,000 characters)
+          maxLength: 5000
         created_at:
           type: string
           format: date-time
@@ -7740,6 +10484,128 @@ components:
           type: string
           description: Reason for updating preferences
           maxLength: 500
+    Document:
+      type: object
+      description: Serializer for Document model.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        file_name:
+          type: string
+          maxLength: 255
+        file_type:
+          allOf:
+          - $ref: '#/components/schemas/FileTypeEnum'
+          readOnly: true
+        file_size:
+          type: integer
+          readOnly: true
+          description: File size in bytes
+        status:
+          allOf:
+          - $ref: '#/components/schemas/DocumentStatusEnum'
+          readOnly: true
+        processing_progress:
+          type: integer
+          readOnly: true
+          description: Processing progress percentage (0-100)
+        error_message:
+          type: string
+          readOnly: true
+          nullable: true
+        chunk_count:
+          type: integer
+          readOnly: true
+        total_tokens:
+          type: integer
+          readOnly: true
+        uploaded_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        processed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When processing was completed
+      required:
+      - chunk_count
+      - created_at
+      - error_message
+      - file_name
+      - file_size
+      - file_type
+      - id
+      - processed_at
+      - processing_progress
+      - status
+      - total_tokens
+    DocumentChunk:
+      type: object
+      description: Serializer for DocumentChunk model.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        document:
+          type: string
+          format: uuid
+          description: Unique identifier
+        document_name:
+          type: string
+          readOnly: true
+        chunk_index:
+          type: integer
+        content:
+          type: string
+        token_count:
+          type: integer
+        page_number:
+          type: integer
+          nullable: true
+          description: Page number in source document (if applicable)
+        section:
+          type: string
+          nullable: true
+          description: Section or heading title (if applicable)
+          maxLength: 255
+        embedding_model:
+          type: string
+          description: Embedding model used for this chunk
+          maxLength: 100
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+      required:
+      - chunk_index
+      - content
+      - created_at
+      - document
+      - document_name
+      - id
+    DocumentStatusEnum:
+      enum:
+      - pending
+      - processing
+      - completed
+      - failed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `processing` - Processing
+        * `completed` - Completed
+        * `failed` - Failed
     EmailVerificationRequest:
       type: object
       description: Serializer for email verification.
@@ -7749,6 +10615,22 @@ components:
           minLength: 1
       required:
       - token
+    EntryTypeEnum:
+      enum:
+      - faq
+      - policy
+      - product_info
+      - service_info
+      - procedure
+      - general
+      type: string
+      description: |-
+        * `faq` - FAQ
+        * `policy` - Policy
+        * `product_info` - Product Information
+        * `service_info` - Service Information
+        * `procedure` - Procedure
+        * `general` - General Knowledge
     ExternalSourceEnum:
       enum:
       - woocommerce
@@ -7759,6 +10641,75 @@ components:
         * `woocommerce` - WooCommerce
         * `shopify` - Shopify
         * `manual` - Manual
+    FeedbackAnalytics:
+      type: object
+      description: Serializer for feedback analytics.
+      properties:
+        total_feedback:
+          type: integer
+        helpful_count:
+          type: integer
+        not_helpful_count:
+          type: integer
+        helpful_rate:
+          type: number
+          format: double
+        avg_implicit_score:
+          type: number
+          format: double
+        feedback_with_comments:
+          type: integer
+        user_continued_rate:
+          type: number
+          format: double
+        completed_action_rate:
+          type: number
+          format: double
+        requested_human_rate:
+          type: number
+          format: double
+      required:
+      - avg_implicit_score
+      - completed_action_rate
+      - feedback_with_comments
+      - helpful_count
+      - helpful_rate
+      - not_helpful_count
+      - requested_human_rate
+      - total_feedback
+      - user_continued_rate
+    FeedbackSubmitRatingEnum:
+      enum:
+      - helpful
+      - not_helpful
+      type: string
+      description: |-
+        * `helpful` - helpful
+        * `not_helpful` - not_helpful
+    FeedbackSubmitRequest:
+      type: object
+      description: Serializer for submitting feedback.
+      properties:
+        agent_interaction_id:
+          type: integer
+        rating:
+          $ref: '#/components/schemas/FeedbackSubmitRatingEnum'
+        feedback_text:
+          type: string
+          maxLength: 1000
+      required:
+      - agent_interaction_id
+      - rating
+    FileTypeEnum:
+      enum:
+      - pdf
+      - txt
+      - docx
+      type: string
+      description: |-
+        * `pdf` - PDF
+        * `txt` - Text
+        * `docx` - Word Document
     FormatEnum:
       enum:
       - json
@@ -7767,6 +10718,249 @@ components:
       description: |-
         * `json` - json
         * `csv` - csv
+    HumanCorrection:
+      type: object
+      description: Serializer for human corrections.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        agent_interaction:
+          type: string
+          format: uuid
+          description: Agent interaction that was corrected
+        conversation:
+          type: string
+          format: uuid
+          description: Conversation this correction belongs to
+        bot_response:
+          type: string
+          description: Original bot response that was incorrect
+        human_response:
+          type: string
+          description: Corrected response from human agent
+        correction_reason:
+          type: string
+          description: Explanation of why correction was needed
+        correction_category:
+          allOf:
+          - $ref: '#/components/schemas/CorrectionCategoryEnum'
+          description: |-
+            Category of correction
+
+            * `factual_error` - Factual Error
+            * `tone_inappropriate` - Inappropriate Tone
+            * `missing_information` - Missing Information
+            * `wrong_intent` - Wrong Intent Detection
+            * `poor_recommendation` - Poor Recommendation
+            * `other` - Other
+        corrected_by:
+          type: string
+          format: uuid
+          description: Human agent who made the correction
+          nullable: true
+        corrected_by_name:
+          type: string
+          readOnly: true
+        approved_for_training:
+          type: boolean
+          description: Whether this correction is approved for training data
+        approved_by:
+          type: string
+          format: uuid
+          description: User who approved this correction for training
+          nullable: true
+        approved_by_name:
+          type: string
+          readOnly: true
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When this correction was approved
+        quality_score:
+          type: number
+          format: double
+          maximum: 5.0
+          minimum: 0.0
+          nullable: true
+          description: Quality rating of the correction (0-5)
+        metadata:
+          description: Additional correction metadata
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+      required:
+      - agent_interaction
+      - approved_by_name
+      - bot_response
+      - conversation
+      - corrected_by_name
+      - correction_category
+      - correction_reason
+      - created_at
+      - human_response
+      - id
+    HumanCorrectionRequest:
+      type: object
+      description: Serializer for human corrections.
+      properties:
+        agent_interaction:
+          type: string
+          format: uuid
+          description: Agent interaction that was corrected
+        conversation:
+          type: string
+          format: uuid
+          description: Conversation this correction belongs to
+        bot_response:
+          type: string
+          minLength: 1
+          description: Original bot response that was incorrect
+        human_response:
+          type: string
+          minLength: 1
+          description: Corrected response from human agent
+        correction_reason:
+          type: string
+          minLength: 1
+          description: Explanation of why correction was needed
+        correction_category:
+          allOf:
+          - $ref: '#/components/schemas/CorrectionCategoryEnum'
+          description: |-
+            Category of correction
+
+            * `factual_error` - Factual Error
+            * `tone_inappropriate` - Inappropriate Tone
+            * `missing_information` - Missing Information
+            * `wrong_intent` - Wrong Intent Detection
+            * `poor_recommendation` - Poor Recommendation
+            * `other` - Other
+        corrected_by:
+          type: string
+          format: uuid
+          description: Human agent who made the correction
+          nullable: true
+        approved_for_training:
+          type: boolean
+          description: Whether this correction is approved for training data
+        approved_by:
+          type: string
+          format: uuid
+          description: User who approved this correction for training
+          nullable: true
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When this correction was approved
+        quality_score:
+          type: number
+          format: double
+          maximum: 5.0
+          minimum: 0.0
+          nullable: true
+          description: Quality rating of the correction (0-5)
+        metadata:
+          description: Additional correction metadata
+      required:
+      - agent_interaction
+      - bot_response
+      - conversation
+      - correction_category
+      - correction_reason
+      - human_response
+    InteractionFeedback:
+      type: object
+      description: Serializer for interaction feedback.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        agent_interaction:
+          type: string
+          format: uuid
+          description: Agent interaction being rated
+        conversation:
+          type: string
+          format: uuid
+          description: Conversation this feedback belongs to
+          readOnly: true
+        customer:
+          type: string
+          format: uuid
+          description: Customer who provided feedback
+          readOnly: true
+        rating:
+          allOf:
+          - $ref: '#/components/schemas/InteractionFeedbackRatingEnum'
+          description: |-
+            User rating (helpful/not_helpful)
+
+            * `helpful` - Helpful
+            * `not_helpful` - Not Helpful
+        feedback_text:
+          type: string
+          description: Optional text feedback from user
+        user_continued:
+          type: boolean
+          description: User continued conversation after bot response
+        completed_action:
+          type: boolean
+          description: User completed intended action (purchase, booking, etc.)
+        requested_human:
+          type: boolean
+          description: User requested human handoff
+        response_time_seconds:
+          type: integer
+          nullable: true
+          description: Time taken for user to respond (engagement metric)
+        implicit_satisfaction_score:
+          type: number
+          format: double
+          description: |-
+            Calculate implicit satisfaction score (0.0 to 1.0).
+
+            Based on behavioral signals:
+            - User continued: +0.3
+            - Completed action: +0.5
+            - Requested human: -0.5
+            - Fast response (<30s): +0.2
+          readOnly: true
+        feedback_source:
+          type: string
+          description: Source of feedback (whatsapp_button, api, etc.)
+          maxLength: 50
+        metadata:
+          description: Additional feedback metadata
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+      required:
+      - agent_interaction
+      - conversation
+      - created_at
+      - customer
+      - id
+      - implicit_satisfaction_score
+      - rating
+    InteractionFeedbackRatingEnum:
+      enum:
+      - helpful
+      - not_helpful
+      type: string
+      description: |-
+        * `helpful` - Helpful
+        * `not_helpful` - Not Helpful
     InviteMemberRequest:
       type: object
       description: Serializer for inviting a new member to a tenant.
@@ -7793,6 +10987,235 @@ components:
         * `pending` - Pending
         * `accepted` - Accepted
         * `revoked` - Revoked
+    KnowledgeEntry:
+      type: object
+      description: |-
+        Serializer for KnowledgeEntry with full field access.
+
+        Provides read/write access to all knowledge entry fields including
+        embeddings, metadata, and versioning information.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        tenant:
+          type: string
+          format: uuid
+          description: Tenant this knowledge entry belongs to
+          readOnly: true
+        tenant_name:
+          type: string
+          readOnly: true
+        entry_type:
+          allOf:
+          - $ref: '#/components/schemas/EntryTypeEnum'
+          description: |-
+            Type of knowledge entry
+
+            * `faq` - FAQ
+            * `policy` - Policy
+            * `product_info` - Product Information
+            * `service_info` - Service Information
+            * `procedure` - Procedure
+            * `general` - General Knowledge
+        category:
+          type: string
+          description: Category for organizing entries (e.g., 'shipping', 'returns',
+            'technical')
+          maxLength: 100
+        title:
+          type: string
+          description: Title or question for this entry
+          maxLength: 255
+        content:
+          type: string
+          description: Full content or answer for this entry
+        keywords:
+          type: string
+          description: Comma-separated keywords for search optimization
+        embedding:
+          readOnly: true
+          nullable: true
+          description: Vector embedding for semantic search (generated from title
+            + content)
+        metadata:
+          description: Additional metadata (source, author, related_entries, etc.)
+        priority:
+          type: integer
+          maximum: 100
+          minimum: 0
+          description: Priority for ranking search results (0-100, higher = more important)
+        is_active:
+          type: boolean
+          description: Whether this entry is active and should be used by the agent
+        version:
+          type: integer
+          readOnly: true
+          description: Version number for tracking updates
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was created
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Timestamp when the record was last updated
+      required:
+      - content
+      - created_at
+      - embedding
+      - id
+      - tenant
+      - tenant_name
+      - title
+      - updated_at
+      - version
+    KnowledgeEntryBulkImportRequest:
+      type: object
+      description: |-
+        Serializer for bulk importing knowledge entries.
+
+        Accepts a list of entry data and validates each entry before import.
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: List of knowledge entries to import (max 100 per request)
+          maxItems: 100
+          minItems: 1
+      required:
+      - entries
+    KnowledgeEntryCreateRequest:
+      type: object
+      description: |-
+        Serializer for creating new knowledge entries.
+
+        Simplified serializer for entry creation that accepts keywords as a list
+        and handles embedding generation automatically.
+      properties:
+        entry_type:
+          allOf:
+          - $ref: '#/components/schemas/EntryTypeEnum'
+          description: |-
+            Type of knowledge entry
+
+            * `faq` - FAQ
+            * `policy` - Policy
+            * `product_info` - Product Information
+            * `service_info` - Service Information
+            * `procedure` - Procedure
+            * `general` - General Knowledge
+        category:
+          type: string
+          description: Category for organizing entries (e.g., 'shipping', 'returns',
+            'technical')
+          maxLength: 100
+        title:
+          type: string
+          minLength: 1
+          description: Title or question for this entry
+          maxLength: 255
+        content:
+          type: string
+          minLength: 1
+          description: Full content or answer for this entry
+        keywords_list:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: List of keywords for search optimization
+        metadata:
+          description: Additional metadata (source, author, related_entries, etc.)
+        priority:
+          type: integer
+          maximum: 100
+          minimum: 0
+          description: Priority for ranking search results (0-100, higher = more important)
+        is_active:
+          type: boolean
+          description: Whether this entry is active and should be used by the agent
+      required:
+      - content
+      - title
+    KnowledgeEntrySearch:
+      type: object
+      description: |-
+        Serializer for knowledge entry search results.
+
+        Includes the entry data plus the similarity score from semantic search.
+      properties:
+        entry:
+          allOf:
+          - $ref: '#/components/schemas/KnowledgeEntry'
+          readOnly: true
+        similarity_score:
+          type: number
+          format: double
+          readOnly: true
+          description: Semantic similarity score (0.0-1.0)
+      required:
+      - entry
+      - similarity_score
+    KnowledgeEntryUpdateRequest:
+      type: object
+      description: |-
+        Serializer for updating knowledge entries.
+
+        Supports partial updates and handles embedding regeneration when
+        title or content changes.
+      properties:
+        entry_type:
+          allOf:
+          - $ref: '#/components/schemas/EntryTypeEnum'
+          description: |-
+            Type of knowledge entry
+
+            * `faq` - FAQ
+            * `policy` - Policy
+            * `product_info` - Product Information
+            * `service_info` - Service Information
+            * `procedure` - Procedure
+            * `general` - General Knowledge
+        category:
+          type: string
+          description: Category for organizing entries (e.g., 'shipping', 'returns',
+            'technical')
+          maxLength: 100
+        title:
+          type: string
+          minLength: 1
+          description: Title or question for this entry
+          maxLength: 255
+        content:
+          type: string
+          minLength: 1
+          description: Full content or answer for this entry
+        keywords_list:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: List of keywords for search optimization
+        metadata:
+          description: Additional metadata (source, author, related_entries, etc.)
+        priority:
+          type: integer
+          maximum: 100
+          minimum: 0
+          description: Priority for ranking search results (0-100, higher = more important)
+        is_active:
+          type: boolean
+          description: Whether this entry is active and should be used by the agent
+      required:
+      - content
+      - title
     LoginRequest:
       type: object
       description: Serializer for user login.
@@ -7915,7 +11338,8 @@ components:
           description: Campaign description and notes
         message_content:
           type: string
-          description: Default message content to send
+          description: Default message content to send (max 10,000 characters)
+          maxLength: 10000
         template:
           type: string
           format: uuid
@@ -7934,6 +11358,27 @@ components:
           description: Whether this campaign is an A/B test
         variants:
           description: 'A/B test variants: [{name, content, customer_ids, metrics}]'
+        media_type:
+          allOf:
+          - $ref: '#/components/schemas/MessageCampaignMediaTypeEnum'
+          description: |-
+            Type of media included in campaign
+
+            * `text` - Text Only
+            * `image` - Image
+            * `video` - Video
+            * `document` - Document
+        media_url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL to media file (image, video, or document)
+          maxLength: 500
+        media_caption:
+          type: string
+          description: Caption for media (used with images, videos, documents)
+        buttons:
+          description: 'List of button configurations (max 3): [{id, title, type}]'
         delivery_count:
           type: integer
           readOnly: true
@@ -7988,10 +11433,11 @@ components:
           nullable: true
           description: When campaign execution completed
         created_by:
-          type: integer
+          type: string
+          format: uuid
+          description: User who created this campaign
           readOnly: true
           nullable: true
-          description: User who created this campaign
         created_by_id:
           type: string
           format: uuid
@@ -8055,6 +11501,18 @@ components:
       - tenant
       - tenant_id
       - updated_at
+    MessageCampaignCreateMediaTypeEnum:
+      enum:
+      - text
+      - image
+      - video
+      - document
+      type: string
+      description: |-
+        * `text` - text
+        * `image` - image
+        * `video` - video
+        * `document` - document
     MessageCampaignCreateRequest:
       type: object
       description: Serializer for creating message campaigns.
@@ -8091,9 +11549,48 @@ components:
           type: array
           items: {}
           description: 'A/B test variants: [{name, content}]'
+        media_type:
+          allOf:
+          - $ref: '#/components/schemas/MessageCampaignCreateMediaTypeEnum'
+          default: text
+          description: |-
+            Type of media to include
+
+            * `text` - text
+            * `image` - image
+            * `video` - video
+            * `document` - document
+        media_url:
+          type: string
+          format: uri
+          nullable: true
+          minLength: 1
+          description: URL to media file (required for non-text media types)
+          maxLength: 500
+        media_caption:
+          type: string
+          description: Caption for media (max 1024 characters)
+          maxLength: 1024
+        buttons:
+          type: array
+          items: {}
+          description: 'Button configurations (max 3): [{id, title, type, url?, phone_number?}]'
+          maxItems: 3
       required:
       - message_content
       - name
+    MessageCampaignMediaTypeEnum:
+      enum:
+      - text
+      - image
+      - video
+      - document
+      type: string
+      description: |-
+        * `text` - Text Only
+        * `image` - Image
+        * `video` - Video
+        * `document` - Document
     MessageCampaignStatusEnum:
       enum:
       - draft
@@ -8128,7 +11625,8 @@ components:
           maxLength: 255
         content:
           type: string
-          description: Template content with {{placeholder}} syntax
+          description: Template content with {{placeholder}} syntax (max 5,000 characters)
+          maxLength: 5000
         message_type:
           allOf:
           - $ref: '#/components/schemas/MessageType384Enum'
@@ -8207,6 +11705,18 @@ components:
       - content
       - message_type
       - name
+    MessageType352Enum:
+      enum:
+      - text
+      - button
+      - list
+      - media
+      type: string
+      description: |-
+        * `text` - Text
+        * `button` - Button
+        * `list` - List
+        * `media` - Media
     MessageType384Enum:
       enum:
       - transactional
@@ -8325,11 +11835,12 @@ components:
           description: Total order amount (subtotal + shipping)
         status:
           allOf:
-          - $ref: '#/components/schemas/Status528Enum'
+          - $ref: '#/components/schemas/Status5f7Enum'
           description: |-
             Order status
 
             * `draft` - Draft
+            * `pending_payment` - Pending Payment
             * `placed` - Placed
             * `paid` - Paid
             * `fulfilled` - Fulfilled
@@ -8394,11 +11905,12 @@ components:
           description: Total order amount (subtotal + shipping)
         status:
           allOf:
-          - $ref: '#/components/schemas/Status528Enum'
+          - $ref: '#/components/schemas/Status5f7Enum'
           description: |-
             Order status
 
             * `draft` - Draft
+            * `pending_payment` - Pending Payment
             * `placed` - Placed
             * `paid` - Paid
             * `fulfilled` - Fulfilled
@@ -8486,9 +11998,9 @@ components:
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
         currency:
           type: string
+          nullable: true
           maxLength: 3
       required:
-      - currency
       - price
       - product_id
       - quantity
@@ -8516,10 +12028,10 @@ components:
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
         currency:
           type: string
+          nullable: true
           minLength: 1
           maxLength: 3
       required:
-      - currency
       - price
       - product_id
       - quantity
@@ -8567,11 +12079,12 @@ components:
           description: Total order amount (subtotal + shipping)
         status:
           allOf:
-          - $ref: '#/components/schemas/Status528Enum'
+          - $ref: '#/components/schemas/Status5f7Enum'
           description: |-
             Order status
 
             * `draft` - Draft
+            * `pending_payment` - Pending Payment
             * `placed` - Placed
             * `paid` - Paid
             * `fulfilled` - Fulfilled
@@ -8627,11 +12140,12 @@ components:
       properties:
         status:
           allOf:
-          - $ref: '#/components/schemas/Status528Enum'
+          - $ref: '#/components/schemas/Status5f7Enum'
           description: |-
             Order status
 
             * `draft` - Draft
+            * `pending_payment` - Pending Payment
             * `placed` - Placed
             * `paid` - Paid
             * `fulfilled` - Fulfilled
@@ -8648,6 +12162,26 @@ components:
           maxLength: 255
         metadata:
           description: Additional order metadata
+    PaginatedAgentInteractionListList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentInteractionList'
     PaginatedAppointmentListList:
       type: object
       properties:
@@ -8708,6 +12242,126 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AvailabilitySlot'
+    PaginatedDocumentChunkList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentChunk'
+    PaginatedDocumentList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+    PaginatedHumanCorrectionList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/HumanCorrection'
+    PaginatedInteractionFeedbackList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/InteractionFeedback'
+    PaginatedKnowledgeEntryList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeEntry'
+    PaginatedKnowledgeEntrySearchList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeEntrySearch'
     PaginatedPermissionList:
       type: object
       properties:
@@ -8826,6 +12480,119 @@ components:
           maxLength: 255
         metadata:
           description: Additional appointment metadata
+    PatchedHumanCorrectionRequest:
+      type: object
+      description: Serializer for human corrections.
+      properties:
+        agent_interaction:
+          type: string
+          format: uuid
+          description: Agent interaction that was corrected
+        conversation:
+          type: string
+          format: uuid
+          description: Conversation this correction belongs to
+        bot_response:
+          type: string
+          minLength: 1
+          description: Original bot response that was incorrect
+        human_response:
+          type: string
+          minLength: 1
+          description: Corrected response from human agent
+        correction_reason:
+          type: string
+          minLength: 1
+          description: Explanation of why correction was needed
+        correction_category:
+          allOf:
+          - $ref: '#/components/schemas/CorrectionCategoryEnum'
+          description: |-
+            Category of correction
+
+            * `factual_error` - Factual Error
+            * `tone_inappropriate` - Inappropriate Tone
+            * `missing_information` - Missing Information
+            * `wrong_intent` - Wrong Intent Detection
+            * `poor_recommendation` - Poor Recommendation
+            * `other` - Other
+        corrected_by:
+          type: string
+          format: uuid
+          description: Human agent who made the correction
+          nullable: true
+        approved_for_training:
+          type: boolean
+          description: Whether this correction is approved for training data
+        approved_by:
+          type: string
+          format: uuid
+          description: User who approved this correction for training
+          nullable: true
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When this correction was approved
+        quality_score:
+          type: number
+          format: double
+          maximum: 5.0
+          minimum: 0.0
+          nullable: true
+          description: Quality rating of the correction (0-5)
+        metadata:
+          description: Additional correction metadata
+    PatchedKnowledgeEntryUpdateRequest:
+      type: object
+      description: |-
+        Serializer for updating knowledge entries.
+
+        Supports partial updates and handles embedding regeneration when
+        title or content changes.
+      properties:
+        entry_type:
+          allOf:
+          - $ref: '#/components/schemas/EntryTypeEnum'
+          description: |-
+            Type of knowledge entry
+
+            * `faq` - FAQ
+            * `policy` - Policy
+            * `product_info` - Product Information
+            * `service_info` - Service Information
+            * `procedure` - Procedure
+            * `general` - General Knowledge
+        category:
+          type: string
+          description: Category for organizing entries (e.g., 'shipping', 'returns',
+            'technical')
+          maxLength: 100
+        title:
+          type: string
+          minLength: 1
+          description: Title or question for this entry
+          maxLength: 255
+        content:
+          type: string
+          minLength: 1
+          description: Full content or answer for this entry
+        keywords_list:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          description: List of keywords for search optimization
+        metadata:
+          description: Additional metadata (source, author, related_entries, etc.)
+        priority:
+          type: integer
+          maximum: 100
+          minimum: 0
+          description: Priority for ranking search results (0-100, higher = more important)
+        is_active:
+          type: boolean
+          description: Whether this entry is active and should be used by the agent
     PatchedServiceCreateRequest:
       type: object
       description: Serializer for creating services.
@@ -9619,7 +13386,8 @@ components:
           nullable: true
         content:
           type: string
-          description: Message content to send
+          description: Message content to send (max 10,000 characters)
+          maxLength: 10000
         template:
           type: string
           format: uuid
@@ -10064,9 +13832,10 @@ components:
         * `trial_expired` - Trial Expired
         * `suspended` - Suspended
         * `canceled` - Canceled
-    Status528Enum:
+    Status5f7Enum:
       enum:
       - draft
+      - pending_payment
       - placed
       - paid
       - fulfilled
@@ -10074,6 +13843,7 @@ components:
       type: string
       description: |-
         * `draft` - Draft
+        * `pending_payment` - Pending Payment
         * `placed` - Placed
         * `paid` - Paid
         * `fulfilled` - Fulfilled
@@ -10525,6 +14295,51 @@ components:
       - created_at
       - id
       - role
+    ToneEnum:
+      enum:
+      - professional
+      - friendly
+      - casual
+      - formal
+      type: string
+      description: |-
+        * `professional` - Professional
+        * `friendly` - Friendly
+        * `casual` - Casual
+        * `formal` - Formal
+    TrackButtonClickRequest:
+      type: object
+      description: Serializer for tracking button clicks.
+      properties:
+        button_id:
+          type: string
+          minLength: 1
+          description: ID of the button that was clicked
+        button_title:
+          type: string
+          minLength: 1
+          description: Title/text of the button
+          maxLength: 100
+        button_type:
+          allOf:
+          - $ref: '#/components/schemas/ButtonTypeEnum'
+          default: reply
+          description: |-
+            Type of button clicked
+
+            * `reply` - reply
+            * `url` - url
+            * `call` - call
+        message_id:
+          type: string
+          format: uuid
+          description: ID of the campaign message containing the button
+        metadata:
+          description: Additional metadata
+      required:
+      - button_id
+      - button_title
+      - message_id
     Transaction:
       type: object
       description: Serializer for Transaction.
@@ -10801,7 +14616,14 @@ components:
       - permission_code
     UserProfile:
       type: object
-      description: Serializer for user profile (GET /v1/auth/me).
+      description: |-
+        Comprehensive serializer for user profile (GET /v1/auth/me).
+
+        Returns complete user information including:
+        - Basic profile (name, email, phone)
+        - Account status (active, verified, 2FA)
+        - All tenant memberships with roles and permissions
+        - Activity timestamps
       properties:
         id:
           type: string
@@ -10833,6 +14655,10 @@ components:
           type: boolean
           readOnly: true
           description: Whether user account is active
+        is_superuser:
+          type: boolean
+          readOnly: true
+          description: Platform administrator (use sparingly in production)
         email_verified:
           type: boolean
           readOnly: true
@@ -10857,6 +14683,15 @@ components:
           format: date-time
           readOnly: true
           description: Timestamp when the record was last updated
+        tenants:
+          type: string
+          readOnly: true
+        total_tenants:
+          type: string
+          readOnly: true
+        pending_invites:
+          type: string
+          readOnly: true
       required:
       - created_at
       - email
@@ -10864,7 +14699,11 @@ components:
       - full_name
       - id
       - is_active
+      - is_superuser
       - last_login_at
+      - pending_invites
+      - tenants
+      - total_tenants
       - two_factor_enabled
       - updated_at
     WalletBalance:
@@ -10886,13 +14725,6 @@ components:
       - balance
       - currency
       - minimum_withdrawal
-    WithdrawalApprovalRequest:
-      type: object
-      description: Serializer for withdrawal approval with four-eyes validation.
-      properties:
-        notes:
-          type: string
-          description: Approval notes
     WithdrawalProcessRequest:
       type: object
       description: Serializer for processing withdrawal (admin).
@@ -10959,20 +14791,8 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: 'JWT token obtained from /v1/auth/login or /v1/auth/register. Include
-        as: Authorization: Bearer <token>'
-    TenantAuth:
-      type: apiKey
-      in: header
-      name: X-TENANT-ID
-      description: Tenant UUID for multi-tenant context. Must be accompanied by X-TENANT-API-KEY
-        header.
-    basicAuth:
-      type: http
-      scheme: basic
-    cookieAuth:
-      type: apiKey
-      in: cookie
-      name: sessionid
+        as: Authorization: Bearer <token>. For tenant-scoped operations, also include
+        X-TENANT-ID header.'
 servers:
 - url: http://localhost:8000
   description: Development server

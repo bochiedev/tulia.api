@@ -241,6 +241,9 @@ class CustomerUpdatePreferencesTool(BaseTool):
         Returns:
             ToolResponse with updated customer data
         """
+        # Import Customer model at the top to avoid scoping issues
+        from apps.tenants.models import Customer
+        
         # Validate required parameters
         error = validate_required_params(kwargs, ["tenant_id", "request_id", "conversation_id", "customer_id"])
         if error:
@@ -265,8 +268,6 @@ class CustomerUpdatePreferencesTool(BaseTool):
                     error="Invalid or inactive tenant",
                     error_code="INVALID_TENANT"
                 )
-            
-            from apps.tenants.models import Customer
             
             # Get customer with tenant scoping
             customer = Customer.objects.get(

@@ -1,0 +1,159 @@
+{
+    "tenant": {
+        "name": "Mama Njeri's Kitchen",
+        "slug": "mama-njeri-kitchen",
+        "whatsapp_number": "+254722100001",
+        "contact_email": "info@mamanjeri.co.ke",
+        "contact_phone": "+254722100001",
+        "timezone": "Africa/Nairobi",
+        "bot_name": "Njeri",
+        "tone_style": "friendly_concise",
+        "default_language": "en",
+        "allowed_languages": [
+            "en",
+            "sw"
+        ],
+        "subscription_tier": "Growth",
+        "billing_cycle": "yearly"
+    },
+    "business_info": {
+        "description": "Authentic Kenyan home-cooked meals delivered fresh to your door",
+        "address": "Kilimani, Nairobi",
+        "business_hours": {
+            "monday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "tuesday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "wednesday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "thursday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "friday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "saturday": {
+                "open": "09:00",
+                "close": "21:00"
+            },
+            "sunday": {
+                "open": "10:00",
+                "close": "18:00"
+            }
+        }
+    },
+    "products": [
+        {
+            "name": "Ugali with Sukuma Wiki",
+            "description": "Traditional Kenyan staple with collard greens cooked in onions and tomatoes",
+            "price": 250.00,
+            "category": "Main Meals",
+            "in_stock": true,
+            "stock_quantity": 50,
+            "image_url": "https://example.com/ugali-sukuma.jpg"
+        },
+        {
+            "name": "Nyama Choma Platter",
+            "description": "Grilled goat meat served with ugali, kachumbari, and vegetables",
+            "price": 800.00,
+            "category": "Main Meals",
+            "in_stock": true,
+            "stock_quantity": 20,
+            "image_url": "https://example.com/nyama-choma.jpg"
+        },
+        {
+            "name": "Pilau Rice",
+            "description": "Spiced rice cooked with beef or chicken, served with kachumbari",
+            "price": 350.00,
+            "category": "Main Meals",
+            "in_stock": true,
+            "stock_quantity": 30,
+            "variants": [
+                {
+                    "name": "Beef Pilau",
+                    "price": 350.00
+                },
+                {
+                    "name": "Chicken Pilau",
+                    "price": 320.00
+                }
+            ]
+        },
+        {
+            "name": "Githeri Special",
+            "description": "Mixed beans and maize with vegetables and meat",
+            "price": 200.00,
+            "category": "Main Meals",
+            "in_stock": true,
+            "stock_quantity": 40
+        },
+        {
+            "name": "Mandazi (6 pieces)",
+            "description": "Sweet fried dough, perfect with tea or coffee",
+            "price": 100.00,
+            "category": "Snacks",
+            "in_stock": true,
+            "stock_quantity": 100
+        },
+        {
+            "name": "Chai Masala",
+            "description": "Spiced tea with milk, served hot",
+            "price": 50.00,
+            "category": "Beverages",
+            "in_stock": true,
+            "stock_quantity": 200
+        }
+    ],
+    "services": [
+        {
+            "name": "Catering Service",
+            "description": "Full catering for events, parties, and corporate functions",
+            "base_price": 500.00,
+            "duration_minutes": 240,
+            "category": "Catering"
+        },
+        {
+            "name": "Cooking Classes",
+            "description": "Learn to cook authentic Kenyan dishes with Mama Njeri",
+            "base_price": 1500.00,
+            "duration_minutes": 180,
+            "category": "Classes"
+        }
+    ],
+    "documents": {
+        "about": "Mama Njeri's Kitchen has been serving authentic Kenyan cuisine for over 15 years. We use traditional recipes passed down through generations, with fresh ingredients sourced from local farmers. Our mission is to bring the taste of home to busy Nairobians who miss authentic home-cooked meals.",
+        "return_policy": "We guarantee fresh, quality meals. If you're not satisfied with your order, contact us within 2 hours of delivery for a full refund or replacement. Due to food safety regulations, we cannot accept returns of consumed items.",
+        "delivery_policy": "We deliver within Nairobi and surrounding areas. Delivery is free for orders above KES 500. Standard delivery takes 45-60 minutes. We also offer scheduled delivery for meal prep orders.",
+        "payment_policy": "We accept M-Pesa, cash on delivery, and card payments. Payment is required before preparation begins for first-time customers. Regular customers can pay on delivery."
+    },
+    "faqs": [
+        {
+            "question": "Do you cater for dietary restrictions?",
+            "answer": "Yes! We can accommodate vegetarian, vegan, and gluten-free diets. Please mention your dietary requirements when ordering, and we'll customize your meal accordingly."
+        },
+        {
+            "question": "How fresh are your ingredients?",
+            "answer": "We source our vegetables daily from Wakulima Market and our meat from certified suppliers. All meals are prepared fresh on the day of delivery."
+        },
+        {
+            "question": "Can I order in advance?",
+            "answer": "Absolutely! We recommend ordering at least 2 hours in advance for regular meals. For catering services, please order at least 24 hours ahead."
+        },
+        {
+            "question": "Do you deliver on weekends?",
+            "answer": "Yes, we deliver 7 days a week. Weekend orders are very popular, so we recommend ordering early to secure your preferred delivery time."
+        },
+        {
+            "question": "What's your spice level?",
+            "answer": "Our default spice level is mild to medium. If you prefer spicier food, just let us know when ordering and we'll adjust accordingly."
+        }
+    ]
+}

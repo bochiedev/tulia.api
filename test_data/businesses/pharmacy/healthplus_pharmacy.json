@@ -1,0 +1,172 @@
+{
+    "tenant": {
+        "name": "HealthPlus Pharmacy",
+        "slug": "healthplus-pharmacy",
+        "whatsapp_number": "+254722100004",
+        "contact_email": "info@healthplus.co.ke",
+        "contact_phone": "+254722100004",
+        "timezone": "Africa/Nairobi",
+        "bot_name": "Dr. Sarah",
+        "tone_style": "professional",
+        "default_language": "en",
+        "allowed_languages": [
+            "en",
+            "sw"
+        ],
+        "subscription_tier": "Growth",
+        "billing_cycle": "yearly"
+    },
+    "business_info": {
+        "description": "Your trusted neighborhood pharmacy providing quality medications and health services",
+        "address": "Kimathi Street, Nairobi CBD",
+        "business_hours": {
+            "monday": {
+                "open": "07:00",
+                "close": "21:00"
+            },
+            "tuesday": {
+                "open": "07:00",
+                "close": "21:00"
+            },
+            "wednesday": {
+                "open": "07:00",
+                "close": "21:00"
+            },
+            "thursday": {
+                "open": "07:00",
+                "close": "21:00"
+            },
+            "friday": {
+                "open": "07:00",
+                "close": "21:00"
+            },
+            "saturday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "sunday": {
+                "open": "09:00",
+                "close": "18:00"
+            }
+        }
+    },
+    "products": [
+        {
+            "name": "Panadol Extra (16 tablets)",
+            "description": "Fast-acting pain relief for headaches, fever, and body aches",
+            "price": 180.00,
+            "category": "Pain Relief",
+            "in_stock": true,
+            "stock_quantity": 200,
+            "requires_prescription": false
+        },
+        {
+            "name": "Amoxicillin 500mg (21 capsules)",
+            "description": "Antibiotic for bacterial infections - prescription required",
+            "price": 450.00,
+            "category": "Antibiotics",
+            "in_stock": true,
+            "stock_quantity": 80,
+            "requires_prescription": true
+        },
+        {
+            "name": "Vitamin C 1000mg (30 tablets)",
+            "description": "Immune system support and antioxidant supplement",
+            "price": 800.00,
+            "category": "Vitamins",
+            "in_stock": true,
+            "stock_quantity": 150
+        },
+        {
+            "name": "Blood Pressure Monitor",
+            "description": "Digital automatic blood pressure monitor with large display",
+            "price": 3500.00,
+            "category": "Medical Devices",
+            "in_stock": true,
+            "stock_quantity": 15
+        },
+        {
+            "name": "Dettol Antiseptic 500ml",
+            "description": "Antiseptic liquid for wound cleaning and disinfection",
+            "price": 320.00,
+            "category": "First Aid",
+            "in_stock": true,
+            "stock_quantity": 100
+        },
+        {
+            "name": "Insulin Pen Needles (100 pack)",
+            "description": "Ultra-fine pen needles for insulin injection",
+            "price": 1200.00,
+            "category": "Diabetes Care",
+            "in_stock": true,
+            "stock_quantity": 50,
+            "requires_prescription": false
+        },
+        {
+            "name": "Pregnancy Test Kit",
+            "description": "Accurate home pregnancy test with clear results",
+            "price": 250.00,
+            "category": "Women's Health",
+            "in_stock": true,
+            "stock_quantity": 75
+        }
+    ],
+    "services": [
+        {
+            "name": "Blood Pressure Check",
+            "description": "Professional blood pressure measurement and consultation",
+            "base_price": 200.00,
+            "duration_minutes": 15,
+            "category": "Health Screening"
+        },
+        {
+            "name": "Medication Consultation",
+            "description": "Pharmacist consultation on medication usage and interactions",
+            "base_price": 500.00,
+            "duration_minutes": 30,
+            "category": "Consultation"
+        },
+        {
+            "name": "Prescription Delivery",
+            "description": "Home delivery of prescription medications within Nairobi",
+            "base_price": 300.00,
+            "duration_minutes": 60,
+            "category": "Delivery"
+        },
+        {
+            "name": "Health Screening Package",
+            "description": "Basic health screening including BP, weight, BMI, and glucose test",
+            "base_price": 1500.00,
+            "duration_minutes": 45,
+            "category": "Health Screening"
+        }
+    ],
+    "documents": {
+        "about": "HealthPlus Pharmacy is a licensed pharmacy committed to providing quality healthcare products and services. Our qualified pharmacists are available to provide professional advice on medications, health conditions, and wellness. We stock a comprehensive range of prescription and over-the-counter medications, medical devices, and health supplements.",
+        "return_policy": "Due to health and safety regulations, we cannot accept returns on medications once they leave the pharmacy. However, if you receive the wrong medication or damaged products, please contact us immediately for exchange. Medical devices can be returned within 7 days if unopened and in original packaging.",
+        "delivery_policy": "We offer prescription delivery within Nairobi for orders above KES 1000. Delivery fee is KES 300. All deliveries require ID verification and signature. Controlled substances require additional verification. Same-day delivery available for urgent prescriptions.",
+        "payment_policy": "We accept cash, M-Pesa, and card payments. Insurance claims are processed for registered members. Corporate accounts available for companies with employee health programs. Payment required before dispensing for first-time customers."
+    },
+    "faqs": [
+        {
+            "question": "Do you accept insurance?",
+            "answer": "Yes, we work with major insurance providers including NHIF, AAR, Jubilee, and CIC. Please bring your insurance card and ID for verification. Some medications may require pre-authorization."
+        },
+        {
+            "question": "Can I get a prescription refill without seeing a doctor?",
+            "answer": "For chronic medications like blood pressure or diabetes drugs, we can provide short-term refills (up to 30 days) if you have a recent prescription. However, you'll need to see your doctor for a new prescription soon."
+        },
+        {
+            "question": "Do you provide vaccination services?",
+            "answer": "Yes, we offer various vaccinations including flu shots, travel vaccines, and routine immunizations. Our qualified pharmacist can administer vaccines by appointment. Please call ahead to ensure vaccine availability."
+        },
+        {
+            "question": "What should I do if I miss a dose of my medication?",
+            "answer": "This depends on the specific medication. Generally, take the missed dose as soon as you remember, unless it's almost time for your next dose. Never double dose. Consult our pharmacist for specific guidance on your medications."
+        },
+        {
+            "question": "Do you offer medication synchronization?",
+            "answer": "Yes! We can synchronize your multiple prescriptions so you can pick them all up on the same day each month. This service helps improve medication adherence and is especially helpful for chronic conditions."
+        }
+    ]
+}

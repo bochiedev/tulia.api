@@ -18,3 +18,31 @@ hypothesis==6.112.5
 # black==24.10.0
 # flake8==7.1.1
 # isort==5.13.2
+pytest-django==4.7.0
+pytest-cov==4.1.0
+pytest-asyncio==0.23.2
+hypothesis==6.92.1
+factory-boy==3.3.0
+Faker==20.1.0
+
+# Code Quality
+black==23.12.1
+flake8==7.0.0
+isort==5.13.2
+pycodestyle==2.11.1
+pyflakes==3.1.0
+mccabe==0.7.0
+
+# Pre-commit Hooks
+pre-commit==3.6.0
+
+# Coverage Reporting
+coverage==7.3.3
+
+# Type Checking (Optional)
+# mypy==1.7.1
+
+# Security Scanning (Optional - run manually)
+# bandit==1.7.5
+# safety==3.0.1
+>>>>>>> c52311f3e9d950558892ab4cd8fc5d5367b69d65

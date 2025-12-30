@@ -1,0 +1,168 @@
+{
+    "tenant": {
+        "name": "Word Alive Christian Bookshop",
+        "slug": "word-alive-bookshop",
+        "whatsapp_number": "+254722100003",
+        "contact_email": "info@wordalive.co.ke",
+        "contact_phone": "+254722100003",
+        "timezone": "Africa/Nairobi",
+        "bot_name": "Grace",
+        "tone_style": "friendly_concise",
+        "default_language": "en",
+        "allowed_languages": [
+            "en",
+            "sw"
+        ],
+        "subscription_tier": "Growth",
+        "billing_cycle": "monthly"
+    },
+    "business_info": {
+        "description": "Your trusted source for Christian books, Bibles, gifts, and spiritual resources",
+        "address": "Biashara Street, Nairobi CBD",
+        "business_hours": {
+            "monday": {
+                "open": "08:00",
+                "close": "18:00"
+            },
+            "tuesday": {
+                "open": "08:00",
+                "close": "18:00"
+            },
+            "wednesday": {
+                "open": "08:00",
+                "close": "18:00"
+            },
+            "thursday": {
+                "open": "08:00",
+                "close": "18:00"
+            },
+            "friday": {
+                "open": "08:00",
+                "close": "18:00"
+            },
+            "saturday": {
+                "open": "09:00",
+                "close": "17:00"
+            },
+            "sunday": {
+                "closed": true
+            }
+        }
+    },
+    "products": [
+        {
+            "name": "NIV Study Bible",
+            "description": "New International Version Study Bible with comprehensive study notes and maps",
+            "price": 2500.00,
+            "category": "Bibles",
+            "in_stock": true,
+            "stock_quantity": 25,
+            "variants": [
+                {
+                    "name": "Hardcover",
+                    "price": 2500.00
+                },
+                {
+                    "name": "Leather Bound",
+                    "price": 3500.00
+                },
+                {
+                    "name": "Large Print",
+                    "price": 2800.00
+                }
+            ]
+        },
+        {
+            "name": "Purpose Driven Life by Rick Warren",
+            "description": "Bestselling Christian book about discovering God's purpose for your life",
+            "price": 1200.00,
+            "category": "Christian Living",
+            "in_stock": true,
+            "stock_quantity": 40
+        },
+        {
+            "name": "Jesus Calling by Sarah Young",
+            "description": "Daily devotional with personal reflections and Scripture",
+            "price": 1500.00,
+            "category": "Devotionals",
+            "in_stock": true,
+            "stock_quantity": 30
+        },
+        {
+            "name": "Swahili Bible (Biblia Takatifu)",
+            "description": "Complete Swahili Bible in contemporary translation",
+            "price": 800.00,
+            "category": "Bibles",
+            "in_stock": true,
+            "stock_quantity": 50
+        },
+        {
+            "name": "Christian Worship Songs CD",
+            "description": "Collection of popular contemporary Christian worship songs",
+            "price": 500.00,
+            "category": "Music",
+            "in_stock": true,
+            "stock_quantity": 60
+        },
+        {
+            "name": "Cross Pendant Necklace",
+            "description": "Beautiful silver-plated cross pendant with chain",
+            "price": 800.00,
+            "category": "Gifts",
+            "in_stock": true,
+            "stock_quantity": 20
+        },
+        {
+            "name": "Children's Bible Stories",
+            "description": "Illustrated Bible stories perfect for young children",
+            "price": 600.00,
+            "category": "Children",
+            "in_stock": true,
+            "stock_quantity": 35
+        }
+    ],
+    "services": [
+        {
+            "name": "Bible Study Group Setup",
+            "description": "Help setting up Bible study groups with materials and guidance",
+            "base_price": 2000.00,
+            "duration_minutes": 120,
+            "category": "Ministry Support"
+        },
+        {
+            "name": "Book Ordering Service",
+            "description": "Special order service for books not currently in stock",
+            "base_price": 200.00,
+            "duration_minutes": 30,
+            "category": "Special Orders"
+        }
+    ],
+    "documents": {
+        "about": "Word Alive Christian Bookshop has been serving the Christian community in Kenya for over 20 years. We provide a wide selection of Bibles, Christian books, music, gifts, and resources to help believers grow in their faith and share God's love with others.",
+        "return_policy": "We accept returns within 14 days of purchase for items in original condition. Bibles and books must be unmarked and undamaged. CDs must be unopened. Gift items can be exchanged within 30 days with receipt.",
+        "delivery_policy": "We offer delivery within Nairobi for orders above KES 1000. Delivery fee is KES 300. For upcountry delivery, we use courier services with costs calculated based on weight and destination. Delivery typically takes 2-5 business days.",
+        "payment_policy": "We accept cash, M-Pesa, and card payments. For bulk orders (churches, schools), we offer 30-day payment terms with approved credit application. Special discounts available for ministry purchases."
+    },
+    "faqs": [
+        {
+            "question": "Do you offer bulk discounts for churches?",
+            "answer": "Yes! We offer special pricing for churches, schools, and ministries. Discounts start at 10% for orders over KES 5,000 and go up to 20% for large orders. Contact us for a custom quote."
+        },
+        {
+            "question": "Can you order books that aren't in stock?",
+            "answer": "Absolutely! We can special order most Christian books and Bibles. It typically takes 2-4 weeks depending on the publisher. We require 50% deposit for special orders."
+        },
+        {
+            "question": "Do you have Bibles in local languages?",
+            "answer": "Yes, we stock Bibles in Swahili, Kikuyu, Luo, and several other Kenyan languages. If we don't have your preferred language in stock, we can usually order it for you."
+        },
+        {
+            "question": "Do you buy used Christian books?",
+            "answer": "We occasionally purchase used books in excellent condition, particularly rare or out-of-print titles. Bring your books in for evaluation - we'll make an offer if we're interested."
+        },
+        {
+            "question": "Can I get my Bible engraved?",
+            "answer": "Yes, we offer Bible engraving services for a personal touch. Engraving costs KES 500 and takes 2-3 business days. Perfect for gifts, confirmations, and special occasions."
+        }
+    ]
+}

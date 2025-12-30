@@ -111,7 +111,7 @@ class TestWebhookToResponseFlow:
             'To': f'whatsapp:{tenant.whatsapp_number}',
             'Body': 'Show me sneakers',
             'NumMedia': '0',
-            'AccountSid': tenant.twilio_sid
+            'AccountSid': tenant.settings.twilio_sid
         }
         
         with patch('apps.integrations.views.TwilioService.verify_signature', return_value=True):

@@ -1,0 +1,160 @@
+{
+    "tenant": {
+        "name": "Java House Westlands",
+        "slug": "java-house-westlands",
+        "whatsapp_number": "+254722100002",
+        "contact_email": "westlands@javahouse.co.ke",
+        "contact_phone": "+254722100002",
+        "timezone": "Africa/Nairobi",
+        "bot_name": "Java Assistant",
+        "tone_style": "professional",
+        "default_language": "en",
+        "allowed_languages": [
+            "en"
+        ],
+        "subscription_tier": "Enterprise",
+        "billing_cycle": "yearly"
+    },
+    "business_info": {
+        "description": "Premium coffee house serving artisan coffee, fresh meals, and pastries",
+        "address": "Westlands Square, Nairobi",
+        "business_hours": {
+            "monday": {
+                "open": "06:30",
+                "close": "22:00"
+            },
+            "tuesday": {
+                "open": "06:30",
+                "close": "22:00"
+            },
+            "wednesday": {
+                "open": "06:30",
+                "close": "22:00"
+            },
+            "thursday": {
+                "open": "06:30",
+                "close": "22:00"
+            },
+            "friday": {
+                "open": "06:30",
+                "close": "23:00"
+            },
+            "saturday": {
+                "open": "07:00",
+                "close": "23:00"
+            },
+            "sunday": {
+                "open": "07:00",
+                "close": "22:00"
+            }
+        }
+    },
+    "products": [
+        {
+            "name": "Cappuccino",
+            "description": "Rich espresso with steamed milk and foam, made from premium Kenyan beans",
+            "price": 320.00,
+            "category": "Coffee",
+            "in_stock": true,
+            "stock_quantity": 999,
+            "variants": [
+                {
+                    "name": "Regular",
+                    "price": 320.00
+                },
+                {
+                    "name": "Large",
+                    "price": 380.00
+                },
+                {
+                    "name": "Decaf",
+                    "price": 320.00
+                }
+            ]
+        },
+        {
+            "name": "Americano",
+            "description": "Bold espresso with hot water, perfect for coffee purists",
+            "price": 280.00,
+            "category": "Coffee",
+            "in_stock": true,
+            "stock_quantity": 999
+        },
+        {
+            "name": "Java Breakfast",
+            "description": "Full English breakfast with eggs, bacon, sausages, beans, and toast",
+            "price": 950.00,
+            "category": "Breakfast",
+            "in_stock": true,
+            "stock_quantity": 50
+        },
+        {
+            "name": "Chicken Caesar Salad",
+            "description": "Grilled chicken breast with romaine lettuce, parmesan, and Caesar dressing",
+            "price": 850.00,
+            "category": "Salads",
+            "in_stock": true,
+            "stock_quantity": 30
+        },
+        {
+            "name": "Chocolate Croissant",
+            "description": "Buttery croissant filled with premium Belgian chocolate",
+            "price": 250.00,
+            "category": "Pastries",
+            "in_stock": true,
+            "stock_quantity": 40
+        },
+        {
+            "name": "Fresh Orange Juice",
+            "description": "Freshly squeezed orange juice, no added sugar",
+            "price": 350.00,
+            "category": "Beverages",
+            "in_stock": true,
+            "stock_quantity": 100
+        }
+    ],
+    "services": [
+        {
+            "name": "Corporate Catering",
+            "description": "Professional catering for meetings, conferences, and corporate events",
+            "base_price": 1200.00,
+            "duration_minutes": 300,
+            "category": "Catering"
+        },
+        {
+            "name": "Private Event Hosting",
+            "description": "Exclusive venue hire for private parties and celebrations",
+            "base_price": 5000.00,
+            "duration_minutes": 240,
+            "category": "Events"
+        }
+    ],
+    "documents": {
+        "about": "Java House is Kenya's leading coffee house chain, committed to serving the finest coffee and fresh food in a welcoming environment. Our Westlands branch offers a premium dining experience with artisan coffee, fresh meals, and exceptional service.",
+        "return_policy": "We stand behind the quality of our food and beverages. If you're not completely satisfied with your order, please speak to our manager immediately. We'll gladly replace your item or provide a full refund.",
+        "delivery_policy": "We offer delivery within a 5km radius of our Westlands location. Minimum order value is KES 500. Delivery fee is KES 200. Orders are typically delivered within 30-45 minutes during peak hours.",
+        "payment_policy": "We accept cash, M-Pesa, card payments, and mobile banking. Corporate accounts are available for regular business customers with monthly billing options."
+    },
+    "faqs": [
+        {
+            "question": "Do you have WiFi?",
+            "answer": "Yes, we offer complimentary high-speed WiFi to all customers. The network name is 'JavaHouse_Guest' and the password is available from our staff."
+        },
+        {
+            "question": "Can I work from here with my laptop?",
+            "answer": "Absolutely! We welcome remote workers and students. We have power outlets at most tables and a quiet atmosphere perfect for productivity."
+        },
+        {
+            "question": "Do you have vegan options?",
+            "answer": "Yes, we have several vegan options including plant-based milk for coffee, vegan pastries, salads, and sandwiches. Please ask our staff for recommendations."
+        },
+        {
+            "question": "Can I make reservations?",
+            "answer": "We don't take reservations for regular dining, but we do accept bookings for private events and large groups (8+ people). Contact us in advance to arrange."
+        },
+        {
+            "question": "Do you sell coffee beans?",
+            "answer": "Yes! We sell our premium coffee beans by the bag. Choose from our signature blends or single-origin varieties. Perfect for brewing Java House quality coffee at home."
+        }
+    ]
+}

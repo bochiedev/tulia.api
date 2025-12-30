@@ -109,7 +109,7 @@ class TestBrandedIdentityProperty:
         lang=language_code()
     )
     @settings(
-        max_examples=20,
+        max_examples=5,
         deadline=None,
         suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow]
     )

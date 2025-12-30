@@ -50,7 +50,7 @@ class SalesAnalyticsService:
         Returns:
             Dict with classification stats
         """
-        from apps.bot.models_sales_orchestration import IntentClassificationLog
+        from apps.bot.models import IntentClassificationLog
         
         # Default to last 7 days
         if not end_date:
@@ -120,7 +120,7 @@ class SalesAnalyticsService:
         Returns:
             Dict with LLM usage stats
         """
-        from apps.bot.models_sales_orchestration import LLMUsageLog
+        from apps.bot.models import LLMUsageLog
         
         # Default to current month
         if not end_date:
@@ -185,9 +185,9 @@ class SalesAnalyticsService:
         Returns:
             Dict with conversion funnel stats
         """
-        from apps.bot.models_sales_orchestration import IntentClassificationLog
+        from apps.bot.models import IntentClassificationLog
         from apps.orders.models import Order
-        from apps.bot.models_sales_orchestration import PaymentRequest
+        from apps.bot.models import PaymentRequest
         
         # Default to last 30 days
         if not end_date:
@@ -255,7 +255,7 @@ class SalesAnalyticsService:
         Returns:
             Dict with payment stats
         """
-        from apps.bot.models_sales_orchestration import PaymentRequest
+        from apps.bot.models import PaymentRequest
         
         # Default to last 30 days
         if not end_date:

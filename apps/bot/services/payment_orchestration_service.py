@@ -20,7 +20,7 @@ from django.utils import timezone
 from django.db import transaction
 
 from apps.orders.models import Order
-from apps.bot.models_sales_orchestration import PaymentRequest
+from apps.bot.models import PaymentRequest
 from apps.tenants.models import Tenant, Customer
 from apps.integrations.services.payment_service import PaymentService
 from apps.messaging.models import Conversation

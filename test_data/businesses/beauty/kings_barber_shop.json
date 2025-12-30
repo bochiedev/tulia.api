@@ -1,0 +1,170 @@
+{
+    "tenant": {
+        "name": "King's Barber Shop",
+        "slug": "kings-barber-shop",
+        "whatsapp_number": "+254722100007",
+        "contact_email": "info@kingsbarber.co.ke",
+        "contact_phone": "+254722100007",
+        "timezone": "Africa/Nairobi",
+        "bot_name": "King",
+        "tone_style": "casual",
+        "default_language": "en",
+        "allowed_languages": [
+            "en",
+            "sheng"
+        ],
+        "subscription_tier": "Starter",
+        "billing_cycle": "monthly"
+    },
+    "business_info": {
+        "description": "Traditional and modern barbering services for the modern gentleman",
+        "address": "Tom Mboya Street, Nairobi CBD",
+        "business_hours": {
+            "monday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "tuesday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "wednesday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "thursday": {
+                "open": "08:00",
+                "close": "20:00"
+            },
+            "friday": {
+                "open": "08:00",
+                "close": "21:00"
+            },
+            "saturday": {
+                "open": "07:00",
+                "close": "21:00"
+            },
+            "sunday": {
+                "open": "09:00",
+                "close": "18:00"
+            }
+        }
+    },
+    "products": [
+        {
+            "name": "Hair Pomade - Strong Hold",
+            "description": "Premium pomade for classic styling and strong hold",
+            "price": 800.00,
+            "category": "Hair Products",
+            "in_stock": true,
+            "stock_quantity": 30
+        },
+        {
+            "name": "Beard Oil - Sandalwood",
+            "description": "Nourishing beard oil with sandalwood scent",
+            "price": 1200.00,
+            "category": "Beard Care",
+            "in_stock": true,
+            "stock_quantity": 25
+        },
+        {
+            "name": "Aftershave Balm",
+            "description": "Soothing aftershave balm to prevent irritation",
+            "price": 600.00,
+            "category": "Shaving",
+            "in_stock": true,
+            "stock_quantity": 40
+        },
+        {
+            "name": "Hair Wax - Matte Finish",
+            "description": "Styling wax for natural, matte finish",
+            "price": 700.00,
+            "category": "Hair Products",
+            "in_stock": true,
+            "stock_quantity": 35
+        }
+    ],
+    "services": [
+        {
+            "name": "Classic Haircut",
+            "description": "Traditional men's haircut with scissors and clippers",
+            "base_price": 500.00,
+            "duration_minutes": 30,
+            "category": "Haircuts"
+        },
+        {
+            "name": "Fade Cut",
+            "description": "Modern fade haircut - low, mid, or high fade options",
+            "base_price": 700.00,
+            "duration_minutes": 45,
+            "category": "Haircuts"
+        },
+        {
+            "name": "Beard Trim & Shape",
+            "description": "Professional beard trimming and shaping service",
+            "base_price": 400.00,
+            "duration_minutes": 20,
+            "category": "Beard Services"
+        },
+        {
+            "name": "Hot Towel Shave",
+            "description": "Traditional hot towel shave with straight razor",
+            "base_price": 800.00,
+            "duration_minutes": 40,
+            "category": "Shaving"
+        },
+        {
+            "name": "Hair Wash & Style",
+            "description": "Shampoo, conditioning, and styling service",
+            "base_price": 300.00,
+            "duration_minutes": 25,
+            "category": "Hair Care"
+        },
+        {
+            "name": "Full Service Package",
+            "description": "Haircut, beard trim, hot towel shave, and styling",
+            "base_price": 1500.00,
+            "duration_minutes": 90,
+            "category": "Packages"
+        },
+        {
+            "name": "Eyebrow Trim",
+            "description": "Eyebrow trimming and shaping for men",
+            "base_price": 200.00,
+            "duration_minutes": 10,
+            "category": "Grooming"
+        }
+    ],
+    "documents": {
+        "about": "King's Barber Shop has been serving Nairobi gentlemen for over 10 years. We combine traditional barbering techniques with modern styles to give you the perfect cut every time. Our experienced barbers take pride in their craft and ensure every customer leaves looking and feeling their best.",
+        "return_policy": "Due to the nature of our services, we cannot offer refunds once services are completed. However, if you're not satisfied with your cut, return within 3 days and we'll fix it free of charge. Product returns accepted within 7 days if unopened.",
+        "delivery_policy": "We offer mobile barber services for special events, corporate functions, and home visits within Nairobi. Mobile service fee is KES 1000 plus regular service charges. Advance booking required (24 hours minimum).",
+        "payment_policy": "We accept cash and M-Pesa payments. No advance payment required for regular services. For mobile services and group bookings, 50% deposit required. Walk-ins welcome, but appointments get priority."
+    },
+    "faqs": [
+        {
+            "question": "Do you take appointments?",
+            "answer": "Yes, we take appointments via WhatsApp or phone. Walk-ins are also welcome, but you might have to wait during busy periods. Weekends and evenings are our busiest times."
+        },
+        {
+            "question": "How often should I get a haircut?",
+            "answer": "For most men, we recommend every 3-4 weeks to maintain a fresh look. If you have a fade, you might want to come in every 2-3 weeks to keep it sharp."
+        },
+        {
+            "question": "Do you do kids' haircuts?",
+            "answer": "Absolutely! We love cutting kids' hair. We have special chairs for little ones and our barbers are patient and gentle. Kids' cuts are KES 400."
+        },
+        {
+            "question": "Can I bring my own hair products?",
+            "answer": "Sure! If you have specific products you prefer, feel free to bring them. However, we stock high-quality products that work great for most hair types."
+        },
+        {
+            "question": "Do you offer student discounts?",
+            "answer": "Yes! Students get 20% off all services Monday to Thursday with valid student ID. This doesn't apply to products or mobile services."
+        },
+        {
+            "question": "What's the difference between a classic cut and a fade?",
+            "answer": "A classic cut uses scissors and maintains more length overall. A fade uses clippers to gradually blend from short to long, creating a modern, sharp look. We can show you examples when you visit."
+        }
+    ]
+}

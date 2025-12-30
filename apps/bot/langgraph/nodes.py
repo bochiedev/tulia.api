@@ -366,6 +366,7 @@ class NodeRegistry:
         self.register_node("customer_get_or_create", ToolNode("customer_get_or_create", "customer_get_or_create"))
         self.register_node("catalog_search", ToolNode("catalog_search", "catalog_search"))
         self.register_node("order_create", ToolNode("order_create", "order_create"))
+        self.register_node("order_get_status", ToolNode("order_get_status", "order_get_status"))
         self.register_node("kb_retrieve", ToolNode("kb_retrieve", "kb_retrieve"))
         self.register_node("handoff_create_ticket", ToolNode("handoff_create_ticket", "handoff_create_ticket"))
         
@@ -373,11 +374,24 @@ class NodeRegistry:
         try:
             # Import actual LLM nodes
             from apps.bot.langgraph.llm_nodes import IntentClassificationNode, LanguagePolicyNode, ConversationGovernorNode
+            from apps.bot.langgraph.support_journey import SupportRagAnswerNode, HandoffMessageNode
+            from apps.bot.langgraph.payment_nodes import PaymentRouterPromptNode
+            from apps.bot.langgraph.offers_journey import OffersAnswerNode
             
             # Register core LLM nodes with actual implementations
             self.register_node("intent_classify", IntentClassificationNode())
             self.register_node("language_policy", LanguagePolicyNode())
             self.register_node("governor_spam_casual", ConversationGovernorNode())
+            
+            # Register support journey LLM nodes
+            self.register_node("support_rag_answer", SupportRagAnswerNode())
+            self.register_node("handoff_message", HandoffMessageNode())
+            
+            # Register payment LLM nodes
+            self.register_node("payment_router_prompt", PaymentRouterPromptNode())
+            
+            # Register offers journey LLM nodes
+            self.register_node("offers_answer", OffersAnswerNode())
             
         except ImportError as e:
             logger.warning(f"Could not import LLM nodes: {e}. Using placeholder nodes.")
@@ -385,6 +399,10 @@ class NodeRegistry:
             self.register_node("intent_classify", PlaceholderLLMNode("intent_classify", "Intent classification"))
             self.register_node("language_policy", PlaceholderLLMNode("language_policy", "Language policy"))
             self.register_node("governor_spam_casual", PlaceholderLLMNode("governor_spam_casual", "Conversation governor"))
+            self.register_node("support_rag_answer", PlaceholderLLMNode("support_rag_answer", "Support RAG answer"))
+            self.register_node("handoff_message", PlaceholderLLMNode("handoff_message", "Handoff message"))
+            self.register_node("payment_router_prompt", PlaceholderLLMNode("payment_router_prompt", "Payment router prompt"))
+            self.register_node("offers_answer", PlaceholderLLMNode("offers_answer", "Offers answer"))
 
 
 class PlaceholderLLMNode(LLMNode):

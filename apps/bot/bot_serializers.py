@@ -476,7 +476,11 @@ class AgentInteractionSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = '__all__'
+        read_only_fields = [
+            'id', 'tenant', 'tenant_name', 'conversation', 'model_used',
+            'confidence_score', 'handoff_triggered', 'message_type', 
+            'estimated_cost', 'created_at', 'updated_at'
+        ]
     
     def get_total_tokens(self, obj):
         """Get total token count."""
@@ -517,7 +521,11 @@ class AgentInteractionListSerializer(serializers.ModelSerializer):
             'estimated_cost',
             'created_at',
         ]
-        read_only_fields = '__all__'
+        read_only_fields = [
+            'id', 'conversation', 'tenant_name', 'model_used',
+            'confidence_score', 'handoff_triggered', 'message_type',
+            'estimated_cost', 'created_at'
+        ]
 
 
 class AgentInteractionStatsSerializer(serializers.Serializer):

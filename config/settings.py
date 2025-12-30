@@ -79,6 +79,7 @@ MIDDLEWARE = [
     
     # Custom middleware
     'apps.tenants.middleware.RequestIDMiddleware',
+    'apps.core.middleware.request_tracking.ConversationContextMiddleware',
     'apps.tenants.middleware.TenantContextMiddleware',
     'apps.tenants.middleware.WebhookSubscriptionMiddleware',
     'apps.core.cors.TenantCORSMiddleware',
@@ -709,6 +710,40 @@ LOGGING = {
         },
         'security': {
             'handlers': ['security', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Bot conversation logging
+        'apps.bot.conversation': {
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        # LangGraph orchestrator logging
+        'apps.bot.langgraph': {
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        # Metrics and observability
+        'tulia.metrics': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'tulia.structured': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Request tracking
+        'apps.core.request_tracking': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'apps.bot.conversation_context': {
+            'handlers': ['console', 'file'],
             'level': 'INFO',
             'propagate': False,
         },
