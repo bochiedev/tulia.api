@@ -4,6 +4,7 @@ Celery tasks for LangGraph orchestration.
 Handles asynchronous processing of inbound messages using the LangGraph orchestrator.
 Legacy AI agent service and direct LLM calls have been removed.
 """
+import asyncio
 import logging
 from celery import shared_task
 from django.utils import timezone
@@ -92,7 +93,7 @@ def process_inbound_message(self, message_id: str):
         orchestrator = LangGraphOrchestrator()
         
         # Process message through LangGraph
-        updated_state = await orchestrator.process_message(
+        updated_state = asyncio.run(orchestrator.process_message(
             tenant_id=str(tenant.id),
             conversation_id=str(conversation.id),
             request_id=str(message.id),  # Use message ID as request ID
@@ -100,14 +101,14 @@ def process_inbound_message(self, message_id: str):
             phone_e164=customer.phone_e164 if customer else None,
             customer_id=str(customer.id) if customer else None,
             existing_state=existing_state
-        )
+        ))
         
         # Send response if generated
         if updated_state.response_text:
             twilio_service = create_twilio_service_for_tenant(tenant)
             
             # Send the response
-            await twilio_service.send_message(
+            twilio_service.send_whatsapp(
                 to=customer.phone_e164,
                 body=updated_state.response_text
             )
