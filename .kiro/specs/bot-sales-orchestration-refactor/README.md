@@ -2,7 +2,7 @@
 
 ## Overview
 
-This spec defines a fundamental refactor of the Tulia AI (WabotIQ) conversational bot from a hallucination-prone, LLM-heavy system into a deterministic, sales-oriented agent. The new architecture implements a hybrid approach where deterministic business logic handles all critical decisions, and LLMs serve only as a thin NLU (Natural Language Understanding) and formatting layer.
+This spec defines a fundamental refactor of the Tulia AI (Tulia AI) conversational bot from a hallucination-prone, LLM-heavy system into a deterministic, sales-oriented agent. The new architecture implements a hybrid approach where deterministic business logic handles all critical decisions, and LLMs serve only as a thin NLU (Natural Language Understanding) and formatting layer.
 
 ## Key Objectives
 

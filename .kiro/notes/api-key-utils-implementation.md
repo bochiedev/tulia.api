@@ -1,7 +1,7 @@
 # API Key Utilities Implementation Summary
 
 ## Overview
-Implemented secure API key generation and management utilities for the WabotIQ tenant system.
+Implemented secure API key generation and management utilities for the Tulia AI tenant system.
 
 ## Files Created/Modified
 
@@ -168,7 +168,7 @@ Potential improvements for consideration:
 
 ## Compliance
 
-This implementation follows WabotIQ security principles:
+This implementation follows Tulia AI security principles:
 - ✅ Multi-tenant isolation (keys scoped to tenant)
 - ✅ Encrypted storage (hashed with SHA-256)
 - ✅ Audit trail (created_at timestamps)

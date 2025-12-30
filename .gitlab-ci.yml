@@ -71,7 +71,7 @@ test:
     
     # Email
     EMAIL_BACKEND: "django.core.mail.backends.console.EmailBackend"
-    DEFAULT_FROM_EMAIL: "noreply@tulia.ai"
+    DEFAULT_FROM_EMAIL: "noreply@trytulia.com"
     
     # Frontend
     FRONTEND_URL: "http://localhost:3000"
@@ -237,7 +237,7 @@ deploy-staging:
         EMAIL_USE_TLS=True
         EMAIL_HOST_USER=$STAGING_EMAIL_HOST_USER
         EMAIL_HOST_PASSWORD=$STAGING_EMAIL_HOST_PASSWORD
-        DEFAULT_FROM_EMAIL=noreply@staging.tulia.ai
+        DEFAULT_FROM_EMAIL=noreply@staging.trytulia.com
         
         # Frontend
         FRONTEND_URL=$STAGING_FRONTEND_URL
@@ -259,7 +259,7 @@ deploy-staging:
   
   environment:
     name: staging
-    url: https://staging.tulia.ai
+    url: https://staging.trytulia.com
   
   only:
     - develop
@@ -338,7 +338,7 @@ deploy-production:
         EMAIL_USE_TLS=True
         EMAIL_HOST_USER=$PRODUCTION_EMAIL_HOST_USER
         EMAIL_HOST_PASSWORD=$PRODUCTION_EMAIL_HOST_PASSWORD
-        DEFAULT_FROM_EMAIL=noreply@tulia.ai
+        DEFAULT_FROM_EMAIL=noreply@trytulia.com
         
         # Frontend
         FRONTEND_URL=$PRODUCTION_FRONTEND_URL
@@ -368,7 +368,7 @@ deploy-production:
   
   environment:
     name: production
-    url: https://tulia.ai
+    url: https://trytulia.com
   
   when: manual
   

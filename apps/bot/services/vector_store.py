@@ -309,7 +309,7 @@ class PineconeVectorStore(VectorStore):
         if not api_key:
             raise ValueError("PINECONE_API_KEY not configured in settings")
         
-        index_name = getattr(settings, 'PINECONE_INDEX_NAME', 'wabotiq-rag')
+        index_name = getattr(settings, 'PINECONE_INDEX_NAME', 'tulia-ai-rag')
         dimension = getattr(settings, 'PINECONE_DIMENSION', 1536)
         metric = getattr(settings, 'PINECONE_METRIC', 'cosine')
         cloud = getattr(settings, 'PINECONE_CLOUD', 'aws')

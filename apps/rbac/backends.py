@@ -1,5 +1,5 @@
 """
-Custom authentication backend for WabotIQ.
+Custom authentication backend for Tulia AI.
 
 Provides email-based authentication compatible with Django admin.
 """

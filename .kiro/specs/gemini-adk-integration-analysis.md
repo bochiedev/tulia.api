@@ -1,4 +1,4 @@
-# Gemini ADK Integration Analysis for WabotIQ
+# Gemini ADK Integration Analysis for Tulia AI
 
 **Date**: November 18, 2025  
 **Status**: Analysis & Recommendations  

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This specification addresses critical conversation flow failures in the WabotIQ bot that prevent sales completion. Real user conversations reveal that the bot: (1) echoes user messages verbatim, (2) never sends interactive WhatsApp elements despite having the code, (3) maintains poor context across conversation sessions, (4) talks endlessly without closing sales, (5) constantly disclaims "needs verification" undermining user confidence, and (6) never actually initiates payment flows. This spec focuses on fixing these immediate blockers to enable the bot to actually complete sales transactions.
+This specification addresses critical conversation flow failures in the Tulia AI bot that prevent sales completion. Real user conversations reveal that the bot: (1) echoes user messages verbatim, (2) never sends interactive WhatsApp elements despite having the code, (3) maintains poor context across conversation sessions, (4) talks endlessly without closing sales, (5) constantly disclaims "needs verification" undermining user confidence, and (6) never actually initiates payment flows. This spec focuses on fixing these immediate blockers to enable the bot to actually complete sales transactions.
 
 ## Glossary
 

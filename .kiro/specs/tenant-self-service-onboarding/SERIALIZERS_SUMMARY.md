@@ -322,4 +322,4 @@ With all serializers complete, the next tasks in the implementation plan are:
 - Task 21: Create database migrations
 - Task 22: Write comprehensive tests
 
-All serializers are production-ready and follow WabotIQ's security and coding standards.
+All serializers are production-ready and follow Tulia AI's security and coding standards.

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design addresses critical UX failures in the WabotIQ conversational commerce bot that prevent smooth inquiry-to-sale journeys. The current system suffers from context loss, poor product discovery, lack of rich media, inconsistent conversation flow, and memory failures. This design transforms the bot into an intelligent sales assistant that guides customers from inquiry to purchase efficiently.
+This design addresses critical UX failures in the Tulia AI conversational commerce bot that prevent smooth inquiry-to-sale journeys. The current system suffers from context loss, poor product discovery, lack of rich media, inconsistent conversation flow, and memory failures. This design transforms the bot into an intelligent sales assistant that guides customers from inquiry to purchase efficiently.
 
 ### Core Problems Identified
 

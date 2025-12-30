@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This specification addresses critical user experience issues in the WabotIQ conversational commerce bot that prevent smooth inquiry-to-sale journeys. Analysis of real user conversations reveals that the bot frustrates users through context loss, poor product discovery, lack of rich media, and inconsistent conversation flow. The goal is to transform the bot from a frustrating experience into an intelligent sales assistant that guides customers from inquiry to purchase in minutes, not through endless back-and-forth messages.
+This specification addresses critical user experience issues in the Tulia AI conversational commerce bot that prevent smooth inquiry-to-sale journeys. Analysis of real user conversations reveals that the bot frustrates users through context loss, poor product discovery, lack of rich media, and inconsistent conversation flow. The goal is to transform the bot from a frustrating experience into an intelligent sales assistant that guides customers from inquiry to purchase in minutes, not through endless back-and-forth messages.
 
 ## Glossary
 

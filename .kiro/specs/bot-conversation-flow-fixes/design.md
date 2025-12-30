@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design addresses critical conversation flow failures that prevent the WabotIQ bot from completing sales. The current system suffers from: (1) echoing user messages, (2) not sending interactive WhatsApp elements, (3) poor context management, (4) endless conversations without closure, (5) confidence-undermining disclaimers, and (6) incomplete payment flows. This design provides concrete fixes to enable actual sales completion.
+This design addresses critical conversation flow failures that prevent the Tulia AI bot from completing sales. The current system suffers from: (1) echoing user messages, (2) not sending interactive WhatsApp elements, (3) poor context management, (4) endless conversations without closure, (5) confidence-undermining disclaimers, and (6) incomplete payment flows. This design provides concrete fixes to enable actual sales completion.
 
 ### Core Problems and Solutions
 

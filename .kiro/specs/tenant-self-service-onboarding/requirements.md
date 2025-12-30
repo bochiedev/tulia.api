@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This feature enables self-service tenant registration and onboarding for WabotIQ. Users can register accounts, create multiple tenants, and configure tenant settings including integration credentials, payment methods, and business preferences through a guided onboarding flow. The system tracks onboarding completion and reminds users to complete pending setup steps.
+This feature enables self-service tenant registration and onboarding for Tulia AI. Users can register accounts, create multiple tenants, and configure tenant settings including integration credentials, payment methods, and business preferences through a guided onboarding flow. The system tracks onboarding completion and reminds users to complete pending setup steps.
 
 **Authentication Model**:
 - User registration and login use JWT-based authentication

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This specification defines the enhancement of the WabotIQ AI customer service agent with comprehensive Retrieval-Augmented Generation (RAG) capabilities. The enhanced system will ground all agent responses in verifiable sources including tenant-uploaded documents, database records, and real-time internet information. This prevents hallucinations, ensures accuracy, and provides customers with helpful, contextual information even when product descriptions are minimal.
+This specification defines the enhancement of the Tulia AI AI customer service agent with comprehensive Retrieval-Augmented Generation (RAG) capabilities. The enhanced system will ground all agent responses in verifiable sources including tenant-uploaded documents, database records, and real-time internet information. This prevents hallucinations, ensures accuracy, and provides customers with helpful, contextual information even when product descriptions are minimal.
 
 ## Glossary
 

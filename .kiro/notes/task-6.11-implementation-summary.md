@@ -61,7 +61,7 @@ Added comprehensive API documentation including:
 
 1. **Invite User and Assign Roles**
 ```bash
-curl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite \
+curl -X POST https://api.trytulia.com/v1/memberships/{tenant_id}/invite \
   -H "X-TENANT-ID: {tenant_id}" \
   -H "X-TENANT-API-KEY: {api_key}" \
   -H "Content-Type: application/json" \
@@ -73,7 +73,7 @@ curl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite \
 
 2. **Grant User-Specific Permission Override**
 ```bash
-curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \
+curl -X POST https://api.trytulia.com/v1/users/{user_id}/permissions \
   -H "X-TENANT-ID: {tenant_id}" \
   -H "X-TENANT-API-KEY: {api_key}" \
   -H "Content-Type: application/json" \
@@ -87,7 +87,7 @@ curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \
 3. **Four-Eyes Withdrawal Approval**
 ```bash
 # Step 1: User A initiates withdrawal
-curl -X POST https://api.tulia.ai/v1/wallet/withdraw \
+curl -X POST https://api.trytulia.com/v1/wallet/withdraw \
   -H "X-TENANT-ID: {tenant_id}" \
   -H "X-TENANT-API-KEY: {api_key}" \
   -H "Content-Type: application/json" \
@@ -98,7 +98,7 @@ curl -X POST https://api.tulia.ai/v1/wallet/withdraw \
   }'
 
 # Step 2: User B approves withdrawal (must be different user)
-curl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve \
+curl -X POST https://api.trytulia.com/v1/wallet/withdrawals/{transaction_id}/approve \
   -H "X-TENANT-ID: {tenant_id}" \
   -H "X-TENANT-API-KEY: {api_key}" \
   -H "Content-Type: application/json" \

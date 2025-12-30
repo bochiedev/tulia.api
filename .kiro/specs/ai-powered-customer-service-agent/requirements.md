@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This specification defines the upgrade of the WabotIQ bot from a basic intent classification system to a powerful, context-aware AI customer service agent. The enhanced agent will leverage advanced language models (OpenAI GPT-4o, o1, and future aggregators like Together AI), maintain comprehensive conversation memory, learn from tenant-specific knowledge bases, and provide personalized customer experiences while maintaining strict multi-tenant isolation.
+This specification defines the upgrade of the Tulia AI bot from a basic intent classification system to a powerful, context-aware AI customer service agent. The enhanced agent will leverage advanced language models (OpenAI GPT-4o, o1, and future aggregators like Together AI), maintain comprehensive conversation memory, learn from tenant-specific knowledge bases, and provide personalized customer experiences while maintaining strict multi-tenant isolation.
 
 ## Glossary
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation plan transforms the WabotIQ bot from a conversation that never closes sales into one that completes transactions efficiently. Tasks are organized by priority and dependency, focusing on immediate impact first.
+This implementation plan transforms the Tulia AI bot from a conversation that never closes sales into one that completes transactions efficiently. Tasks are organized by priority and dependency, focusing on immediate impact first.
 
 ## Task Breakdown
 

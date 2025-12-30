@@ -40,31 +40,31 @@ info:
     \ | Finance |\n| `integrations:manage` | Manage external integrations | Integrations\
     \ |\n| `users:manage` | Invite users, assign roles, manage permissions | Users\
     \ |\n\n## Example Workflows\n\n### Invite a User and Assign Roles\n```bash\n#\
-    \ 1. Invite user (requires users:manage scope)\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite\
+    \ 1. Invite user (requires users:manage scope)\ncurl -X POST https://api.trytulia.com/v1/memberships/{tenant_id}/invite\
     \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
     \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"email\": \"newuser@example.com\"\
     ,\n    \"role_ids\": [\"role-uuid-1\", \"role-uuid-2\"]\n  }'\n\n# 2. User accepts\
-    \ invitation and logs in\n\n# 3. Assign additional roles\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/{user_id}/roles\
+    \ invitation and logs in\n\n# 3. Assign additional roles\ncurl -X POST https://api.trytulia.com/v1/memberships/{tenant_id}/{user_id}/roles\
     \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
     \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"role_ids\": [\"\
     role-uuid-3\"]\n  }'\n```\n\n### Grant User-Specific Permission Override\n```bash\n\
     # Grant a specific permission to a user (overrides role permissions)\ncurl -X\
-    \ POST https://api.tulia.ai/v1/users/{user_id}/permissions \\\n  -H \"X-TENANT-ID:\
+    \ POST https://api.trytulia.com/v1/users/{user_id}/permissions \\\n  -H \"X-TENANT-ID:\
     \ {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\n  -H \"Content-Type:\
     \ application/json\" \\\n  -d '{\n    \"permission_code\": \"finance:reconcile\"\
     ,\n    \"granted\": true,\n    \"reason\": \"Temporary access for Q4 audit\"\n\
-    \  }'\n\n# Deny a permission (even if granted by role)\ncurl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions\
+    \  }'\n\n# Deny a permission (even if granted by role)\ncurl -X POST https://api.trytulia.com/v1/users/{user_id}/permissions\
     \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
     \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"permission_code\"\
     : \"catalog:edit\",\n    \"granted\": false,\n    \"reason\": \"Suspended pending\
     \ investigation\"\n  }'\n```\n\n### Four-Eyes Withdrawal Approval\n```bash\n#\
     \ 1. User A initiates withdrawal (requires finance:withdraw:initiate)\ncurl -X\
-    \ POST https://api.tulia.ai/v1/wallet/withdraw \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
+    \ POST https://api.trytulia.com/v1/wallet/withdraw \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
     \ \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\n  -H \"Content-Type: application/json\"\
     \ \\\n  -d '{\n    \"amount\": 1000.00,\n    \"currency\": \"USD\",\n    \"destination\"\
     : \"bank_account_123\"\n  }'\n# Returns: {\"transaction_id\": \"txn-uuid\", \"\
     status\": \"pending_approval\"}\n\n# 2. User B approves withdrawal (requires finance:withdraw:approve,\
-    \ must be different user)\ncurl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve\
+    \ must be different user)\ncurl -X POST https://api.trytulia.com/v1/wallet/withdrawals/{transaction_id}/approve\
     \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
     \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"notes\": \"Approved\
     \ for monthly payout\"\n  }'\n# Returns: {\"transaction_id\": \"txn-uuid\", \"\
@@ -187,7 +187,7 @@ paths:
       description: "\nChange a tenant's subscription tier. This will:\n- Update the\
         \ tenant's subscription_tier\n- Create or update the Subscription record\n\
         - Log a SubscriptionEvent for audit trail\n- Apply new feature limits immediately\n\
-        \n**Example curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/admin/tenants/{tenant_id}/subscription\
+        \n**Example curl:**\n```bash\ncurl -X POST https://api.trytulia.com/v1/admin/tenants/{tenant_id}/subscription\
         \ \\\n  -H \"Authorization: Bearer {admin_token}\" \\\n  -H \"Content-Type:\
         \ application/json\" \\\n  -d '{\n    \"tier_id\": \"tier-uuid\",\n    \"\
         billing_cycle\": \"monthly\",\n    \"notes\": \"Upgraded to Growth tier\"\n\
@@ -255,7 +255,7 @@ paths:
       description: "\nWaive or unwaive subscription fees for a tenant. When waived:\n\
         - Tenant status remains 'active'\n- No invoices are generated\n- All tier\
         \ features remain accessible\n- Displayed as \"Subscription Waived\" in tenant\
-        \ dashboard\n\n**Example curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/admin/tenants/{tenant_id}/subscription/waiver\
+        \ dashboard\n\n**Example curl:**\n```bash\ncurl -X POST https://api.trytulia.com/v1/admin/tenants/{tenant_id}/subscription/waiver\
         \ \\\n  -H \"Authorization: Bearer {admin_token}\" \\\n  -H \"Content-Type:\
         \ application/json\" \\\n  -d '{\n    \"waived\": true,\n    \"notes\": \"\
         Strategic partnership - waive fees for 12 months\"\n  }'\n```\n\nRequires\
@@ -323,7 +323,7 @@ paths:
       description: "\nComplete or fail a pending withdrawal. This is for platform\
         \ operator processing.\n\n**Actions:**\n- `complete`: Mark withdrawal as completed\
         \ (funds transferred)\n- `fail`: Mark withdrawal as failed and credit amount\
-        \ back to wallet\n\n**Example curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/admin/wallet/withdrawals/{transaction_id}/process\
+        \ back to wallet\n\n**Example curl:**\n```bash\ncurl -X POST https://api.trytulia.com/v1/admin/wallet/withdrawals/{transaction_id}/process\
         \ \\\n  -H \"Authorization: Bearer {admin_token}\" \\\n  -H \"Content-Type:\
         \ application/json\" \\\n  -d '{\n    \"action\": \"complete\",\n    \"notes\"\
         : \"Bank transfer completed\"\n  }'\n```\n\nFor four-eyes approval within\
@@ -1217,7 +1217,7 @@ paths:
       operationId: memberships_roles_create
       description: "\nAssign roles to a tenant user. Adds the specified roles to the\
         \ user's existing roles.\n\n**Required scope:** `users:manage`\n\n**Example\
-        \ curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/{user_id}/roles\
+        \ curl:**\n```bash\ncurl -X POST https://api.trytulia.com/v1/memberships/{tenant_id}/{user_id}/roles\
         \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
         \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"role_ids\": [\"\
         role-uuid-1\", \"role-uuid-2\"]}'\n```\n        "
@@ -1325,7 +1325,7 @@ paths:
         \ with invite_status='pending' and optionally assigns roles.\n\n**Required\
         \ scope:** `users:manage`\n\nThe invited user will receive an email with an\
         \ acceptance link.\nIf the user doesn't exist, a new User account is created.\n\
-        \n**Example curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite\
+        \n**Example curl:**\n```bash\ncurl -X POST https://api.trytulia.com/v1/memberships/{tenant_id}/invite\
         \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
         \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"email\":\
         \ \"newuser@example.com\",\n    \"role_ids\": [\"role-uuid-1\", \"role-uuid-2\"\
@@ -3062,7 +3062,7 @@ paths:
         \ metadata:\n        - shop_domain: Shopify store domain (e.g., mystore.myshopify.com)\n\
         \        - access_token: Admin API access token\n        \n        The sync\
         \ runs asynchronously via Celery task. Returns task ID for tracking.\n   \
-        \     \n        Example curl:\n        ```bash\n        curl -X POST https://api.tulia.ai/v1/catalog/sync/shopify\
+        \     \n        Example curl:\n        ```bash\n        curl -X POST https://api.trytulia.com/v1/catalog/sync/shopify\
         \ \\\n          -H \"X-TENANT-ID: tenant-uuid\" \\\n          -H \"X-TENANT-API-KEY:\
         \ your-api-key\"\n        ```\n        "
       summary: Sync Shopify products
@@ -3119,7 +3119,7 @@ paths:
         \ REST API consumer key\n        - consumer_secret: REST API consumer secret\n\
         \        \n        The sync runs asynchronously via Celery task. Returns task\
         \ ID for tracking.\n        \n        Example curl:\n        ```bash\n   \
-        \     curl -X POST https://api.tulia.ai/v1/catalog/sync/woocommerce \\\n \
+        \     curl -X POST https://api.trytulia.com/v1/catalog/sync/woocommerce \\\n \
         \         -H \"X-TENANT-ID: tenant-uuid\" \\\n          -H \"X-TENANT-API-KEY:\
         \ your-api-key\"\n        ```\n        "
       summary: Sync WooCommerce products
@@ -3293,7 +3293,7 @@ paths:
       description: "\nAdd permissions to a role. Creates RolePermission records for\
         \ the specified permission codes.\n\n**Required scope:** `users:manage`\n\n\
         This immediately affects all users assigned to this role. Their scope cache\
-        \ is invalidated.\n\n**Example curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/roles/{role_id}/permissions\
+        \ is invalidated.\n\n**Example curl:**\n```bash\ncurl -X POST https://api.trytulia.com/v1/roles/{role_id}/permissions\
         \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
         \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"permission_codes\"\
         : [\"catalog:view\", \"catalog:edit\", \"orders:view\"]\n  }'\n```\n     \
@@ -5496,7 +5496,7 @@ paths:
         \ status)\n- User's primary role in each tenant\n- Onboarding completion status\n\
         - Subscription tier\n\nThis endpoint does not require any specific scope -\
         \ all authenticated users\ncan list the tenants they belong to.\n\n**Example\
-        \ curl:**\n```bash\ncurl -X GET https://api.tulia.ai/v1/tenants \\\n  -H \"\
+        \ curl:**\n```bash\ncurl -X GET https://api.trytulia.com/v1/tenants \\\n  -H \"\
         Authorization: Bearer {jwt_token}\"\n```\n        "
       summary: List user's tenants
       tags:
@@ -5534,7 +5534,7 @@ paths:
         \ the tenant\n- Detailed onboarding status with pending steps\n- Subscription\
         \ information\n- Contact information\n- Business settings\n\nUser must have\
         \ an active membership in the tenant to access this endpoint.\n\n**Example\
-        \ curl:**\n```bash\ncurl -X GET https://api.tulia.ai/v1/tenants/{tenant_id}\
+        \ curl:**\n```bash\ncurl -X GET https://api.trytulia.com/v1/tenants/{tenant_id}\
         \ \\\n  -H \"Authorization: Bearer {jwt_token}\"\n```\n        "
       summary: Get tenant details
       parameters:
@@ -5588,7 +5588,7 @@ paths:
         3. Revokes all API keys\n4. Deactivates all tenant user memberships\n5. Cascades\
         \ soft delete to related records\n\nOnly tenant Owners can delete tenants.\
         \ This is a destructive operation\nthat cannot be easily undone.\n\n**Example\
-        \ curl:**\n```bash\ncurl -X DELETE https://api.tulia.ai/v1/tenants/{tenant_id}\
+        \ curl:**\n```bash\ncurl -X DELETE https://api.trytulia.com/v1/tenants/{tenant_id}\
         \ \\\n  -H \"Authorization: Bearer {jwt_token}\" \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
         \ \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\n```\n        "
       summary: Delete tenant
@@ -5639,7 +5639,7 @@ paths:
         \nReturns information about each member including:\n- User details (email,\
         \ name)\n- Assigned roles\n- Invitation status\n- Join date and last activity\n\
         \nUser must have an active membership in the tenant to access this endpoint.\n\
-        \n**Example curl:**\n```bash\ncurl -X GET https://api.tulia.ai/v1/tenants/{tenant_id}/members\
+        \n**Example curl:**\n```bash\ncurl -X GET https://api.trytulia.com/v1/tenants/{tenant_id}/members\
         \ \\\n  -H \"Authorization: Bearer {jwt_token}\"\n```\n        "
       summary: List tenant members
       parameters:
@@ -5690,7 +5690,7 @@ paths:
       description: "\nRemove a user's membership from the tenant.\n\n**Required scope:**\
         \ `users:manage`\n\nThis deactivates the user's TenantUser membership, revoking\
         \ their access\nto the tenant. The user account itself is not deleted.\n\n\
-        **Example curl:**\n```bash\ncurl -X DELETE https://api.tulia.ai/v1/tenants/{tenant_id}/members/{user_id}\
+        **Example curl:**\n```bash\ncurl -X DELETE https://api.trytulia.com/v1/tenants/{tenant_id}/members/{user_id}\
         \ \\\n  -H \"Authorization: Bearer {jwt_token}\" \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
         \ \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\n```\n        "
       summary: Remove member from tenant
@@ -5746,7 +5746,7 @@ paths:
         \ scope:** `users:manage`\n\nIf the user doesn't exist, creates a new user\
         \ account with pending status.\nIf the user exists, creates a TenantUser membership\
         \ with pending invitation.\n\nThe invited user will receive an email invitation\
-        \ to join the tenant.\n\n**Example curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/tenants/{tenant_id}/members\
+        \ to join the tenant.\n\n**Example curl:**\n```bash\ncurl -X POST https://api.trytulia.com/v1/tenants/{tenant_id}/members\
         \ \\\n  -H \"Authorization: Bearer {jwt_token}\" \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
         \ \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\n  -H \"Content-Type: application/json\"\
         \ \\\n  -d '{\n    \"email\": \"newuser@example.com\",\n    \"roles\": [\"\
@@ -5814,7 +5814,7 @@ paths:
       description: "\nUpdate basic tenant information such as name, contact details,\
         \ and timezone.\n\n**Required scope:** `users:manage`\n\nOnly users with the\
         \ users:manage scope can update tenant information.\nTypically this is limited\
-        \ to Owners and Admins.\n\n**Example curl:**\n```bash\ncurl -X PUT https://api.tulia.ai/v1/tenants/{tenant_id}\
+        \ to Owners and Admins.\n\n**Example curl:**\n```bash\ncurl -X PUT https://api.trytulia.com/v1/tenants/{tenant_id}\
         \ \\\n  -H \"Authorization: Bearer {jwt_token}\" \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
         \ \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\n  -H \"Content-Type: application/json\"\
         \ \\\n  -d '{\n    \"name\": \"Acme Corporation\",\n    \"contact_email\"\
@@ -5886,7 +5886,7 @@ paths:
         \ TenantSettings with default configuration\n4. Creates TenantUser membership\
         \ with Owner role and all permissions\n5. Initializes onboarding status tracking\n\
         \nThe user becomes the Owner of the new tenant with full access to all features.\n\
-        \n**Example curl:**\n```bash\ncurl -X POST https://api.tulia.ai/v1/tenants\
+        \n**Example curl:**\n```bash\ncurl -X POST https://api.trytulia.com/v1/tenants\
         \ \\\n  -H \"Authorization: Bearer {jwt_token}\" \\\n  -H \"Content-Type:\
         \ application/json\" \\\n  -d '{\n    \"name\": \"Acme Corp\",\n    \"slug\"\
         : \"acme-corp\",\n    \"whatsapp_number\": \"+1234567890\"\n  }'\n```\n  \
@@ -6115,12 +6115,12 @@ paths:
         \ override that takes precedence over role permissions.\n\n**Required scope:**\
         \ `users:manage`\n\n**Deny overrides always win:** If a user has a permission\
         \ from a role but a UserPermission\ndenies it, the user will NOT have that\
-        \ permission.\n\n**Example curl (grant):**\n```bash\ncurl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions\
+        \ permission.\n\n**Example curl (grant):**\n```bash\ncurl -X POST https://api.trytulia.com/v1/users/{user_id}/permissions\
         \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
         \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"permission_code\"\
         : \"finance:reconcile\",\n    \"granted\": true,\n    \"reason\": \"Temporary\
         \ access for Q4 audit\"\n  }'\n```\n\n**Example curl (deny):**\n```bash\n\
-        curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \\\n  -H\
+        curl -X POST https://api.trytulia.com/v1/users/{user_id}/permissions \\\n  -H\
         \ \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\
         \n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"permission_code\"\
         : \"catalog:edit\",\n    \"granted\": false,\n    \"reason\": \"Suspended\
@@ -6285,7 +6285,7 @@ paths:
         \ with `pending_approval` status.\nA different user with `finance:withdraw:approve`\
         \ scope must approve the withdrawal.\n\n**Four-eyes validation:** The initiating\
         \ user CANNOT approve their own withdrawal.\n\n**Example curl:**\n```bash\n\
-        curl -X POST https://api.tulia.ai/v1/wallet/withdraw \\\n  -H \"X-TENANT-ID:\
+        curl -X POST https://api.trytulia.com/v1/wallet/withdraw \\\n  -H \"X-TENANT-ID:\
         \ {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\" \\\n  -H \"Content-Type:\
         \ application/json\" \\\n  -d '{\n    \"amount\": 1000.00,\n    \"currency\"\
         : \"USD\",\n    \"bank_account\": \"****1234\",\n    \"notes\": \"Monthly\
@@ -6357,7 +6357,7 @@ paths:
         \ be a different user than the initiator.\nIf the same user attempts approval,\
         \ returns 409 Conflict.\n\nOnce approved, the withdrawal is processed and\
         \ funds are transferred to the specified destination.\n\n**Example curl:**\n\
-        ```bash\ncurl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve\
+        ```bash\ncurl -X POST https://api.trytulia.com/v1/wallet/withdrawals/{transaction_id}/approve\
         \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
         \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"notes\":\
         \ \"Approved for monthly payout\"\n  }'\n```\n\n**Success:** Transaction status\
@@ -10978,7 +10978,7 @@ servers:
   description: Development server
 - url: https://api-staging.tulia.ai
   description: Staging server
-- url: https://api.tulia.ai
+- url: https://api.trytulia.com
   description: Production server
 tags:
 - name: Authentication

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design document outlines the architecture for enhancing the WabotIQ AI customer service agent with comprehensive Retrieval-Augmented Generation (RAG) capabilities. The system will ground all agent responses in verifiable sources including tenant-uploaded documents (PDFs, text files), real-time database records (products, services, appointments), and internet-sourced product information.
+This design document outlines the architecture for enhancing the Tulia AI AI customer service agent with comprehensive Retrieval-Augmented Generation (RAG) capabilities. The system will ground all agent responses in verifiable sources including tenant-uploaded documents (PDFs, text files), real-time database records (products, services, appointments), and internet-sourced product information.
 
 The design leverages LangChain as the primary RAG framework for rapid MVP delivery while maintaining flexibility for future customization. The architecture ensures strict multi-tenant isolation, fast retrieval performance, and seamless integration with the existing AI agent infrastructure.
 

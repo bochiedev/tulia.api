@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This specification defines a fundamental refactor of the Tulia AI (WabotIQ) conversational bot from a hallucination-prone, LLM-heavy system into a deterministic, sales-oriented agent. The current bot relies too heavily on LLMs for business logic, leading to hallucinated products, invented policies, high costs, and poor conversion rates. This refactor implements a hybrid architecture where deterministic business logic handles all critical decisions, and LLMs serve only as a thin NLU (Natural Language Understanding) and formatting layer. The goal is to create an autonomous agent that shortens the path from enquiry to sale/booking, maintains costs under $10/tenant/month, and never hallucinates business data.
+This specification defines a fundamental refactor of the Tulia AI (Tulia AI) conversational bot from a hallucination-prone, LLM-heavy system into a deterministic, sales-oriented agent. The current bot relies too heavily on LLMs for business logic, leading to hallucinated products, invented policies, high costs, and poor conversion rates. This refactor implements a hybrid architecture where deterministic business logic handles all critical decisions, and LLMs serve only as a thin NLU (Natural Language Understanding) and formatting layer. The goal is to create an autonomous agent that shortens the path from enquiry to sale/booking, maintains costs under $10/tenant/month, and never hallucinates business data.
 
 ## Glossary
 

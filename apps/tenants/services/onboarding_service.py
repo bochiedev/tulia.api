@@ -236,18 +236,18 @@ class OnboardingService:
         message = f"""
 Hi there,
 
-You're {completion_percentage}% done setting up your {tenant.name} account on WabotIQ!
+You're {completion_percentage}% done setting up your {tenant.name} account on Tulia AI!
 
 To get the most out of your account, please complete these remaining steps:
 
 {pending_list}
 
-Complete your setup now: {getattr(settings, 'FRONTEND_URL', 'https://app.tulia.ai')}/onboarding
+Complete your setup now: {getattr(settings, 'FRONTEND_URL', 'https://app.trytulia.com')}/onboarding
 
 Need help? Reply to this email and we'll be happy to assist.
 
 Best regards,
-The WabotIQ Team
+The Tulia AI Team
 """
         
         # Send email
@@ -255,7 +255,7 @@ The WabotIQ Team
             send_mail(
                 subject=subject,
                 message=message,
-                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@tulia.ai'),
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@trytulia.com'),
                 recipient_list=[contact_email],
                 fail_silently=False,
             )

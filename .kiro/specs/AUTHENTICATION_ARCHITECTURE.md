@@ -1,8 +1,8 @@
-# WabotIQ Authentication Architecture
+# Tulia AI Authentication Architecture
 
 ## Overview
 
-WabotIQ uses a unified JWT-based authentication system with three distinct access patterns depending on the API endpoint type. This document describes the complete authentication and authorization architecture.
+Tulia AI uses a unified JWT-based authentication system with three distinct access patterns depending on the API endpoint type. This document describes the complete authentication and authorization architecture.
 
 ## Authentication Patterns
 
@@ -301,13 +301,13 @@ class MyTenantManagementView(APIView):
 
 ### Platform Operator: List All Tenants
 ```bash
-curl -X GET https://api.wabotiq.com/v1/platform/tenants \
+curl -X GET https://api.trytulia.com/v1/platform/tenants \
   -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc..."
 ```
 
 ### Tenant User: List Customers
 ```bash
-curl -X GET https://api.wabotiq.com/v1/customers \
+curl -X GET https://api.trytulia.com/v1/customers \
   -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc..." \
   -H "X-TENANT-ID: 550e8400-e29b-41d4-a716-446655440000" \
   -H "X-TENANT-API-KEY: wiq_abc123..."
@@ -315,7 +315,7 @@ curl -X GET https://api.wabotiq.com/v1/customers \
 
 ### User: Create New Tenant
 ```bash
-curl -X POST https://api.wabotiq.com/v1/tenants \
+curl -X POST https://api.trytulia.com/v1/tenants \
   -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc..." \
   -H "Content-Type: application/json" \
   -d '{

@@ -1,0 +1,20 @@
+# Development and Testing Dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Include production requirements
+-r requirements.txt
+
+# Testing Framework
+pytest==7.4.4
+pytest-django==4.7.0
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+
+# Test Data Generation
+factory-boy==3.3.0
+hypothesis==6.92.7
+
+# Development Tools (optional)
+# black==23.12.1
+# flake8==7.0.0
+# isort==5.13.2

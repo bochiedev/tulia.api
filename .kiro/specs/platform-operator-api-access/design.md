@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design implements a platform operator access system that allows super admins to manage the WabotIQ platform through APIs without being tied to specific tenants. The system uses JWT-based authentication with platform-level privileges, separate from the existing tenant-based authentication system.
+This design implements a platform operator access system that allows super admins to manage the Tulia AI platform through APIs without being tied to specific tenants. The system uses JWT-based authentication with platform-level privileges, separate from the existing tenant-based authentication system.
 
 The design maintains full backward compatibility with existing tenant APIs while adding a parallel authentication path for platform-level operations. Platform operators can perform cross-tenant operations like viewing all tenants, aggregating analytics, and managing system configuration.
 

@@ -1,13 +1,13 @@
-# WabotIQ Platform - Complete Overview
+# Tulia AI Platform - Complete Overview
 
 **Version**: 1.0  
-**Last Updated**: November 21, 2025
+**Last Updated**: December 30, 2025
 
 ---
 
 ## Table of Contents
 
-1. [What is WabotIQ?](#what-is-wabotiq)
+1. [What is Tulia AI?](#what-is-tulia-ai)
 2. [Core Features](#core-features)
 3. [Technology Stack](#technology-stack)
 4. [Architecture](#architecture)

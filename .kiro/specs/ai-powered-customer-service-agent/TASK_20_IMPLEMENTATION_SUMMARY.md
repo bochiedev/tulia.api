@@ -238,6 +238,6 @@ CELERY_BEAT_SCHEDULE = {
 
 ## Conclusion
 
-Task 20.1 and 20.2 are **COMPLETE**. The core pagination infrastructure is in place and ready for integration with the AI agent. The service layer is fully functional, tested, and follows all WabotIQ security and multi-tenancy requirements.
+Task 20.1 and 20.2 are **COMPLETE**. The core pagination infrastructure is in place and ready for integration with the AI agent. The service layer is fully functional, tested, and follows all Tulia AI security and multi-tenancy requirements.
 
 Next steps: Update test fixtures, implement WhatsApp UI (Task 20.3), and integrate with agent workflow (Task 20.4).

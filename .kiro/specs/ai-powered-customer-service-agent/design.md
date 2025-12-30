@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design document outlines the architecture for upgrading the WabotIQ bot from a basic intent classification system to an advanced AI-powered customer service agent. The enhanced system will leverage state-of-the-art language models, maintain comprehensive conversation memory, integrate tenant-specific knowledge bases, and provide rich interactive experiences through WhatsApp's advanced messaging features.
+This design document outlines the architecture for upgrading the Tulia AI bot from a basic intent classification system to an advanced AI-powered customer service agent. The enhanced system will leverage state-of-the-art language models, maintain comprehensive conversation memory, integrate tenant-specific knowledge bases, and provide rich interactive experiences through WhatsApp's advanced messaging features.
 
 The design follows a modular, service-oriented architecture that maintains strict multi-tenant isolation while enabling powerful AI capabilities including context-aware responses, intelligent error correction, multi-intent handling, and proactive recommendations.
 

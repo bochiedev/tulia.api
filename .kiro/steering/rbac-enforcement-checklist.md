@@ -2,7 +2,7 @@
 inclusion: always
 ---
 
-# RBAC Enforcement Checklist for WabotIQ
+# RBAC Enforcement Checklist for Tulia AI
 
 ## CRITICAL: All API Views MUST Enforce RBAC
 

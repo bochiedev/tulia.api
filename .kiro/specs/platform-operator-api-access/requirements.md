@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This feature enables platform operators (super admins) to access and manage the WabotIQ platform through APIs without being tied to specific tenants. Platform operators need the ability to perform cross-tenant operations, system-wide analytics, tenant management, and platform configuration through JWT-based authentication with platform-level privileges.
+This feature enables platform operators (super admins) to access and manage the Tulia AI platform through APIs without being tied to specific tenants. Platform operators need the ability to perform cross-tenant operations, system-wide analytics, tenant management, and platform configuration through JWT-based authentication with platform-level privileges.
 
 **Authentication Model**:
 - Platform operators authenticate using JWT tokens (Authorization: Bearer header)
@@ -12,13 +12,13 @@ This feature enables platform operators (super admins) to access and manage the 
 
 ## Glossary
 
-- **Platform Operator**: A super admin user (is_superuser=True) who manages the WabotIQ platform itself, not tied to any specific tenant
+- **Platform Operator**: A super admin user (is_superuser=True) who manages the Tulia AI platform itself, not tied to any specific tenant
 - **JWT Token**: JSON Web Token used for user authentication across all APIs
 - **Tenant API Key**: The existing API key system that grants access to a specific tenant's resources (used alongside JWT)
 - **Platform Privilege**: A permission scope that applies to platform-level operations (e.g., `platform:tenants:manage`, `platform:analytics:view`)
 - **TenantContextMiddleware**: The Django middleware that validates authentication and establishes tenant context
 - **Cross-Tenant Operation**: An operation that accesses or modifies data across multiple tenants
-- **System**: The WabotIQ platform
+- **System**: The Tulia AI platform
 - **Superuser**: A user with `is_superuser=True` flag who has platform operator privileges
 
 ## Requirements

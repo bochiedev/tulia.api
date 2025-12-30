@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Tenant Self-Service Onboarding system enables users to register accounts, create multiple tenants, and configure tenant settings through a comprehensive REST API. The design follows WabotIQ's multi-tenant architecture with strict RBAC enforcement, encrypted credential storage, and comprehensive audit logging.
+The Tenant Self-Service Onboarding system enables users to register accounts, create multiple tenants, and configure tenant settings through a comprehensive REST API. The design follows Tulia AI's multi-tenant architecture with strict RBAC enforcement, encrypted credential storage, and comprehensive audit logging.
 
 The system consists of three main components:
 1. **Authentication & Registration API** - User account creation and JWT-based authentication
@@ -811,10 +811,10 @@ EMAIL_PORT=587
 EMAIL_USE_TLS=True
 EMAIL_HOST_USER=apikey
 EMAIL_HOST_PASSWORD=<sendgrid-api-key>
-DEFAULT_FROM_EMAIL=noreply@tulia.ai
+DEFAULT_FROM_EMAIL=noreply@trytulia.com
 
 # Frontend URL (for email links)
-FRONTEND_URL=https://app.tulia.ai
+FRONTEND_URL=https://app.trytulia.com
 ```
 
 ### Database Migrations

@@ -317,4 +317,4 @@ curl -X GET "https://api.example.com/v1/bot/documents/?status=completed&search=f
 
 ## Status: ✅ COMPLETE
 
-The document management API is production-ready and follows all WabotIQ security and architectural guidelines. All RBAC tests pass, tenant isolation is enforced, and the API is ready for integration with the document processing pipeline.
+The document management API is production-ready and follows all Tulia AI security and architectural guidelines. All RBAC tests pass, tenant isolation is enforced, and the API is ready for integration with the document processing pipeline.

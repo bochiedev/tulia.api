@@ -274,7 +274,7 @@ The `X-TENANT-ID` header determines which tenant context is active for the reque
 ### Login and Get JWT Token
 ```bash
 # Login to get JWT token
-curl -X POST https://api.tulia.ai/v1/auth/login \\
+curl -X POST https://api.trytulia.com/v1/auth/login \\
   -H "Content-Type: application/json" \\
   -d '{
     "email": "user@example.com",
@@ -289,7 +289,7 @@ export TOKEN="eyJ..."
 ### Invite a User and Assign Roles
 ```bash
 # 1. Invite user (requires users:manage scope)
-curl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite \\
+curl -X POST https://api.trytulia.com/v1/memberships/{tenant_id}/invite \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "X-TENANT-ID: {tenant_id}" \\
   -H "Content-Type: application/json" \\
@@ -301,7 +301,7 @@ curl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite \\
 # 2. User accepts invitation and logs in
 
 # 3. Assign additional roles
-curl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/{user_id}/roles \\
+curl -X POST https://api.trytulia.com/v1/memberships/{tenant_id}/{user_id}/roles \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "X-TENANT-ID: {tenant_id}" \\
   -H "Content-Type: application/json" \\
@@ -313,7 +313,7 @@ curl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/{user_id}/roles \\
 ### Grant User-Specific Permission Override
 ```bash
 # Grant a specific permission to a user (overrides role permissions)
-curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \\
+curl -X POST https://api.trytulia.com/v1/users/{user_id}/permissions \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "X-TENANT-ID: {tenant_id}" \\
   -H "Content-Type: application/json" \\
@@ -324,7 +324,7 @@ curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \\
   }'
 
 # Deny a permission (even if granted by role)
-curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \\
+curl -X POST https://api.trytulia.com/v1/users/{user_id}/permissions \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "X-TENANT-ID: {tenant_id}" \\
   -H "Content-Type: application/json" \\
@@ -338,7 +338,7 @@ curl -X POST https://api.tulia.ai/v1/users/{user_id}/permissions \\
 ### Four-Eyes Withdrawal Approval
 ```bash
 # 1. User A initiates withdrawal (requires finance:withdraw:initiate)
-curl -X POST https://api.tulia.ai/v1/wallet/withdraw \\
+curl -X POST https://api.trytulia.com/v1/wallet/withdraw \\
   -H "Authorization: Bearer $TOKEN_USER_A" \\
   -H "X-TENANT-ID: {tenant_id}" \\
   -H "Content-Type: application/json" \\
@@ -350,7 +350,7 @@ curl -X POST https://api.tulia.ai/v1/wallet/withdraw \\
 # Returns: {"transaction_id": "txn-uuid", "status": "pending_approval"}
 
 # 2. User B approves withdrawal (requires finance:withdraw:approve, must be different user)
-curl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve \\
+curl -X POST https://api.trytulia.com/v1/wallet/withdrawals/{transaction_id}/approve \\
   -H "Authorization: Bearer $TOKEN_USER_B" \\
   -H "X-TENANT-ID: {tenant_id}" \\
   -H "Content-Type: application/json" \\
@@ -394,11 +394,11 @@ curl -X POST https://api.tulia.ai/v1/wallet/withdrawals/{transaction_id}/approve
             'description': 'Development server'
         },
         {
-            'url': 'https://api-staging.tulia.ai',
+            'url': 'https://api-staging.trytulia.com',
             'description': 'Staging server'
         },
         {
-            'url': 'https://api.tulia.ai',
+            'url': 'https://api.trytulia.com',
             'description': 'Production server'
         }
     ],
@@ -748,7 +748,7 @@ ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default=None)
 
 # RAG Configuration
 PINECONE_API_KEY = env('PINECONE_API_KEY', default=None)
-PINECONE_INDEX_NAME = env('PINECONE_INDEX_NAME', default='wabotiq-rag')
+PINECONE_INDEX_NAME = env('PINECONE_INDEX_NAME', default='tulia-ai-rag')
 PINECONE_DIMENSION = env.int('PINECONE_DIMENSION', default=1536)  # text-embedding-3-small
 PINECONE_METRIC = env('PINECONE_METRIC', default='cosine')
 PINECONE_CLOUD = env('PINECONE_CLOUD', default='aws')
@@ -776,7 +776,7 @@ EMAIL_PORT = env.int('EMAIL_PORT', default=587)
 EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
 EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@tulia.ai')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@trytulia.com')
 
 # Frontend Configuration
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:3000')

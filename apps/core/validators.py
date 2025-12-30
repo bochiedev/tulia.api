@@ -1,5 +1,5 @@
 """
-Validation utilities for WabotIQ.
+Validation utilities for Tulia AI.
 
 Provides credential validation helpers for external services
 and common input validation functions.

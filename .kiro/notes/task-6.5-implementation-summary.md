@@ -131,11 +131,11 @@ python manage.py seed_demo --skip-if-exists
 ```
 
 **Demo Users Created**:
-1. **owner@demo.tulia.ai** (Owner) - Full access
-2. **catalog@demo.tulia.ai** (Catalog Manager) - Manage products/services
-3. **finance@demo.tulia.ai** (Finance Admin) - Financial operations
-4. **support@demo.tulia.ai** (Support Lead) - Customer support
-5. **analyst@demo.tulia.ai** (Analyst) - Read-only analytics
+1. **owner@demo.trytulia.com** (Owner) - Full access
+2. **catalog@demo.trytulia.com** (Catalog Manager) - Manage products/services
+3. **finance@demo.trytulia.com** (Finance Admin) - Financial operations
+4. **support@demo.trytulia.com** (Support Lead) - Customer support
+5. **analyst@demo.trytulia.com** (Analyst) - Read-only analytics
 
 **Default Password**: `demo123!` (customizable)
 
