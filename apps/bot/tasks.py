@@ -59,7 +59,7 @@ def process_inbound_message(self, message_id: str):
         )
         
         # Check if conversation is in handoff mode
-        if conversation.handoff_active:
+        if conversation.status == 'handoff':
             logger.info(
                 f"Skipping bot processing - conversation in handoff mode",
                 extra={
