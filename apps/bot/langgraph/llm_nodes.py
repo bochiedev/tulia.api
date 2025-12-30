@@ -126,9 +126,10 @@ Return JSON with exact schema:
             
             # Create LLM router for tenant
             llm_router = LLMRouter(tenant)
+            await llm_router._ensure_config_loaded()
             
             # Check budget first
-            if not llm_router._check_budget():
+            if not await llm_router._check_budget():
                 return {
                     "intent": "unknown",
                     "confidence": 0.0,
@@ -138,7 +139,7 @@ Return JSON with exact schema:
             
             # Get provider for structured output
             provider_name, model_name = llm_router._select_model('intent_classification')
-            provider = llm_router._get_provider(provider_name)
+            provider = await llm_router._get_provider(provider_name)
             
             # Prepare messages for LLM call
             messages = [
@@ -156,7 +157,7 @@ Return JSON with exact schema:
             )
             
             # Log usage
-            llm_router._log_usage(provider_name, model_name, 'intent_classification', response.input_tokens)
+            await llm_router._log_usage(provider_name, model_name, 'intent_classification', response.input_tokens)
             
             # Parse JSON response
             try:
@@ -488,9 +489,10 @@ Return JSON with exact schema:
             
             # Create LLM router for tenant
             llm_router = LLMRouter(tenant)
+            await llm_router._ensure_config_loaded()
             
             # Check budget first
-            if not llm_router._check_budget():
+            if not await llm_router._check_budget():
                 # Fallback to heuristic detection
                 detected_language = self._detect_language_heuristic(state.incoming_message or "")
                 return {
@@ -501,7 +503,7 @@ Return JSON with exact schema:
             
             # Get provider for structured output
             provider_name, model_name = llm_router._select_model('language_detection')
-            provider = llm_router._get_provider(provider_name)
+            provider = await llm_router._get_provider(provider_name)
             
             # Prepare messages for LLM call
             messages = [
@@ -519,7 +521,7 @@ Return JSON with exact schema:
             )
             
             # Log usage
-            llm_router._log_usage(provider_name, model_name, 'language_detection', response.input_tokens)
+            await llm_router._log_usage(provider_name, model_name, 'language_detection', response.input_tokens)
             
             # Parse JSON response
             try:
@@ -889,9 +891,10 @@ Return JSON with exact schema:
             
             # Create LLM router for tenant
             llm_router = LLMRouter(tenant)
+            await llm_router._ensure_config_loaded()
             
             # Check budget first
-            if not llm_router._check_budget():
+            if not await llm_router._check_budget():
                 # Fallback to heuristic classification
                 classification = self._classify_governance_heuristic(state.incoming_message or "", state)
                 return {
@@ -902,7 +905,7 @@ Return JSON with exact schema:
             
             # Get provider for structured output
             provider_name, model_name = llm_router._select_model('governance')
-            provider = llm_router._get_provider(provider_name)
+            provider = await llm_router._get_provider(provider_name)
             
             # Prepare messages for LLM call
             messages = [
@@ -920,7 +923,7 @@ Return JSON with exact schema:
             )
             
             # Log usage
-            llm_router._log_usage(provider_name, model_name, 'governance', response.input_tokens)
+            await llm_router._log_usage(provider_name, model_name, 'governance', response.input_tokens)
             
             # Parse JSON response
             try:

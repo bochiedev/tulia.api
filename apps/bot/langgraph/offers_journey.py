@@ -116,6 +116,10 @@ You respond with natural language text only. No JSON or structured output."""
             
             # Create LLM router for tenant
             llm_router = LLMRouter(tenant)
+
+            await llm_router._ensure_config_loaded()
+
+            await llm_router._ensure_config_loaded()
             
             # Check budget first
             if not llm_router._check_budget():

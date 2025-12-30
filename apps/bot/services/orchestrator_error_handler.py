@@ -7,6 +7,7 @@ specifically for the LangGraph orchestrator nodes.
 Requirements: 10.1, 10.3
 """
 
+import asyncio
 import logging
 from typing import Dict, Any, Optional, Callable
 from dataclasses import asdict
@@ -60,15 +61,11 @@ class OrchestratorErrorHandler:
         
         try:
             # Create fallback function
-            def fallback():
+            async def fallback():
                 return self._get_node_fallback(node_name, state, context)
             
-            # Execute with error handling
-            result = await self.error_service.execute_with_error_handling(
-                lambda: node_func(state),
-                context,
-                fallback
-            )
+            # Execute the node function directly since it's already async
+            result = await node_func(state)
             
             return result
             
@@ -266,9 +263,36 @@ def with_node_error_handling(node_name: str, component_type: ComponentType = Com
         component_type: Type of component for error handling strategy
     """
     def decorator(func: Callable) -> Callable:
-        async def wrapper(state: Dict[str, Any]) -> Dict[str, Any]:
-            return await orchestrator_error_handler.execute_node_with_fallback(
-                func, state, node_name, component_type
-            )
+        async def wrapper(self, state: Dict[str, Any]) -> Dict[str, Any]:
+            try:
+                # Execute the original function
+                result = await func(self, state)
+                return result
+            except Exception as e:
+                logger.error(
+                    f"Node {node_name} failed: {e}",
+                    extra={
+                        'tenant_id': state.get('tenant_id', 'unknown'),
+                        'conversation_id': state.get('conversation_id', 'unknown'),
+                        'request_id': state.get('request_id', 'unknown'),
+                        'node_name': node_name,
+                        'error': str(e)
+                    },
+                    exc_info=True
+                )
+                
+                # Return fallback state
+                fallback_state = state.copy()
+                fallback_state.update({
+                    "response_text": "I'm having a brief technical issue. Let me try to help you in a different way.",
+                    "journey": "support",
+                    "escalation_required": False,
+                    "error_context": {
+                        "failed_node": node_name,
+                        "error_handled": True,
+                        "fallback_applied": True
+                    }
+                })
+                return fallback_state
         return wrapper
     return decorator

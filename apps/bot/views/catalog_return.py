@@ -78,7 +78,7 @@ class CatalogReturnWebhookView(APIView):
                 )
             
             # Deserialize conversation state
-            conv_state = ConversationStateManager.deserialize_from_storage(session.state)
+            conv_state = ConversationStateManager.deserialize_from_storage(session.state_data)
             
             # Handle catalog return using sales journey
             sales_journey = SalesJourneySubgraph()
@@ -89,7 +89,7 @@ class CatalogReturnWebhookView(APIView):
             )
             
             # Update session with new state
-            session.state = ConversationStateManager.serialize_for_storage(updated_state)
+            session.state_data = ConversationStateManager.serialize_for_storage(updated_state)
             await session.asave()
             
             # Send response back to customer via WhatsApp

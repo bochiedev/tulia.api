@@ -23,44 +23,56 @@ logger = logging.getLogger(__name__)
 @task_prerun.connect
 def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, **extra):
     """Log task start."""
-    logger.info(
-        f"Task started: {task.name}",
-        extra={
-            'task_id': task_id,
-            'task_name': task.name,
-            'args': args,
-            'kwargs': kwargs,
-        }
-    )
+    try:
+        logger.info(
+            f"Task started: {task.name}",
+            extra={
+                'task_id': task_id,
+                'task_name': task.name,
+                'task_args': str(args)[:200] if args else None,
+                'task_kwargs': str(kwargs)[:200] if kwargs else None,
+            }
+        )
+    except Exception as e:
+        # Fallback logging without extra context if there are issues
+        logger.info(f"Task started: {task.name} (task_id: {task_id})")
 
 
 @task_postrun.connect
 def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, retval=None, **extra):
     """Log task completion."""
-    logger.info(
-        f"Task completed: {task.name}",
-        extra={
-            'task_id': task_id,
-            'task_name': task.name,
-            'result': str(retval)[:200] if retval else None,
-        }
-    )
+    try:
+        logger.info(
+            f"Task completed: {task.name}",
+            extra={
+                'task_id': task_id,
+                'task_name': task.name,
+                'result': str(retval)[:200] if retval else None,
+            }
+        )
+    except Exception as e:
+        # Fallback logging without extra context if there are issues
+        logger.info(f"Task completed: {task.name} (task_id: {task_id})")
 
 
 @task_failure.connect
 def task_failure_handler(sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **extra):
     """Log task failure and send to Sentry."""
-    logger.error(
-        f"Task failed: {sender.name}",
-        extra={
-            'task_id': task_id,
-            'task_name': sender.name,
-            'exception': str(exception),
-            'args': args,
-            'kwargs': kwargs,
-        },
-        exc_info=einfo
-    )
+    try:
+        logger.error(
+            f"Task failed: {sender.name}",
+            extra={
+                'task_id': task_id,
+                'task_name': sender.name,
+                'exception': str(exception)[:500] if exception else None,
+                'task_args': str(args)[:200] if args else None,
+                'task_kwargs': str(kwargs)[:200] if kwargs else None,
+            },
+            exc_info=einfo
+        )
+    except Exception as e:
+        # Fallback logging without extra context if there are issues
+        logger.error(f"Task failed: {sender.name} (task_id: {task_id}) - {str(exception)}")
     
     # Send to Sentry with additional context
     try:
@@ -82,15 +94,19 @@ def task_failure_handler(sender=None, task_id=None, exception=None, args=None, k
 @task_retry.connect
 def task_retry_handler(sender=None, task_id=None, reason=None, einfo=None, **extra):
     """Log task retry."""
-    logger.warning(
-        f"Task retry: {sender.name}",
-        extra={
-            'task_id': task_id,
-            'task_name': sender.name,
-            'reason': str(reason),
-            'retry_count': sender.request.retries,
-        }
-    )
+    try:
+        logger.warning(
+            f"Task retry: {sender.name}",
+            extra={
+                'task_id': task_id,
+                'task_name': sender.name,
+                'reason': str(reason)[:200] if reason else None,
+                'retry_count': getattr(sender.request, 'retries', 0),
+            }
+        )
+    except Exception as e:
+        # Fallback logging without extra context if there are issues
+        logger.warning(f"Task retry: {sender.name} (task_id: {task_id}) - {str(reason)}")
 
 
 @app.task(bind=True, ignore_result=True)

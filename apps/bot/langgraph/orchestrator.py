@@ -171,6 +171,22 @@ class LangGraphOrchestrator:
             phone_e164=phone_e164
         ) as request_context:
             
+            # Create or update conversation state
+            if existing_state:
+                state = existing_state
+                state.request_id = request_id
+            else:
+                state = ConversationStateManager.create_initial_state(
+                    tenant_id=tenant_id,
+                    conversation_id=conversation_id,
+                    request_id=request_id,
+                    customer_id=customer_id,
+                    phone_e164=phone_e164
+                )
+            
+            # Add incoming message context
+            state.incoming_message = message_text
+            
             # Log conversation start
             conversation_logger.log_conversation_start(state, message_text)
             enhanced_logging_service.log_conversation_start(
@@ -179,22 +195,6 @@ class LangGraphOrchestrator:
             
             # Track conversation metrics
             with ConversationTracker(tenant_id, conversation_id, request_id, customer_id):
-                
-                # Create or update conversation state
-                if existing_state:
-                    state = existing_state
-                    state.request_id = request_id
-                else:
-                    state = ConversationStateManager.create_initial_state(
-                        tenant_id=tenant_id,
-                        conversation_id=conversation_id,
-                        request_id=request_id,
-                        customer_id=customer_id,
-                        phone_e164=phone_e164
-                    )
-                
-                # Add incoming message context
-                state.incoming_message = message_text
                 
                 try:
                     # Track performance of entire orchestration

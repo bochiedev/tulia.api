@@ -37,11 +37,18 @@ class LLMRouter:
             tenant: Tenant instance for configuration
         """
         self.tenant = tenant
-        self.config = AgentConfiguration.objects.filter(tenant=tenant).first()
+        self.config = None  # Will be loaded lazily
         self._provider_cache: Dict[str, LLMProvider] = {}
         self.factory = LLMProviderFactory()
     
-    def classify_intent(self, text: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _ensure_config_loaded(self):
+        """Ensure config is loaded asynchronously."""
+        if self.config is None:
+            from asgiref.sync import sync_to_async
+            get_config = sync_to_async(lambda: AgentConfiguration.objects.filter(tenant=self.tenant).first())
+            self.config = await get_config()
+    
+    async def classify_intent(self, text: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Classify user intent using optimized LLM call.
         
@@ -52,12 +59,12 @@ class LLMRouter:
         Returns:
             Intent classification result
         """
-        if not self._check_budget():
+        if not await self._check_budget():
             return {'budget_exceeded': True}
         
         try:
             provider_name, model_name = self._select_model('intent_classification')
-            provider = self._get_provider(provider_name)
+            provider = await self._get_provider(provider_name)
             
             # Build prompt for intent classification
             system_prompt = self._build_intent_system_prompt()
@@ -73,7 +80,7 @@ class LLMRouter:
             )
             
             # Log usage
-            self._log_usage(provider_name, model_name, 'intent_classification', len(text))
+            await self._log_usage(provider_name, model_name, 'intent_classification', len(text))
             
             # Parse response (simplified for now)
             return {
@@ -86,7 +93,7 @@ class LLMRouter:
             logger.error(f"Intent classification failed: {e}", exc_info=True)
             return {'error': str(e)}
     
-    def extract_slots(self, text: str, intent: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def extract_slots(self, text: str, intent: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Extract slots from user message for given intent.
         
@@ -98,12 +105,12 @@ class LLMRouter:
         Returns:
             Extracted slots
         """
-        if not self._check_budget():
+        if not await self._check_budget():
             return {'budget_exceeded': True}
         
         try:
             provider_name, model_name = self._select_model('slot_extraction')
-            provider = self._get_provider(provider_name)
+            provider = await self._get_provider(provider_name)
             
             # Build prompt for slot extraction
             system_prompt = self._build_slot_system_prompt(intent)
@@ -119,7 +126,7 @@ class LLMRouter:
             )
             
             # Log usage
-            self._log_usage(provider_name, model_name, 'slot_extraction', len(text))
+            await self._log_usage(provider_name, model_name, 'slot_extraction', len(text))
             
             return {'slots': {}, 'raw_response': response.content}
             
@@ -127,7 +134,7 @@ class LLMRouter:
             logger.error(f"Slot extraction failed: {e}", exc_info=True)
             return {'error': str(e)}
     
-    def generate_response(self, chunks: list, query: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def generate_response(self, chunks: list, query: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate response using RAG chunks and context.
         
@@ -139,12 +146,12 @@ class LLMRouter:
         Returns:
             Generated response
         """
-        if not self._check_budget():
+        if not await self._check_budget():
             return {'budget_exceeded': True}
         
         try:
             provider_name, model_name = self._select_model('response_generation')
-            provider = self._get_provider(provider_name)
+            provider = await self._get_provider(provider_name)
             
             # Build prompt for response generation
             system_prompt = self._build_response_system_prompt()
@@ -160,7 +167,7 @@ class LLMRouter:
             )
             
             # Log usage
-            self._log_usage(provider_name, model_name, 'response_generation', len(user_prompt))
+            await self._log_usage(provider_name, model_name, 'response_generation', len(user_prompt))
             
             return {'response': response.content, 'raw_response': response.content}
             
@@ -189,7 +196,7 @@ class LLMRouter:
         
         return task_models.get(task, ('openai', 'gpt-4o-mini'))
     
-    def _get_provider(self, provider_name: str) -> LLMProvider:
+    async def _get_provider(self, provider_name: str) -> LLMProvider:
         """
         Get or create provider instance.
         
@@ -200,38 +207,49 @@ class LLMRouter:
             LLM provider instance
         """
         if provider_name not in self._provider_cache:
-            self._provider_cache[provider_name] = self.factory.create_from_tenant_settings(
-                self.tenant, provider_name
+            from asgiref.sync import sync_to_async
+            
+            create_provider = sync_to_async(
+                lambda: self.factory.create_from_tenant_settings(
+                    self.tenant, provider_name
+                )
             )
+            
+            self._provider_cache[provider_name] = await create_provider()
         
         return self._provider_cache[provider_name]
     
-    def _check_budget(self) -> bool:
+    async def _check_budget(self) -> bool:
         """
         Check if tenant is within LLM usage budget.
         
         Returns:
             True if within budget, False otherwise
         """
+        await self._ensure_config_loaded()
+        
         if not self.config or not self.config.llm_budget_limit:
             return True
         
         # Get current month usage
         from django.utils import timezone
-        from datetime import datetime
+        from asgiref.sync import sync_to_async
         
         current_month = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
-        total_cost = LLMUsageLog.objects.filter(
-            tenant=self.tenant,
-            created_at__gte=current_month
-        ).aggregate(
-            total=models.Sum('cost')
-        )['total'] or Decimal('0.00')
+        get_total_cost = sync_to_async(
+            lambda: LLMUsageLog.objects.filter(
+                tenant=self.tenant,
+                created_at__gte=current_month
+            ).aggregate(
+                total=models.Sum('cost')
+            )['total'] or Decimal('0.00')
+        )
         
+        total_cost = await get_total_cost()
         return total_cost < self.config.llm_budget_limit
     
-    def _log_usage(self, provider: str, model: str, task: str, input_tokens: int):
+    async def _log_usage(self, provider: str, model: str, task: str, input_tokens: int):
         """
         Log LLM usage for cost tracking.
         
@@ -242,18 +260,24 @@ class LLMRouter:
             input_tokens: Estimated input tokens
         """
         try:
+            from asgiref.sync import sync_to_async
+            
             # Estimate cost (simplified)
             estimated_cost = Decimal(str(input_tokens * 0.0001))  # $0.0001 per token estimate
             
-            LLMUsageLog.objects.create(
-                tenant=self.tenant,
-                provider=provider,
-                model=model,
-                task_type=task,
-                input_tokens=input_tokens,
-                output_tokens=100,  # Estimate
-                cost=estimated_cost
+            create_log = sync_to_async(
+                lambda: LLMUsageLog.objects.create(
+                    tenant=self.tenant,
+                    provider=provider,
+                    model=model,
+                    task_type=task,
+                    input_tokens=input_tokens,
+                    output_tokens=100,  # Estimate
+                    cost=estimated_cost
+                )
             )
+            
+            await create_log()
         except Exception as e:
             logger.warning(f"Failed to log LLM usage: {e}")
     

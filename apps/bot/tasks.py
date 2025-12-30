@@ -10,6 +10,8 @@ from celery import shared_task
 from django.utils import timezone
 from django.db import models
 
+from apps.bot.conversation_state import ConversationState, ConversationStateManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,14 +80,24 @@ def process_inbound_message(self, message_id: str):
             tenant=tenant,
             conversation=conversation,
             defaults={
+                'customer': customer,
                 'is_active': True,
-                'state': '{}'  # Empty initial state
+                'state_data': ConversationStateManager.serialize_for_storage(
+                    ConversationState(
+                        tenant_id=str(tenant.id),
+                        conversation_id=str(conversation.id),
+                        request_id=str(message.id),
+                        customer_id=str(customer.id) if customer else None,
+                        phone_e164=customer.phone_e164 if customer else None
+                    )
+                ),
+                'last_request_id': str(message.id)
             }
         )
         
         # Deserialize existing state or create initial state
-        if session.state and session.state != '{}':
-            existing_state = ConversationStateManager.deserialize_from_storage(session.state)
+        if session.state_data and session.state_data != '{}':
+            existing_state = ConversationStateManager.deserialize_from_storage(session.state_data)
         else:
             existing_state = None
         
@@ -123,7 +135,7 @@ def process_inbound_message(self, message_id: str):
             )
         
         # Update conversation session with new state
-        session.state = ConversationStateManager.serialize_for_storage(updated_state)
+        session.state_data = ConversationStateManager.serialize_for_storage(updated_state)
         session.updated_at = timezone.now()
         session.save()
         

@@ -22,6 +22,34 @@ from apps.core.logging import JSONFormatter, PIIMasker, SecurityLogger
 from apps.bot.services.observability import observability_service, ConversationMetrics
 
 
+class EnhancedJSONFormatter(JSONFormatter):
+    """Enhanced JSON formatter with additional context fields."""
+    
+    def format(self, record):
+        # Get base JSON log entry
+        log_entry = json.loads(super().format(record))
+        
+        # Add request context if available
+        if hasattr(record, 'request_context'):
+            context = record.request_context
+            if hasattr(context, 'to_dict'):
+                log_entry.update(context.to_dict())
+        
+        # Add log context type
+        if hasattr(record, 'log_context'):
+            log_entry['log_context'] = record.log_context.value if hasattr(record.log_context, 'value') else record.log_context
+        
+        # Add performance metrics
+        if hasattr(record, 'performance_metrics'):
+            log_entry['performance_metrics'] = record.performance_metrics
+        
+        # Add business metrics
+        if hasattr(record, 'business_metrics'):
+            log_entry['business_metrics'] = record.business_metrics
+        
+        return json.dumps(log_entry)
+
+
 class LogContext(Enum):
     """Log context types for categorizing log entries."""
     CONVERSATION = "conversation"
@@ -85,31 +113,6 @@ class EnhancedLoggingService:
     
     def _setup_loggers(self):
         """Set up specialized loggers with appropriate formatters."""
-        # Enhanced JSON formatter with additional context
-        class EnhancedJSONFormatter(JSONFormatter):
-            def format(self, record):
-                # Get base JSON log entry
-                log_entry = json.loads(super().format(record))
-                
-                # Add request context if available
-                if hasattr(self, '_local') and hasattr(self._local, 'request_context'):
-                    context = self._local.request_context
-                    log_entry.update(context.to_dict())
-                
-                # Add log context type
-                if hasattr(record, 'log_context'):
-                    log_entry['log_context'] = record.log_context.value
-                
-                # Add performance metrics
-                if hasattr(record, 'performance_metrics'):
-                    log_entry['performance_metrics'] = record.performance_metrics
-                
-                # Add business metrics
-                if hasattr(record, 'business_metrics'):
-                    log_entry['business_metrics'] = record.business_metrics
-                
-                return json.dumps(log_entry)
-        
         # Set up formatters for different logger types
         formatter = EnhancedJSONFormatter()
         

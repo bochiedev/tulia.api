@@ -143,6 +143,10 @@ Return JSON with exact schema:
             
             # Create LLM router for tenant
             llm_router = LLMRouter(tenant)
+
+            await llm_router._ensure_config_loaded()
+
+            await llm_router._ensure_config_loaded()
             
             # Check budget first
             if not llm_router._check_budget():
@@ -501,6 +505,10 @@ Generate a natural, helpful product presentation based on the search results pro
             
             # Create LLM router for tenant
             llm_router = LLMRouter(tenant)
+
+            await llm_router._ensure_config_loaded()
+
+            await llm_router._ensure_config_loaded()
             
             # Check budget first
             if not llm_router._check_budget():
@@ -803,6 +811,10 @@ Return JSON with exact schema:
             
             # Create LLM router for tenant
             llm_router = LLMRouter(tenant)
+
+            await llm_router._ensure_config_loaded()
+
+            await llm_router._ensure_config_loaded()
             
             # Check budget first
             if not llm_router._check_budget():
