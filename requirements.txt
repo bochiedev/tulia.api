@@ -4,7 +4,7 @@ gunicorn==21.2.0
 # Core Django
 Django==4.2.16
 djangorestframework==3.14.0
-django-cors-headers==4.3.1
+django-cors-headers==4.4.0
 django-environ==0.11.2
 
 # Database
@@ -24,9 +24,6 @@ django-filter==24.2
 cryptography==42.0.8
 PyJWT==2.9.0
 django-ratelimit==4.1.0
-
-# CORS Support
-django-cors-headers==4.4.0
 
 # Monitoring & Error Tracking
 sentry-sdk==2.14.0
@@ -52,7 +49,6 @@ langchain-openai==0.2.8
 langchain-community==0.3.7
 langchain-pinecone==0.2.0
 tiktoken==0.8.0
-pinecone==5.0.1
 
 # LangGraph for orchestration
 langgraph==0.2.34
