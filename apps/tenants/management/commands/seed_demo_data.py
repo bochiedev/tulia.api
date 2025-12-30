@@ -300,12 +300,17 @@ class Command(BaseCommand):
             trial_start_date=timezone.now(),
             trial_end_date=timezone.now() + timedelta(days=14),
             whatsapp_number=data['phone'],
-            twilio_sid=demo_sid,
-            twilio_token=demo_token,
-            webhook_secret=demo_secret,
             contact_email=data['owner_email'],
             timezone='America/New_York',
         )
+        
+        # Update tenant settings with Twilio credentials (settings created by signal)
+        from apps.tenants.models import TenantSettings
+        settings, created = TenantSettings.objects.get_or_create(tenant=tenant)
+        settings.twilio_sid = demo_sid
+        settings.twilio_token = demo_token
+        settings.twilio_webhook_secret = demo_secret
+        settings.save()
         
         # Seed roles for tenant
         call_command('seed_tenant_roles', tenant=tenant.slug, verbosity=0)
