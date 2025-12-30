@@ -66,13 +66,6 @@ info:
     ,\n    \"granted\": true,\n    \"reason\": \"Temporary access for Q4 audit\"\n\
     \  }'\n\n# Deny a permission (even if granted by role)\ncurl -X POST https://api.trytulia.com/v1/users/{user_id}/permissions\
     \ \\\n  -H \"X-TENANT-ID: {tenant_id}\" \\\n  -H \"X-TENANT-API-KEY: {api_key}\"\
-=======
-    \ |\n\n## Example Workflows\n\n### Login and Get JWT Token\n```bash\n# Login to\
-    \ get JWT token\ncurl -X POST https://api.tulia.ai/v1/auth/login \\\n  -H \"Content-Type:\
-    \ application/json\" \\\n  -d '{\n    \"email\": \"user@example.com\",\n    \"\
-    password\": \"your-password\"\n  }'\n# Returns: {\"token\": \"eyJ...\", \"user\"\
-    : {...}}\n\n# Use the token in subsequent requests\nexport TOKEN=\"eyJ...\"\n\
-    ```\n\n### Invite a User and Assign Roles\n```bash\n# 1. Invite user (requires\
     \ users:manage scope)\ncurl -X POST https://api.tulia.ai/v1/memberships/{tenant_id}/invite\
     \ \\\n  -H \"Authorization: Bearer $TOKEN\" \\\n  -H \"X-TENANT-ID: {tenant_id}\"\
     \ \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"email\": \"newuser@example.com\"\
